@@ -18,7 +18,7 @@ public final class HomeActivity extends Activity {
         // ColorOS can deny SystemUI's cold ContentProvider start even when the
         // module and provider are installed. Apply its own associated-startup
         // setting once after installation or an app-data reset.
-        if(!getSharedPreferences("native_clock_startup",0).getBoolean("allowed",false)){
+        if(PlatformProfile.isColorOs(this)&&!getSharedPreferences("native_clock_startup",0).getBoolean("allowed",false)){
             new Thread(()->{
                 try{
                     RootBridge.allowClockStartup(this);

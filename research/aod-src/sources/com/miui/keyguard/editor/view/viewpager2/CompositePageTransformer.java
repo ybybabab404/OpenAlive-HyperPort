@@ -1,0 +1,28 @@
+package com.miui.keyguard.editor.view.viewpager2;
+
+import android.view.View;
+import androidx.annotation.NonNull;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+/* JADX INFO: loaded from: classes2.dex */
+public final class CompositePageTransformer implements ViewPager2.PageTransformer {
+    public final List mTransformers = new ArrayList();
+
+    public void addTransformer(@NonNull ViewPager2.PageTransformer pageTransformer) {
+        this.mTransformers.add(pageTransformer);
+    }
+
+    public void removeTransformer(@NonNull ViewPager2.PageTransformer pageTransformer) {
+        this.mTransformers.remove(pageTransformer);
+    }
+
+    @Override // com.miui.keyguard.editor.view.viewpager2.ViewPager2.PageTransformer
+    public void transformPage(@NonNull View view, float f) {
+        Iterator it = this.mTransformers.iterator();
+        while (it.hasNext()) {
+            ((ViewPager2.PageTransformer) it.next()).transformPage(view, f);
+        }
+    }
+}

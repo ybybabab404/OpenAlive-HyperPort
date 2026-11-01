@@ -1,0 +1,179 @@
+package com.miui.keyguard.editor.view.viewpager2;
+
+import android.util.DisplayMetrics;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.Scroller;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.LinearSmoothScroller;
+import androidx.recyclerview.widget.RecyclerView;
+
+/* JADX INFO: loaded from: classes2.dex */
+public abstract class SnapHelper extends RecyclerView.OnFlingListener {
+    public Scroller mGravityScroller;
+    public RecyclerView mRecyclerView;
+    public final RecyclerView.OnScrollListener mScrollListener = new RecyclerView.OnScrollListener() { // from class: com.miui.keyguard.editor.view.viewpager2.SnapHelper.1
+        public boolean mScrolled = false;
+
+        @Override // androidx.recyclerview.widget.RecyclerView.OnScrollListener
+        public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int i) {
+            super.onScrollStateChanged(recyclerView, i);
+            if (i == 0) {
+                if (this.mScrolled || SnapHelper.this.firstVisibleItemOffset() != 0) {
+                    this.mScrolled = false;
+                    SnapHelper.this.snapToTargetExistingView();
+                }
+            }
+        }
+
+        @Override // androidx.recyclerview.widget.RecyclerView.OnScrollListener
+        public void onScrolled(@NonNull RecyclerView recyclerView, int i, int i2) {
+            if (i == 0 && i2 == 0) {
+                return;
+            }
+            this.mScrolled = true;
+        }
+    };
+
+    private void destroyCallbacks() {
+        this.mRecyclerView.removeOnScrollListener(this.mScrollListener);
+        this.mRecyclerView.setOnFlingListener(null);
+    }
+
+    private void setupCallbacks() {
+        if (this.mRecyclerView.getOnFlingListener() != null) {
+            throw new IllegalStateException("An instance of OnFlingListener already set.");
+        }
+        this.mRecyclerView.addOnScrollListener(this.mScrollListener);
+        this.mRecyclerView.setOnFlingListener(this);
+    }
+
+    private boolean snapFromFling(RecyclerView.LayoutManager layoutManager, int i, int i2) {
+        RecyclerView.SmoothScroller smoothScrollerCreateScroller;
+        int iFindTargetSnapPosition;
+        if (!(layoutManager instanceof RecyclerView.SmoothScroller.ScrollVectorProvider) || (smoothScrollerCreateScroller = createScroller(layoutManager)) == null || (iFindTargetSnapPosition = findTargetSnapPosition(layoutManager, i, i2)) == -1) {
+            return false;
+        }
+        smoothScrollerCreateScroller.setTargetPosition(iFindTargetSnapPosition);
+        layoutManager.startSmoothScroll(smoothScrollerCreateScroller);
+        return true;
+    }
+
+    public void attachToRecyclerView(@Nullable RecyclerView recyclerView) throws IllegalStateException {
+        RecyclerView recyclerView2 = this.mRecyclerView;
+        if (recyclerView2 == recyclerView) {
+            return;
+        }
+        if (recyclerView2 != null) {
+            destroyCallbacks();
+        }
+        this.mRecyclerView = recyclerView;
+        if (recyclerView != null) {
+            setupCallbacks();
+            this.mGravityScroller = new Scroller(this.mRecyclerView.getContext(), new DecelerateInterpolator());
+            snapToTargetExistingView();
+        }
+    }
+
+    @Nullable
+    public abstract int[] calculateDistanceToFinalSnap(@NonNull RecyclerView.LayoutManager layoutManager, @NonNull View view);
+
+    public int[] calculateScrollDistance(int i, int i2) {
+        this.mGravityScroller.fling(0, 0, i, i2, Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE);
+        return new int[]{this.mGravityScroller.getFinalX(), this.mGravityScroller.getFinalY()};
+    }
+
+    public RecyclerView.SmoothScroller createScroller(RecyclerView.LayoutManager layoutManager) {
+        return createSnapScroller(layoutManager);
+    }
+
+    public LinearSmoothScroller createSnapScroller(RecyclerView.LayoutManager layoutManager) {
+        if (layoutManager instanceof RecyclerView.SmoothScroller.ScrollVectorProvider) {
+            return new LinearSmoothScroller(this.mRecyclerView.getContext()) { // from class: com.miui.keyguard.editor.view.viewpager2.SnapHelper.2
+                @Override // androidx.recyclerview.widget.LinearSmoothScroller
+                public float calculateSpeedPerPixel(DisplayMetrics displayMetrics) {
+                    return 100.0f / displayMetrics.densityDpi;
+                }
+
+                @Override // androidx.recyclerview.widget.LinearSmoothScroller, androidx.recyclerview.widget.RecyclerView.SmoothScroller
+                public void onTargetFound(View view, RecyclerView.State state, RecyclerView.SmoothScroller.Action action) {
+                    SnapHelper snapHelper = SnapHelper.this;
+                    RecyclerView recyclerView = snapHelper.mRecyclerView;
+                    if (recyclerView == null) {
+                        return;
+                    }
+                    int[] iArrCalculateDistanceToFinalSnap = snapHelper.calculateDistanceToFinalSnap(recyclerView.getLayoutManager(), view);
+                    int i = iArrCalculateDistanceToFinalSnap[0];
+                    int i2 = iArrCalculateDistanceToFinalSnap[1];
+                    int iCalculateTimeForDeceleration = calculateTimeForDeceleration(Math.max(Math.abs(i), Math.abs(i2)));
+                    if (iCalculateTimeForDeceleration > 0) {
+                        action.update(i, i2, iCalculateTimeForDeceleration, this.mDecelerateInterpolator);
+                    }
+                }
+            };
+        }
+        return null;
+    }
+
+    @Nullable
+    public abstract View findSnapView(RecyclerView.LayoutManager layoutManager);
+
+    public abstract int findTargetSnapPosition(RecyclerView.LayoutManager layoutManager, int i, int i2);
+
+    public final int firstVisibleItemOffset() {
+        LinearLayoutManager linearLayoutManager;
+        int iFindFirstVisibleItemPosition;
+        View viewFindViewByPosition;
+        RecyclerView.LayoutManager layoutManager = this.mRecyclerView.getLayoutManager();
+        if (!(layoutManager instanceof LinearLayoutManager) || (iFindFirstVisibleItemPosition = (linearLayoutManager = (LinearLayoutManager) layoutManager).findFirstVisibleItemPosition()) == -1 || (viewFindViewByPosition = linearLayoutManager.findViewByPosition(iFindFirstVisibleItemPosition)) == null) {
+            return 0;
+        }
+        int leftDecorationWidth = linearLayoutManager.getLeftDecorationWidth(viewFindViewByPosition);
+        int topDecorationHeight = linearLayoutManager.getTopDecorationHeight(viewFindViewByPosition);
+        ViewGroup.LayoutParams layoutParams = viewFindViewByPosition.getLayoutParams();
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams marginLayoutParams = (ViewGroup.MarginLayoutParams) layoutParams;
+            leftDecorationWidth += marginLayoutParams.leftMargin;
+            topDecorationHeight += marginLayoutParams.topMargin;
+        }
+        if (linearLayoutManager.getOrientation() != 0) {
+            return (viewFindViewByPosition.getTop() - topDecorationHeight) - this.mRecyclerView.getPaddingTop();
+        }
+        int left = (viewFindViewByPosition.getLeft() - leftDecorationWidth) - this.mRecyclerView.getPaddingLeft();
+        return isRtl() ? -left : left;
+    }
+
+    public final boolean isRtl() {
+        RecyclerView recyclerView = this.mRecyclerView;
+        RecyclerView.LayoutManager layoutManager = recyclerView != null ? recyclerView.getLayoutManager() : null;
+        return layoutManager != null && layoutManager.getLayoutDirection() == 1;
+    }
+
+    @Override // androidx.recyclerview.widget.RecyclerView.OnFlingListener
+    public boolean onFling(int i, int i2) {
+        RecyclerView.LayoutManager layoutManager = this.mRecyclerView.getLayoutManager();
+        if (layoutManager == null || this.mRecyclerView.getAdapter() == null) {
+            return false;
+        }
+        int minFlingVelocity = this.mRecyclerView.getMinFlingVelocity();
+        return (Math.abs(i2) > minFlingVelocity || Math.abs(i) > minFlingVelocity) && snapFromFling(layoutManager, i, i2);
+    }
+
+    public void snapToTargetExistingView() {
+        RecyclerView.LayoutManager layoutManager;
+        View viewFindSnapView;
+        int[] iArrCalculateDistanceToFinalSnap;
+        RecyclerView recyclerView = this.mRecyclerView;
+        if (recyclerView == null || (layoutManager = recyclerView.getLayoutManager()) == null || (viewFindSnapView = findSnapView(layoutManager)) == null || (iArrCalculateDistanceToFinalSnap = calculateDistanceToFinalSnap(layoutManager, viewFindSnapView)) == null) {
+            return;
+        }
+        int i = iArrCalculateDistanceToFinalSnap[0];
+        if (i == 0 && iArrCalculateDistanceToFinalSnap[1] == 0) {
+            return;
+        }
+        this.mRecyclerView.smoothScrollBy(i, iArrCalculateDistanceToFinalSnap[1]);
+    }
+}

@@ -11,6 +11,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         boolean colorOsEditor="com.oplus.wallpapers".equals(p.packageName);
         boolean systemUi="com.android.systemui".equals(p.packageName);
         if(systemUi)ModuleActivationHook.install();
+        if("com.miui.aod".equals(p.packageName))HyperOsAod.install(p.classLoader);
         if(colorOsEditor){
             NativeClockApplyPolicy.install(p.classLoader);
             ColorOsNativeClockFonts.install(p.classLoader);
@@ -19,7 +20,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         // Android the class lookups below simply find nothing and the module
         // keeps working as a plain live-wallpaper provider.
         if(systemUi&&PlatformProfile.hasVendorClass(p.classLoader))ColorOsNativeClockFonts.install(p.classLoader);
-        if(!"android".equals(p.packageName)&&!systemUi)return;
+        if(!"android".equals(p.packageName)&&!systemUi&&!"com.miui.aod".equals(p.packageName))return;
         if(!ambientHooked){
             XposedHelpers.findAndHookMethod(WallpaperInfo.class,"supportsAmbientMode",new XC_MethodHook(){@Override protected void afterHookedMethod(MethodHookParam call){WallpaperInfo info=(WallpaperInfo)call.thisObject;if("org.aliveclean".equals(info.getPackageName()))call.setResult(true);}});
             ambientHooked=true;

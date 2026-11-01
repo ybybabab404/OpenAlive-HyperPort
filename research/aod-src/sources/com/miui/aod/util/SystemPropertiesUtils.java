@@ -1,0 +1,39 @@
+package com.miui.aod.util;
+
+import com.miui.aod.utils.MiuiSettingsUtils;
+import kotlin.Metadata;
+import kotlin.jvm.internal.Intrinsics;
+
+/*  JADX ERROR: Error in decompile pass: KotlinMetadataDecompile
+    java.lang.IllegalArgumentException: Provided Metadata instance does not have metadataVersion in it and therefore is malformed and cannot be read.
+    	at kotlin.metadata.jvm.internal.JvmReadUtils.checkMetadataVersionForRead(JvmReadUtils.kt:79)
+    	at kotlin.metadata.jvm.internal.JvmReadUtils.readMetadataImpl$kotlin_metadata_jvm(JvmReadUtils.kt:46)
+    	at kotlin.metadata.jvm.KotlinClassMetadata$Companion.readLenient(KotlinClassMetadata.kt:418)
+    	at jadx.plugins.kotlin.metadata.utils.KotlinMetadataExtKt.getKotlinClassMetadata(KotlinMetadataExt.kt:68)
+    	at jadx.plugins.kotlin.metadata.utils.KmClassWrapper$Companion.getWrapper(KmClassWrapper.kt:31)
+    	at jadx.plugins.kotlin.metadata.pass.KotlinMetadataDecompilePass.visit(KotlinMetadataDecompilePass.kt:33)
+    */
+/* JADX INFO: compiled from: SystemPropertiesUtils.kt */
+/* JADX INFO: loaded from: classes.dex */
+@Metadata
+public final class SystemPropertiesUtils {
+    public static final SystemPropertiesUtils INSTANCE = new SystemPropertiesUtils();
+
+    public final String get(String key, String defaultValue) {
+        Intrinsics.checkNotNullParameter(key, "key");
+        Intrinsics.checkNotNullParameter(defaultValue, "defaultValue");
+        String stringFromSystemProperties = MiuiSettingsUtils.getStringFromSystemProperties(key, defaultValue);
+        Intrinsics.checkNotNullExpressionValue(stringFromSystemProperties, "getStringFromSystemProperties(...)");
+        return stringFromSystemProperties;
+    }
+
+    public final boolean getBoolean(String key, boolean z) {
+        Intrinsics.checkNotNullParameter(key, "key");
+        return MiuiSettingsUtils.getBooleanFromSystemProperties(key, z);
+    }
+
+    public final int getInt(String key, int i) {
+        Intrinsics.checkNotNullParameter(key, "key");
+        return MiuiSettingsUtils.getIntFromSystemProperties(key, i);
+    }
+}

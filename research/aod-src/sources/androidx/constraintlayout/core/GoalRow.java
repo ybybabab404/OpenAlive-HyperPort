@@ -1,0 +1,10 @@
+package androidx.constraintlayout.core;
+
+/* JADX INFO: loaded from: classes.dex */
+public class GoalRow extends ArrayRow {
+    @Override // androidx.constraintlayout.core.ArrayRow, androidx.constraintlayout.core.LinearSystem.Row
+    public void addError(SolverVariable solverVariable) {
+        super.addError(solverVariable);
+        solverVariable.usageInRowCount--;
+    }
+}

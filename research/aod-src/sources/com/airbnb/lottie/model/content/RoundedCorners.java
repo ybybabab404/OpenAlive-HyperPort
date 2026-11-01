@@ -1,0 +1,31 @@
+package com.airbnb.lottie.model.content;
+
+import com.airbnb.lottie.LottieDrawable;
+import com.airbnb.lottie.animation.content.Content;
+import com.airbnb.lottie.animation.content.RoundedCornersContent;
+import com.airbnb.lottie.model.animatable.AnimatableValue;
+import com.airbnb.lottie.model.layer.BaseLayer;
+
+/* JADX INFO: loaded from: classes.dex */
+public class RoundedCorners implements ContentModel {
+    public final AnimatableValue cornerRadius;
+    public final String name;
+
+    public RoundedCorners(String str, AnimatableValue animatableValue) {
+        this.name = str;
+        this.cornerRadius = animatableValue;
+    }
+
+    public AnimatableValue getCornerRadius() {
+        return this.cornerRadius;
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
+    @Override // com.airbnb.lottie.model.content.ContentModel
+    public Content toContent(LottieDrawable lottieDrawable, BaseLayer baseLayer) {
+        return new RoundedCornersContent(lottieDrawable, baseLayer, this);
+    }
+}

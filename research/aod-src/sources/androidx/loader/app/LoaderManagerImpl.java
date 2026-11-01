@@ -1,0 +1,263 @@
+package androidx.loader.app;
+
+import android.os.Bundle;
+import android.os.Looper;
+import android.util.Log;
+import androidx.collection.SparseArrayCompat;
+import androidx.core.util.DebugUtils;
+import androidx.lifecycle.LifecycleOwner;
+import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModel;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.lifecycle.ViewModelStore;
+import androidx.loader.content.Loader;
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+
+/* JADX INFO: loaded from: classes.dex */
+class LoaderManagerImpl extends LoaderManager {
+    public static boolean DEBUG = false;
+    public final LifecycleOwner mLifecycleOwner;
+    public final LoaderViewModel mLoaderViewModel;
+
+    public static class LoaderInfo<D> extends MutableLiveData<D> implements Loader.OnLoadCompleteListener<D> {
+        public final Bundle mArgs;
+        public final int mId;
+        public LifecycleOwner mLifecycleOwner;
+        public final Loader mLoader;
+        public LoaderObserver mObserver;
+        public Loader mPriorLoader;
+
+        public Loader destroy(boolean z) {
+            if (LoaderManagerImpl.DEBUG) {
+                Log.v("LoaderManager", "  Destroying: " + this);
+            }
+            this.mLoader.cancelLoad();
+            this.mLoader.abandon();
+            LoaderObserver loaderObserver = this.mObserver;
+            if (loaderObserver != null) {
+                removeObserver(loaderObserver);
+                if (z) {
+                    loaderObserver.reset();
+                }
+            }
+            this.mLoader.unregisterListener(this);
+            if ((loaderObserver == null || loaderObserver.hasDeliveredData()) && !z) {
+                return this.mLoader;
+            }
+            this.mLoader.reset();
+            return this.mPriorLoader;
+        }
+
+        public void dump(String str, FileDescriptor fileDescriptor, PrintWriter printWriter, String[] strArr) {
+            printWriter.print(str);
+            printWriter.print("mId=");
+            printWriter.print(this.mId);
+            printWriter.print(" mArgs=");
+            printWriter.println(this.mArgs);
+            printWriter.print(str);
+            printWriter.print("mLoader=");
+            printWriter.println(this.mLoader);
+            this.mLoader.dump(str + "  ", fileDescriptor, printWriter, strArr);
+            if (this.mObserver != null) {
+                printWriter.print(str);
+                printWriter.print("mCallbacks=");
+                printWriter.println(this.mObserver);
+                this.mObserver.dump(str + "  ", printWriter);
+            }
+            printWriter.print(str);
+            printWriter.print("mData=");
+            printWriter.println(getLoader().dataToString(getValue()));
+            printWriter.print(str);
+            printWriter.print("mStarted=");
+            printWriter.println(hasActiveObservers());
+        }
+
+        public Loader getLoader() {
+            return this.mLoader;
+        }
+
+        public void markForRedelivery() {
+            LifecycleOwner lifecycleOwner = this.mLifecycleOwner;
+            LoaderObserver loaderObserver = this.mObserver;
+            if (lifecycleOwner == null || loaderObserver == null) {
+                return;
+            }
+            super.removeObserver(loaderObserver);
+            observe(lifecycleOwner, loaderObserver);
+        }
+
+        @Override // androidx.lifecycle.LiveData
+        public void onActive() {
+            if (LoaderManagerImpl.DEBUG) {
+                Log.v("LoaderManager", "  Starting: " + this);
+            }
+            this.mLoader.startLoading();
+        }
+
+        @Override // androidx.lifecycle.LiveData
+        public void onInactive() {
+            if (LoaderManagerImpl.DEBUG) {
+                Log.v("LoaderManager", "  Stopping: " + this);
+            }
+            this.mLoader.stopLoading();
+        }
+
+        @Override // androidx.loader.content.Loader.OnLoadCompleteListener
+        public void onLoadComplete(Loader loader, Object obj) {
+            if (LoaderManagerImpl.DEBUG) {
+                Log.v("LoaderManager", "onLoadComplete: " + this);
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                setValue(obj);
+                return;
+            }
+            if (LoaderManagerImpl.DEBUG) {
+                Log.w("LoaderManager", "onLoadComplete was incorrectly called on a background thread");
+            }
+            postValue(obj);
+        }
+
+        @Override // androidx.lifecycle.LiveData
+        public void removeObserver(Observer observer) {
+            super.removeObserver(observer);
+            this.mLifecycleOwner = null;
+            this.mObserver = null;
+        }
+
+        @Override // androidx.lifecycle.MutableLiveData, androidx.lifecycle.LiveData
+        public void setValue(Object obj) {
+            super.setValue(obj);
+            Loader loader = this.mPriorLoader;
+            if (loader != null) {
+                loader.reset();
+                this.mPriorLoader = null;
+            }
+        }
+
+        public String toString() {
+            StringBuilder sb = new StringBuilder(64);
+            sb.append("LoaderInfo{");
+            sb.append(Integer.toHexString(System.identityHashCode(this)));
+            sb.append(" #");
+            sb.append(this.mId);
+            sb.append(" : ");
+            DebugUtils.buildShortClassTag(this.mLoader, sb);
+            sb.append("}}");
+            return sb.toString();
+        }
+    }
+
+    public static class LoaderObserver<D> implements Observer<D> {
+        public final LoaderManager.LoaderCallbacks mCallback;
+        public boolean mDeliveredData;
+        public final Loader mLoader;
+
+        public void dump(String str, PrintWriter printWriter) {
+            printWriter.print(str);
+            printWriter.print("mDeliveredData=");
+            printWriter.println(this.mDeliveredData);
+        }
+
+        public boolean hasDeliveredData() {
+            return this.mDeliveredData;
+        }
+
+        @Override // androidx.lifecycle.Observer
+        public void onChanged(Object obj) {
+            if (LoaderManagerImpl.DEBUG) {
+                Log.v("LoaderManager", "  onLoadFinished in " + this.mLoader + ": " + this.mLoader.dataToString(obj));
+            }
+            this.mCallback.onLoadFinished(this.mLoader, obj);
+            this.mDeliveredData = true;
+        }
+
+        public void reset() {
+            if (this.mDeliveredData) {
+                if (LoaderManagerImpl.DEBUG) {
+                    Log.v("LoaderManager", "  Resetting: " + this.mLoader);
+                }
+                this.mCallback.onLoaderReset(this.mLoader);
+            }
+        }
+
+        public String toString() {
+            return this.mCallback.toString();
+        }
+    }
+
+    public static class LoaderViewModel extends ViewModel {
+        public static final ViewModelProvider.Factory FACTORY = new ViewModelProvider.Factory() { // from class: androidx.loader.app.LoaderManagerImpl.LoaderViewModel.1
+            @Override // androidx.lifecycle.ViewModelProvider.Factory
+            public ViewModel create(Class cls) {
+                return new LoaderViewModel();
+            }
+        };
+        public SparseArrayCompat mLoaders = new SparseArrayCompat();
+        public boolean mCreatingLoader = false;
+
+        public static LoaderViewModel getInstance(ViewModelStore viewModelStore) {
+            return (LoaderViewModel) new ViewModelProvider(viewModelStore, FACTORY).get(LoaderViewModel.class);
+        }
+
+        public void dump(String str, FileDescriptor fileDescriptor, PrintWriter printWriter, String[] strArr) {
+            if (this.mLoaders.size() > 0) {
+                printWriter.print(str);
+                printWriter.println("Loaders:");
+                String str2 = str + "    ";
+                for (int i = 0; i < this.mLoaders.size(); i++) {
+                    LoaderInfo loaderInfo = (LoaderInfo) this.mLoaders.valueAt(i);
+                    printWriter.print(str);
+                    printWriter.print("  #");
+                    printWriter.print(this.mLoaders.keyAt(i));
+                    printWriter.print(": ");
+                    printWriter.println(loaderInfo.toString());
+                    loaderInfo.dump(str2, fileDescriptor, printWriter, strArr);
+                }
+            }
+        }
+
+        public void markForRedelivery() {
+            int size = this.mLoaders.size();
+            for (int i = 0; i < size; i++) {
+                ((LoaderInfo) this.mLoaders.valueAt(i)).markForRedelivery();
+            }
+        }
+
+        @Override // androidx.lifecycle.ViewModel
+        public void onCleared() {
+            super.onCleared();
+            int size = this.mLoaders.size();
+            for (int i = 0; i < size; i++) {
+                ((LoaderInfo) this.mLoaders.valueAt(i)).destroy(true);
+            }
+            this.mLoaders.clear();
+        }
+    }
+
+    public LoaderManagerImpl(LifecycleOwner lifecycleOwner, ViewModelStore viewModelStore) {
+        this.mLifecycleOwner = lifecycleOwner;
+        this.mLoaderViewModel = LoaderViewModel.getInstance(viewModelStore);
+    }
+
+    @Override // androidx.loader.app.LoaderManager
+    public void dump(String str, FileDescriptor fileDescriptor, PrintWriter printWriter, String[] strArr) {
+        this.mLoaderViewModel.dump(str, fileDescriptor, printWriter, strArr);
+    }
+
+    @Override // androidx.loader.app.LoaderManager
+    public void markForRedelivery() {
+        this.mLoaderViewModel.markForRedelivery();
+    }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder(128);
+        sb.append("LoaderManager{");
+        sb.append(Integer.toHexString(System.identityHashCode(this)));
+        sb.append(" in ");
+        DebugUtils.buildShortClassTag(this.mLifecycleOwner, sb);
+        sb.append("}}");
+        return sb.toString();
+    }
+}

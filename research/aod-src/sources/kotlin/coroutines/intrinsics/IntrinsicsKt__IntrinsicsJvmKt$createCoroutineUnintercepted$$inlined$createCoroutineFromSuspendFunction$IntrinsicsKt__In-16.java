@@ -1,0 +1,44 @@
+package kotlin.coroutines.intrinsics;
+
+import kotlin.Metadata;
+import kotlin.ResultKt;
+import kotlin.coroutines.jvm.internal.ContinuationImpl;
+import kotlin.jvm.functions.Function1;
+import kotlin.jvm.internal.Intrinsics;
+import kotlin.jvm.internal.SourceDebugExtension;
+import kotlin.jvm.internal.TypeIntrinsics;
+
+/*  JADX ERROR: Error in decompile pass: KotlinMetadataDecompile
+    java.lang.IllegalArgumentException: Provided Metadata instance does not have metadataVersion in it and therefore is malformed and cannot be read.
+    	at kotlin.metadata.jvm.internal.JvmReadUtils.checkMetadataVersionForRead(JvmReadUtils.kt:79)
+    	at kotlin.metadata.jvm.internal.JvmReadUtils.readMetadataImpl$kotlin_metadata_jvm(JvmReadUtils.kt:46)
+    	at kotlin.metadata.jvm.KotlinClassMetadata$Companion.readLenient(KotlinClassMetadata.kt:418)
+    	at jadx.plugins.kotlin.metadata.utils.KotlinMetadataExtKt.getKotlinClassMetadata(KotlinMetadataExt.kt:68)
+    	at jadx.plugins.kotlin.metadata.utils.KmClassWrapper$Companion.getWrapper(KmClassWrapper.kt:31)
+    	at jadx.plugins.kotlin.metadata.pass.KotlinMetadataDecompilePass.visit(KotlinMetadataDecompilePass.kt:33)
+    */
+/* JADX INFO: compiled from: IntrinsicsJvm.kt */
+/* JADX INFO: loaded from: classes2.dex */
+@Metadata
+@SourceDebugExtension
+public final class IntrinsicsKt__IntrinsicsJvmKt$createCoroutineUnintercepted$$inlined$createCoroutineFromSuspendFunction$IntrinsicsKt__IntrinsicsJvmKt$2 extends ContinuationImpl {
+    public final /* synthetic */ Function1 $this_createCoroutineUnintercepted$inlined;
+    public int label;
+
+    @Override // kotlin.coroutines.jvm.internal.BaseContinuationImpl
+    public Object invokeSuspend(Object obj) {
+        int i = this.label;
+        if (i == 0) {
+            this.label = 1;
+            ResultKt.throwOnFailure(obj);
+            Intrinsics.checkNotNull(this.$this_createCoroutineUnintercepted$inlined, "null cannot be cast to non-null type kotlin.Function1<kotlin.coroutines.Continuation<T of kotlin.coroutines.intrinsics.IntrinsicsKt__IntrinsicsJvmKt.createCoroutineUnintercepted>, kotlin.Any?>");
+            return ((Function1) TypeIntrinsics.beforeCheckcastToFunctionOfArity(this.$this_createCoroutineUnintercepted$inlined, 1)).invoke(this);
+        }
+        if (i != 1) {
+            throw new IllegalStateException("This coroutine had already completed");
+        }
+        this.label = 2;
+        ResultKt.throwOnFailure(obj);
+        return obj;
+    }
+}

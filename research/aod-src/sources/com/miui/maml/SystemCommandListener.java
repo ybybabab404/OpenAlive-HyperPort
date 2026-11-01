@@ -1,0 +1,34 @@
+package com.miui.maml;
+
+import android.text.TextUtils;
+
+/* JADX INFO: loaded from: classes2.dex */
+public class SystemCommandListener implements ScreenElementRoot.OnExternCommandListener {
+    private static final String CLEAR_RESOURCE = "__clearResource";
+    private static final String DATETIMEVAR_UPDATE = "__datatimeVarUpdate";
+    private static final String REQUEST_UPDATE = "__requestUpdate";
+    private ScreenElementRoot mRoot;
+
+    public SystemCommandListener(ScreenElementRoot screenElementRoot) {
+        this.mRoot = screenElementRoot;
+    }
+
+    @Override // com.miui.maml.ScreenElementRoot.OnExternCommandListener
+    public void onCommand(String str, Double d, String str2) {
+        if (CLEAR_RESOURCE.equals(str)) {
+            if (!TextUtils.isEmpty(str2)) {
+                this.mRoot.getContext().mResourceManager.clear(str2);
+                return;
+            } else {
+                ResourceManager resourceManager = this.mRoot.getContext().mResourceManager;
+                ResourceManager.clear();
+                return;
+            }
+        }
+        if (REQUEST_UPDATE.equals(str)) {
+            this.mRoot.requestUpdate();
+        } else if (DATETIMEVAR_UPDATE.equals(str)) {
+            this.mRoot.updateDateTimeVariable(str2);
+        }
+    }
+}

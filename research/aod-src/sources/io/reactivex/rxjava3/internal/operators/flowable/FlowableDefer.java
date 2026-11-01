@@ -1,0 +1,26 @@
+package io.reactivex.rxjava3.internal.operators.flowable;
+
+import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.exceptions.Exceptions;
+import io.reactivex.rxjava3.functions.Supplier;
+import io.reactivex.rxjava3.internal.subscriptions.EmptySubscription;
+import java.util.Objects;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+
+/* JADX INFO: loaded from: classes2.dex */
+public final class FlowableDefer<T> extends Flowable<T> {
+    public final Supplier supplier;
+
+    @Override // io.reactivex.rxjava3.core.Flowable
+    public void subscribeActual(Subscriber subscriber) {
+        try {
+            Object obj = this.supplier.get();
+            Objects.requireNonNull(obj, "The publisher supplied is null");
+            ((Publisher) obj).subscribe(subscriber);
+        } catch (Throwable th) {
+            Exceptions.throwIfFatal(th);
+            EmptySubscription.error(th, subscriber);
+        }
+    }
+}

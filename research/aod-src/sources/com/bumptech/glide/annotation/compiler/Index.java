@@ -1,0 +1,14 @@
+package com.bumptech.glide.annotation.compiler;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/* JADX WARN: Method from annotation default annotation not found: extensions */
+/* JADX WARN: Method from annotation default annotation not found: modules */
+/* JADX INFO: loaded from: classes.dex */
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.CLASS)
+@interface Index {
+}

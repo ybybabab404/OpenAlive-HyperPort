@@ -12,6 +12,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         boolean systemUi="com.android.systemui".equals(p.packageName);
         if(systemUi)ModuleActivationHook.install();
         if("com.miui.aod".equals(p.packageName))HyperOsAod.install(p.classLoader);
+        if(systemUi)HyperOsAod.install(p.classLoader);
         if(colorOsEditor){
             NativeClockApplyPolicy.install(p.classLoader);
             ColorOsNativeClockFonts.install(p.classLoader);

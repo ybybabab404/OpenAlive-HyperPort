@@ -1,0 +1,17 @@
+# Build outputs
+/build/
+/dist/
+/target/
+# Local machine state
+/local/
+/.tmp/
+__pycache__/
+*.pyc
+# Signing material must never enter the repository
+*.jks
+*.keystore
+*.p12
+/signing.json
+# Editor and OS noise
+.DS_Store
+Thumbs.db

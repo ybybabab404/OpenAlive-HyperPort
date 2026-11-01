@@ -21,6 +21,12 @@ final class WallpaperPicker {
         "com.google.android.apps.wallpaper","com.android.wallpaper",
         "com.heytap.themestore","com.oplus.themestore","com.android.thememanager"
     };
+    // HyperOS keeps the AOSP live picker but moves the personalization entry
+    // point into the theme app; try the resident app first, then the AOSP ones.
+    private static final String[] HYPEROS_PACKAGES={
+        "com.android.wallpaper.livepicker","com.android.thememanager",
+        "com.miui.miwallpaper","com.android.wallpaper","com.google.android.apps.wallpaper"
+    };
 
     // Only the component-specific preview confirms this wallpaper with RESULT_OK.
     // Lists and app launchers may apply a different wallpaper; verify changed IDs.
@@ -45,7 +51,7 @@ final class WallpaperPicker {
         if(start(activity,target(new Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER),wallpaper),request)){
             manualSelection(activity);return false;
         }
-        for(String name:PACKAGES){
+        for(String name:PlatformProfile.isHyperOs(activity)?HYPEROS_PACKAGES:PACKAGES){
             Intent launch=activity.getPackageManager().getLaunchIntentForPackage(name);
             if(launch!=null){
                 // NEW_TASK causes an immediate canceled result, before the user applies.

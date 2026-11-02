@@ -54,6 +54,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
                 @Override public void stereoSensitivity(int value){draft.edit().putInt("stereo_sensitivity",value).apply();}
             },this);
             showScene();
+            if(getFilesDir()!=null)captureWallpaper();
         }catch(Exception e){
             android.util.Log.e("AliveClean","Official editor initialization failed",e);
             new android.app.AlertDialog.Builder(this).setTitle("编辑页面无法打开").setMessage(e.toString())
@@ -110,11 +111,39 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
 
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
     private void importBusy(boolean busy){importing=busy;showScene();}
+
+    /** Stores the wallpaper that is actually showing, so the AOD sphere can use its
+     * colours instead of the renderer's built-in fallback gradient. */
+    private void captureWallpaper() {
+        try {
+            WallpaperManager manager = WallpaperManager.getInstance(this);
+            android.graphics.drawable.Drawable drawable = manager.getDrawable();
+            if (drawable == null) return;
+            int width = Math.max(1, drawable.getIntrinsicWidth()), height = Math.max(1, drawable.getIntrinsicHeight());
+            float scale = Math.min(1f, 1440f / Math.max(width, height));
+            android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
+                    Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale)),
+                    android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+            drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
+            drawable.draw(canvas);
+            java.io.File target = new java.io.File(getFilesDir(), SceneOptions.WALLPAPER);
+            try (java.io.FileOutputStream stream = new java.io.FileOutputStream(target)) {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream);
+            }
+            bitmap.recycle();
+            android.util.Log.i("AliveClean", "wallpaper captured " + target.length() + "B");
+        } catch (Throwable failure) {
+            android.util.Log.w("AliveClean", "wallpaper capture failed", failure);
+        }
+    }
+
     private void commitDraft(){
         SceneOptions chosen=new SceneOptions(draft);
         // The SystemUI bridge may become ready a little after the editor. Do not
         // make applying a wallpaper depend on that race: the bridge observes the
         // committed configuration and attaches the AOD clock when it is ready.
+        captureWallpaper();
         if(chosen.save(getSharedPreferences(SceneOptions.APPLIED,0))){
             SceneProvider.changed(this);
             if(chosen.aod>=0&&PlatformProfile.isColorOs(this)){

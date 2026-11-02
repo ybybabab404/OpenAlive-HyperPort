@@ -44,6 +44,24 @@ final class RenderLoop {
     private int homeWidth,homeHeight;
     private float aspect=1;
     private boolean visible=true;
+    // Wallpaper palette handed over by the AOD host; null means "derive locally".
+    private int[] aodPalette;
+    void aodPalette(int primary,int secondary,int tertiary){aodPalette=new int[]{primary,secondary,tertiary};}
+    /** Reads the palette of the wallpaper the user applied. Works for live wallpapers
+     * too, which is why the sphere cannot simply sample a wallpaper bitmap here. */
+    private void readWallpaperPalette(){
+        if(aodPalette!=null)return;
+        try{android.app.WallpaperManager manager=android.app.WallpaperManager.getInstance(context);
+            android.app.WallpaperColors colors=manager.getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM);
+            if(colors==null)colors=manager.getWallpaperColors(android.app.WallpaperManager.FLAG_LOCK);
+            if(colors==null)return;
+            int primary=colors.getPrimaryColor().toArgb();
+            android.graphics.Color secondaryColor=colors.getSecondaryColor();
+            android.graphics.Color tertiaryColor=colors.getTertiaryColor();
+            aodPalette=new int[]{primary,secondaryColor!=null?secondaryColor.toArgb():primary,tertiaryColor!=null?tertiaryColor.toArgb():primary};
+            Log.i("AliveClean","wallpaper palette "+Integer.toHexString(primary));
+        }catch(Throwable failure){Log.w("AliveClean","wallpaper palette unavailable",failure);}
+    }
     private boolean backdropCovered;
     private boolean stateReported;
     private long clockToken,seenClockToken;
@@ -193,6 +211,7 @@ final class RenderLoop {
             applyAodRegion();choreographer=Choreographer.getInstance();pacer.reset();return;
         }
         int lock=options.lock,home=options.home;
+        if(mode==0)readWallpaperPalette();
         scene=NativeScene.create(width,height,mode,options.aod,lock,home);
         if(scene==0)throw new IllegalStateException("Native scene creation failed; see shader log");
         motion=new SceneMotion(width,height,mode,PhotoStyle.supported(options.aod)?-1:options.aod,lock,home,false);
@@ -247,9 +266,17 @@ final class RenderLoop {
         createScene(options);{if(Diagnostics.TRACE)Log.i("AliveClean","GLES3 scene ready "+w+"x"+h);}
     }
     private int loadPhoto(String name,boolean primary){
-        File file=new File(context.getFilesDir(),name);Bitmap bitmap=null;
+        File file=new File(context.getFilesDir(),name);
+        // The AOD sphere is the wallpaper the user applied, so prefer the copy captured
+        // at apply time over whatever scene photo the options point at.
+        if(primary&&mode==0){File wallpaper=new File(context.getFilesDir(),SceneOptions.WALLPAPER);if(wallpaper.isFile())file=wallpaper;}
+        Bitmap bitmap=null;
         if(file.exists())try{android.graphics.ImageDecoder.Source source=android.graphics.ImageDecoder.createSource(file);bitmap=android.graphics.ImageDecoder.decodeBitmap(source,(decoder,info,s)->{int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);});}catch(IOException e){Log.e("AliveClean","Photo decode failed",e);}
-        if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);p.setShader(new LinearGradient(0,0,720,1440,new int[]{0xff183955,0xffce865c,0xff5b526e},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);p.setColor(0xffe6b282);canvas.drawCircle(490,480,230,p);p.setColor(0xff254452);canvas.drawOval(-220,800,930,1880,p);}
+        if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);
+            int[] palette=aodPalette;
+            if(palette==null){palette=new int[]{0xff183955,0xffce865c,0xff5b526e};}
+            p.setShader(new LinearGradient(0,0,720,1440,new int[]{palette[0],palette[1],palette[2]},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);
+            p.setColor(palette[2]);canvas.drawCircle(490,480,230,p);p.setColor(palette[0]);canvas.drawOval(-220,800,930,1880,p);}
         if(primary)aspect=(float)bitmap.getWidth()/bitmap.getHeight();else{homeWidth=bitmap.getWidth();homeHeight=bitmap.getHeight();}int id=upload(bitmap);bitmap.recycle();return id;
     }
     private static int upload(Bitmap bitmap){

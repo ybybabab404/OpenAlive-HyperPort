@@ -155,11 +155,14 @@ final class HyperOsAod {
         // the inner container instead: wallpaper below, stock clock above.
         ViewGroup target = findInnerAod(root);
         if (target == null) {
-            target = root;
-            Log.i(TAG, "inner AODView not up yet, falling back to outer host");
+            // The stock clock lives above the inner AODView. Attaching to the outer root
+            // would cover it, and moving it later makes the whole screen blink, so wait
+            // for the real container instead of attaching anywhere else.
+            Log.i(TAG, "inner AODView not up yet, waiting");
             root.postDelayed(new Runnable() {
                 @Override public void run() { injectIntoAod(); }
-            }, 400);
+            }, 200);
+            return;
         }
         AodSurface surface = new AodSurface(context);
         surface.setTag(TAG);

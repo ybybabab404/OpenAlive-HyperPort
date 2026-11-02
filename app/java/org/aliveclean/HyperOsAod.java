@@ -60,6 +60,11 @@ final class HyperOsAod {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
                 AodOverlay.show(svc);
                 android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                // SharedPreferences does not notify across processes, so the scene
+                // chosen in the app is only visible if we rebuild the host here.
+                handler.postDelayed(new Runnable() {
+                    @Override public void run() { refreshScene(); }
+                }, 900);
                 handler.postDelayed(new Runnable() {
                     @Override public void run() { dumpTree("dozing"); }
                 }, 3000);
@@ -79,6 +84,19 @@ final class HyperOsAod {
         return root != null && root.findViewWithTag(TAG) != null;
     }
 
+    /** Rebuilds the scene host so a style picked in the app (written to another
+     * process) is re-read on every doze entry. */
+    static void refreshScene() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        if (root == null) return;
+        View old = root.findViewWithTag(TAG);
+        if (old != null && old.getParent() instanceof ViewGroup) {
+            ((ViewGroup) old.getParent()).removeView(old);
+            Log.i(TAG, "scene host dropped for refresh");
+        }
+        attach(root);
+    }
+
     static boolean injectIntoAod() {
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
         if (root == null) return false;
@@ -89,7 +107,7 @@ final class HyperOsAod {
     private static void attach(ViewGroup root) {
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
-        if (!ownsWallpaper(context)) return;
+        if (!aodSceneEnabled(context)) return;
         if (root.findViewWithTag(TAG) != null) return;
         // The inner com.miui.aod.AODView paints the AOD wallpaper full screen, so a
         // surface added to the outer AodView sits *under* that wallpaper. Inject into
@@ -225,6 +243,23 @@ final class HyperOsAod {
         } catch (Throwable unavailable) {
             Log.w(TAG, "module context unavailable, using the host context", unavailable);
             return base;
+        }
+    }
+
+    /** The AOD scene belongs to this module and is independent of whichever live
+     * wallpaper currently runs behind the lock screen, so key it off the scene
+     * settings instead of the wallpaper component. */
+    private static boolean aodSceneEnabled(Context base) {
+        try {
+            Context app = moduleContext(base);
+            android.content.SharedPreferences prefs =
+                    app.getSharedPreferences(SceneOptions.APPLIED, 0);
+            // aod == -1 is the only value that means "leave the stock AOD alone";
+            // 0 is a real scene, not "off".
+            return prefs.getInt("aod", 0) != -1;
+        } catch (Throwable unavailable) {
+            Log.w(TAG, "cannot read scene settings", unavailable);
+            return false;
         }
     }
 

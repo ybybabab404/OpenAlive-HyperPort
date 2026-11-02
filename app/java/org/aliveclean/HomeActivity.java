@@ -63,11 +63,6 @@ public final class HomeActivity extends Activity {
             for(java.lang.reflect.Field field:lp.getClass().getFields())if(!java.lang.reflect.Modifier.isStatic(field.getModifiers())&&field.getType().isPrimitive())field.set(vivoLp,field.get(lp));
             replaceAnchor(vivoLp,wallpaper.getId(),alive.getId());parent.addView(vivo,vivoLp);firstText(vivo).setText("Vivo Alive 壁纸");
             vivo.setOnClickListener(v->startActivity(new Intent(this,VivoLibraryActivity.class)));
-            View xiaomi=ui.inflate("view_system_center_wallpaper",parent);xiaomi.setId(View.generateViewId());ui.cardBackground(xiaomi);
-            ViewGroup.LayoutParams xiaomiLp=vivoLp.getClass().getConstructor(ViewGroup.LayoutParams.class).newInstance(vivoLp);
-            for(java.lang.reflect.Field field:vivoLp.getClass().getFields())if(!java.lang.reflect.Modifier.isStatic(field.getModifiers())&&field.getType().isPrimitive())field.set(xiaomiLp,field.get(vivoLp));
-            replaceAnchor(xiaomiLp,alive.getId(),vivo.getId());parent.addView(xiaomi,xiaomiLp);firstText(xiaomi).setText("小米Alive壁纸");
-            xiaomi.setOnClickListener(v->startActivity(new Intent(this,XiaomiLibraryActivity.class)));
             // The original tiles are pinned to opposite screen edges, while the
             // wallpaper bars have a centered content width. Put the original
             // tiles in one equally divided row with that same width instead.
@@ -75,7 +70,7 @@ public final class HomeActivity extends Activity {
             shortcuts.setOrientation(LinearLayout.HORIZONTAL);shortcuts.setBaselineAligned(false);
             ViewGroup.LayoutParams shortcutLp=wallpaper.getLayoutParams().getClass().getConstructor(ViewGroup.LayoutParams.class).newInstance(wallpaper.getLayoutParams());
             for(java.lang.reflect.Field field:shortcutLp.getClass().getFields())if(!java.lang.reflect.Modifier.isStatic(field.getModifiers())&&field.getType().isPrimitive())field.set(shortcutLp,field.get(wallpaper.getLayoutParams()));
-            replaceAnchor(shortcutLp,ui.id("id","system_layout_container"),xiaomi.getId());
+            replaceAnchor(shortcutLp,ui.id("id","system_layout_container"),vivo.getId());
             shortcutLp.height=ViewGroup.LayoutParams.WRAP_CONTENT;parent.addView(shortcuts,shortcutLp);
             int shortcutCount=0;
             for(boolean font:new boolean[]{false,true}){

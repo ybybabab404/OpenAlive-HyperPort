@@ -1,7 +1,7 @@
 # HyperAlive
 
-把 Flyme Alive 的连贯动画带到 HyperOS：息屏、锁屏和桌面接起来，并且把小米超级壁纸、
-Vivo Alive 与魅族原生时钟搬进第三方模块。
+把 Flyme Alive 的连贯动画带到 HyperOS：息屏、锁屏和桌面接起来，并且把 Vivo Alive
+与魅族原生时钟搬进第三方模块。
 
 HyperAlive 是 [OpenAlive](https://github.com/Maga-King/OpenAlive) 的移植分支，面向
 **HyperOS / Android 14-17**（开发机：Redmi 25102RKBEC，HyperOS 4.0 / Android 17）。
@@ -15,7 +15,6 @@ HyperAlive 是 [OpenAlive](https://github.com/Maga-King/OpenAlive) 的移植分�
 | Flyme Alive 场景（启航 / 留光 / 星月 / 轻启 / 山脉 / 银河 / 涟漪 / 浪流 / 深潜） | 可用 | 自绘 OpenGL 动态壁纸，不依赖 OEM 框架 |
 | 渐变、光斑、气泡、立体、唱片等效果 | 可用 | 同上 |
 | Vivo Alive（液态 / 光栅 / 闪卡） | 可用 | 复用 Vivo 原版渲染器 |
-| 小米超级壁纸（月球 / 雪山 / 几何 / 土星 / 地球 / 火星） | 可用 | 内置 HyperOS 运行时的原版控件与场景包 |
 | 息屏动画衔接（ColorOS AOD 面板） | 仅 ColorOS | HyperOS 的 AOD 由 `com.miui.aod` 自绘，不承接第三方壁纸 |
 | 锁屏编辑器原生时钟（ColorOS） | 仅 ColorOS | 依赖 `com.oplus.wallpapers` 的编辑器 |
 | 通知光效 | 仅 ColorOS | 依赖 SystemUI 的 ColorOS 类 |

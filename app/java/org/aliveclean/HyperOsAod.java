@@ -71,9 +71,33 @@ final class HyperOsAod {
             }
         });
         XposedBridge.hookAllMethods(service, "onDreamingStopped", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.hide(); }
+            @Override protected void afterHookedMethod(MethodHookParam param) { playExit(); AodOverlay.hide(); }
         });
         Log.i(TAG, "doze service hook installed");
+    }
+
+
+    /** The scene leaves with the same motion it enters with, reversed: it sinks a
+     * little and fades out, so waking up never cuts the sphere off mid-frame. */
+    static void playExit() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        if (root == null) return;
+        View scene = root.findViewWithTag(TAG);
+        if (scene == null) return;
+        float lift = -24f * scene.getResources().getDisplayMetrics().density;
+        scene.animate()
+                .alpha(0f)
+                .scaleX(0.9f)
+                .scaleY(0.9f)
+                .translationY(lift)
+                .setDuration(280L)
+                .withEndAction(() -> {
+                    if (scene.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) scene.getParent()).removeView(scene);
+                    }
+                })
+                .start();
+        Log.i(TAG, "exit animation started");
     }
 
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;

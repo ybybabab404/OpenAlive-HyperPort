@@ -82,6 +82,95 @@ final class AliveAodStyle {
                 }
             });
         }
+        // The page the user actually sees is the classic preference screen: its spinner takes
+        // its labels from AODSettings.getShowStyleEntries(). Appending one label is the whole
+        // UI change; the value mapping is handled below.
+        Class<?> aodSettings = XposedHelpers.findClassIfExists("com.miui.aod.widget.AODSettings", loader);
+        if (aodSettings != null) {
+            XposedHelpers.findAndHookMethod(aodSettings, "getShowStyleEntries", Context.class, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam call) {
+                    Object result = call.getResult();
+                    if (!(result instanceof CharSequence[])) return;
+                    CharSequence[] original = (CharSequence[]) result;
+                    CharSequence[] extended = new CharSequence[original.length + 1];
+                    System.arraycopy(original, 0, extended, 0, original.length);
+                    extended[original.length] = "HyperAlive 样式";
+                    call.setResult(extended);
+                    Trace.log("T23", "style entries -> " + extended.length);
+                }
+            });
+        }
+        // Diagnostic: which string array feeds the display-mode dialog.
+        try {
+            XposedHelpers.findAndHookMethod(android.content.res.Resources.class, "getStringArray", int.class, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam call) {
+                    Object result = call.getResult();
+                    if (!(result instanceof String[])) return;
+                    String[] values = (String[]) result;
+                    if (values.length == 0 || values.length > 8) return;
+                    StringBuilder joined = new StringBuilder();
+                    for (String value : values) joined.append(value).append('|');
+                    Trace.log("T24", "res=" + call.args[0] + " -> " + joined);
+                }
+            });
+            XposedHelpers.findAndHookMethod(android.content.res.Resources.class, "getTextArray", int.class, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam call) {
+                    Object result = call.getResult();
+                    if (!(result instanceof CharSequence[])) return;
+                    CharSequence[] values = (CharSequence[]) result;
+                    if (values.length == 0 || values.length > 8) return;
+                    StringBuilder joined = new StringBuilder();
+                    for (CharSequence value : values) joined.append(value).append('|');
+                    Trace.log("T25", "res=" + call.args[0] + " -> " + joined);
+                }
+            });
+        } catch (Throwable error) {
+            Trace.log("T24", "array probe failed", error);
+        }
+        // Never replace MIUI's adapter: its item layout carries the font/colour styling.
+        // We only append one virtual entry through method-level injection on the instance.
+        try {
+            Class<?> spinner = XposedHelpers.findClassIfExists("miuix.appcompat.widget.Spinner", loader);
+            if (spinner != null) {
+                XposedHelpers.findAndHookMethod(spinner, "setAdapter", android.widget.SpinnerAdapter.class, new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam call) {
+                        Object adapter = call.args[0];
+                        if (!(adapter instanceof android.widget.ArrayAdapter)) return;
+                        android.widget.ArrayAdapter<?> array = (android.widget.ArrayAdapter<?>) adapter;
+                        if (array.getCount() != 2) return;
+                        if (!"自定义".equals(String.valueOf(array.getItem(0)))) return;
+                        if (!"和锁屏样式一致".equals(String.valueOf(array.getItem(1)))) return;
+                        styleAdapter = new java.lang.ref.WeakReference<>(array);
+                        Trace.log("T28", "style adapter tracked (no replacement)");
+                    }
+                });
+                XposedHelpers.findAndHookMethod(spinner, "setOnItemSelectedListener",
+                        android.widget.AdapterView.OnItemSelectedListener.class, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam call) {
+                        Object listener = call.args[0];
+                        if (listener == null || listener instanceof OurListener) return;
+                        call.args[0] = new OurListener((android.widget.AdapterView.OnItemSelectedListener) listener);
+                    }
+                });
+            }
+            if (!arrayHooked) {
+                arrayHooked = true;
+                XposedHelpers.findAndHookMethod(android.widget.ArrayAdapter.class, "getCount", new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam call) {
+                        if (!isStyleAdapter(call.thisObject)) return;
+                        call.setResult(((Integer) call.getResult()) + 1);
+                    }
+                });
+                XposedHelpers.findAndHookMethod(android.widget.ArrayAdapter.class, "getItem", int.class, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam call) {
+                        if (!isStyleAdapter(call.thisObject)) return;
+                        if ((Integer) call.args[0] == 2) call.setResult("HyperAlive 样式");
+                    }
+                });
+            }
+        } catch (Throwable error) {
+            Trace.log("T28", "style spinner hook failed", error);
+        }
         Trace.log("T20", "display mode hooks installed");
     }
 
@@ -107,5 +196,39 @@ final class AliveAodStyle {
     }
 
     private AliveAodStyle() {
+    }
+
+    private static java.lang.ref.WeakReference<android.widget.ArrayAdapter<?>> styleAdapter;
+    private static boolean arrayHooked;
+
+    private static boolean isStyleAdapter(Object candidate) {
+        android.widget.ArrayAdapter<?> adapter = styleAdapter == null ? null : styleAdapter.get();
+        return adapter != null && adapter == candidate;
+    }
+
+    /** Delegates native positions, owns the appended one. */
+    private static final class OurListener implements android.widget.AdapterView.OnItemSelectedListener {
+        private final android.widget.AdapterView.OnItemSelectedListener delegate;
+
+        OurListener(android.widget.AdapterView.OnItemSelectedListener delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
+            if (position == 2) {
+                android.content.Context context = parent.getContext();
+                android.content.ContentResolver cr = context.getContentResolver();
+                android.provider.Settings.Secure.putInt(cr, KEY_SHOW_STYLE, 3);
+                android.provider.Settings.Secure.putInt(cr, KEY_FULL_AOD, 1);
+                android.provider.Settings.Secure.putInt(cr, KEY_OURS, 1);
+                Trace.log("T29", "picked HyperAlive style via spinner");
+                return;
+            }
+            delegate.onItemSelected(parent, view, position, id);
+        }
+
+        @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            delegate.onNothingSelected(parent);
+        }
     }
 }

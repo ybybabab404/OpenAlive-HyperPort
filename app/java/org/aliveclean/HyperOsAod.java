@@ -380,7 +380,10 @@ final class HyperOsAod {
                     app.getSharedPreferences(SceneOptions.APPLIED, 0);
             // aod == -1 is the only value that means "leave the stock AOD alone";
             // 0 is a real scene, not "off".
-            return prefs.getInt("aod", 0) != -1;
+            if (prefs.getInt("aod", 0) == -1) return false;
+            // The scene belongs to the HyperAlive display mode only: any native mode keeps
+            // the stock AOD untouched, even if the user previously picked ours.
+            return android.provider.Settings.Secure.getInt(app.getContentResolver(), "alive_aod_style", 0) == 1;
         } catch (Throwable unavailable) {
             Log.w(TAG, "cannot read scene settings", unavailable);
             return false;

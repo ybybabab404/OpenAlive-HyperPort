@@ -236,6 +236,12 @@ final class AliveAodStyle {
                 return;
             }
             delegate.onItemSelected(parent, view, position, id);
+            // Choosing any native mode must switch our effect off: the flag is the only
+            // thing the renderer consults, so clearing it is the whole state change.
+            android.content.ContentResolver resolver = parent.getContext().getContentResolver();
+            int previous = android.provider.Settings.Secure.getInt(resolver, KEY_OURS, 0);
+            android.provider.Settings.Secure.putInt(resolver, KEY_OURS, 0);
+            if (previous != 0) Trace.log("T29", "native mode chosen, our flag cleared");
         }
 
         @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {

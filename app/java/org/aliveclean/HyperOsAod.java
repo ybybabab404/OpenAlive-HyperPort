@@ -203,7 +203,19 @@ final class HyperOsAod {
         // sphere and reintroduce the detach churn, so that path stays off.
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
-        if (!aodSceneEnabled(context)) return;
+        if (!aodSceneEnabled(context)) {
+            // Leaving HyperAlive mode must also take down the ball that is already on screen:
+            // the surface is reused across doze cycles, so skipping the attach is not enough.
+            AodSurface stale = liveSurface == null ? null : liveSurface.get();
+            if (stale != null) {
+                if (stale.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) stale.getParent()).removeView(stale);
+                }
+                liveSurface = null;
+                Trace.log("T30", "gate off, detached the scene");
+            }
+            return;
+        }
         // Exactly one scene surface per process: MIUI builds several AodView hosts while
         // entering doze (keyguard one, then the doze one). A second surface means two
         // balls, and whichever host is torn down makes the visible one restart.
@@ -381,6 +393,14 @@ final class HyperOsAod {
             // aod == -1 is the only value that means "leave the stock AOD alone";
             // 0 is a real scene, not "off".
             if (prefs.getInt("aod", 0) == -1) return false;
+            int ours = -1;
+            try {
+                ours = android.provider.Settings.Secure.getInt(base.getContentResolver(), "alive_aod_style", 0);
+            } catch (Throwable denied) {
+                Trace.log("T30", "cannot read alive_aod_style", denied);
+            }
+            Trace.log("T30", "gate alive_aod_style=" + ours);
+            if (ours != 1) return false;
             // The scene belongs to the HyperAlive display mode only: any native mode keeps
             // the stock AOD untouched, even if the user previously picked ours.
             return android.provider.Settings.Secure.getInt(app.getContentResolver(), "alive_aod_style", 0) == 1;

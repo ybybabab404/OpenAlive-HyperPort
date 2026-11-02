@@ -9,6 +9,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -116,6 +117,10 @@ final class HyperOsAod {
     private static java.lang.ref.WeakReference<AodSurface> activeSurface;
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
     private static java.lang.ref.WeakReference<View> overlayView;
+    /** MIUI can build a second AOD host (keyguard entry vs. doze entry). Two surfaces
+     *  fight over the same window and each rebuild restarted the flow, which is the
+     *  flicker seen when entering AOD from the lock screen. Keep exactly one. */
+    private static java.lang.ref.WeakReference<AodSurface> liveSurface;
     private static android.view.WindowManager overlayWindows;
 
     /** Hosts the scene in our own window. MIUI keeps clearing the children of its
@@ -197,6 +202,15 @@ final class HyperOsAod {
         aodRoot = new java.lang.ref.WeakReference<>(root);
         if (!aodSceneEnabled(context)) return;
         if (root.findViewWithTag(TAG) != null) return;
+        // Entering AOD from the lock screen builds a second AOD host while the first is
+        // still alive. Replacing it tears down a working SurfaceTexture and restarts the
+        // flow, which is the flicker. Keep the surface that is already on screen and
+        // just remember the new root for lookups.
+        AodSurface previous = liveSurface == null ? null : liveSurface.get();
+        if (previous != null && previous.isAttachedToWindow() && previous.getParent() != null) {
+            Log.i(TAG, "second AOD host ignored, keeping the live surface");
+            return;
+        }
         // The inner com.miui.aod.AODView paints the AOD wallpaper full screen, so a
         // surface added to the outer AodView sits *under* that wallpaper. Inject into
         // the inner container instead: wallpaper below, stock clock above.
@@ -213,6 +227,7 @@ final class HyperOsAod {
         }
         AodSurface surface = new AodSurface(context);
         surface.setTag(TAG);
+        liveSurface = new java.lang.ref.WeakReference<>(surface);
         surface.setAlpha(1f);
         target.addView(surface, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));

@@ -273,15 +273,13 @@ final class RenderLoop {
             File external=context.getExternalFilesDir(null);
             File fromExternal=external==null?null:new File(external,SceneOptions.WALLPAPER);
             File internal=new File(context.getFilesDir(),SceneOptions.WALLPAPER);
-            if(fromExternal!=null&&fromExternal.isFile())file=fromExternal;else if(internal.isFile())file=internal;
+            File shared=new File("/data/data/com.android.systemui/files/aod-wallpaper.png");
+            if(shared.isFile())file=shared;else if(fromExternal!=null&&fromExternal.isFile())file=fromExternal;else if(internal.isFile())file=internal;
         }
+        Log.i("AliveClean","loadPhoto "+file.getAbsolutePath()+" exists="+file.isFile()+" mode="+mode+" primary="+primary);
         Bitmap bitmap=null;
         if(file.exists())try{android.graphics.ImageDecoder.Source source=android.graphics.ImageDecoder.createSource(file);bitmap=android.graphics.ImageDecoder.decodeBitmap(source,(decoder,info,s)->{int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);});}catch(IOException e){Log.e("AliveClean","Photo decode failed",e);}
-        if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);
-            int[] palette=aodPalette;
-            if(palette==null){palette=new int[]{0xff183955,0xffce865c,0xff5b526e};}
-            p.setShader(new LinearGradient(0,0,720,1440,new int[]{palette[0],palette[1],palette[2]},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);
-            p.setColor(palette[2]);canvas.drawCircle(490,480,230,p);p.setColor(palette[0]);canvas.drawOval(-220,800,930,1880,p);}
+        if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);p.setShader(new LinearGradient(0,0,720,1440,new int[]{0xff183955,0xffce865c,0xff5b526e},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);p.setColor(0xffe6b282);canvas.drawCircle(490,480,230,p);p.setColor(0xff254452);canvas.drawOval(-220,800,930,1880,p);}
         if(primary)aspect=(float)bitmap.getWidth()/bitmap.getHeight();else{homeWidth=bitmap.getWidth();homeHeight=bitmap.getHeight();}int id=upload(bitmap);bitmap.recycle();return id;
     }
     private static int upload(Bitmap bitmap){

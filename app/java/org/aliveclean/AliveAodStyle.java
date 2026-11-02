@@ -164,6 +164,7 @@ final class AliveAodStyle {
                             }
                             array.notifyDataSetChanged();
                             styleAdapter = new java.lang.ref.WeakReference<>(array);
+                        ensureObserver(array.getContext());
                             Trace.log("T28", "style item appended, count=" + array.getCount());
                         } catch (Throwable failure) {
                             Trace.log("T28", "append failed", failure);
@@ -211,6 +212,31 @@ final class AliveAodStyle {
 
     private static java.lang.ref.WeakReference<android.widget.ArrayAdapter<?>> styleAdapter;
     private static boolean extending;
+    private static boolean observerReady;
+
+    /** Registered once, from a context that actually belongs to this process. */
+    private static void ensureObserver(final android.content.Context context) {
+        if (observerReady || context == null) return;
+        observerReady = true;
+        try {
+            final android.content.ContentResolver resolver = context.getContentResolver();
+            resolver.registerContentObserver(
+                    android.provider.Settings.Secure.getUriFor(KEY_SHOW_STYLE), false,
+                    new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())) {
+                        @Override public void onChange(boolean selfChange) {
+                            if (System.currentTimeMillis() - lastOwnWrite < 1500) return;
+                            int ours = android.provider.Settings.Secure.getInt(resolver, KEY_OURS, 0);
+                            if (ours == 0) return;
+                            android.provider.Settings.Secure.putInt(resolver, KEY_OURS, 0);
+                            Trace.log("T31", "stock style changed, flag cleared");
+                        }
+                    });
+            Trace.log("T20", "style observer registered");
+        } catch (Throwable error) {
+            Trace.log("T31", "observer failed", error);
+        }
+    }
+    private static volatile long lastOwnWrite;
 
     /** Delegates native positions, owns the appended one. */
     private static final class OurListener implements android.widget.AdapterView.OnItemSelectedListener {
@@ -224,12 +250,14 @@ final class AliveAodStyle {
             if (position == 2) {
                 // Let MIUI do its own work for the value it understands ("和锁屏样式一致"),
                 // then mark the choice as ours. The delegate sees the native index 1.
+                lastOwnWrite = System.currentTimeMillis();
                 delegate.onItemSelected(parent, view, 1, id);
                 android.content.Context context = parent.getContext();
                 android.content.ContentResolver cr = context.getContentResolver();
                 android.provider.Settings.Secure.putInt(cr, KEY_SHOW_STYLE, 3);
                 android.provider.Settings.Secure.putInt(cr, KEY_FULL_AOD, 1);
                 android.provider.Settings.Secure.putInt(cr, KEY_OURS, 1);
+                lastOwnWrite = System.currentTimeMillis();
                 Trace.log("T29", "picked HyperAlive style: aod_show_style="
                         + android.provider.Settings.Secure.getInt(cr, KEY_SHOW_STYLE, -1)
                         + " ours=" + android.provider.Settings.Secure.getInt(cr, KEY_OURS, -1));

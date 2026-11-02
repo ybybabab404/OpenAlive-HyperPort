@@ -78,4 +78,6 @@ void main () {
     #endif
     vec4 darkColor = applyDarkIfNeed(vec4(finalColor, 1.0), u_dark_strength);
     fragColor = mix(darkColor, vec4(0.0, 0.0, 0.0, 1.0), smoothstep(u_lens_scale - 0.002, u_lens_scale, dist));
+    // Keep the sphere quiet: it must not compete with the stock clock drawn above it.
+    fragColor.rgb *= 0.55;
 }

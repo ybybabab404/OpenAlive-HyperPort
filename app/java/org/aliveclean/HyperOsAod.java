@@ -77,29 +77,24 @@ final class HyperOsAod {
     }
 
 
-    /** The scene leaves with the same motion it enters with, reversed: it sinks a
-     * little and fades out, so waking up never cuts the sphere off mid-frame. */
+    /** Leaving AOD runs the very transition the editor preview plays between the
+     * always-on and home compositions, so the sphere opens back into the wallpaper
+     * instead of being cut off. */
     static void playExit() {
+        AodSurface surface = activeSurface == null ? null : activeSurface.get();
+        if (surface != null && surface.exitWithTransition()) {
+            Log.i(TAG, "exit transition started");
+            return;
+        }
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        if (root == null) return;
-        View scene = root.findViewWithTag(TAG);
-        if (scene == null) return;
-        float lift = -24f * scene.getResources().getDisplayMetrics().density;
-        scene.animate()
-                .alpha(0f)
-                .scaleX(0.9f)
-                .scaleY(0.9f)
-                .translationY(lift)
-                .setDuration(280L)
-                .withEndAction(() -> {
-                    if (scene.getParent() instanceof ViewGroup) {
-                        ((ViewGroup) scene.getParent()).removeView(scene);
-                    }
-                })
-                .start();
-        Log.i(TAG, "exit animation started");
+        View scene = root == null ? null : root.findViewWithTag(TAG);
+        if (scene != null && scene.getParent() instanceof ViewGroup) {
+            ((ViewGroup) scene.getParent()).removeView(scene);
+            Log.i(TAG, "scene removed without transition");
+        }
     }
 
+    private static java.lang.ref.WeakReference<AodSurface> activeSurface;
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
 
     /** Injects into the stock AOD window itself, which keeps the stock clock above. */
@@ -317,8 +312,21 @@ final class HyperOsAod {
             setOpaque(false);
         }
 
+
+        /** Plays the same mode transition the editor preview uses, then detaches. */
+        private boolean exitWithTransition() {
+            if (loop == null) return false;
+            loop.mode(1, true);
+            postDelayed(() -> {
+                if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
+                Log.i(TAG, "exit transition done");
+            }, 1100L);
+            return true;
+        }
+
         @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
             surface = new Surface(texture);
+            activeSurface = new java.lang.ref.WeakReference<>(this);
             loop = new RenderLoop(appContext);
             loop.mode(0);
             loop.attach(surface, width, height);

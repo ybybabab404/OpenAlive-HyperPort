@@ -269,7 +269,12 @@ final class RenderLoop {
         File file=new File(context.getFilesDir(),name);
         // The AOD sphere is the wallpaper the user applied, so prefer the copy captured
         // at apply time over whatever scene photo the options point at.
-        if(primary&&mode==0){File wallpaper=new File(context.getFilesDir(),SceneOptions.WALLPAPER);if(wallpaper.isFile())file=wallpaper;}
+        if(primary&&mode==0){
+            File external=context.getExternalFilesDir(null);
+            File fromExternal=external==null?null:new File(external,SceneOptions.WALLPAPER);
+            File internal=new File(context.getFilesDir(),SceneOptions.WALLPAPER);
+            if(fromExternal!=null&&fromExternal.isFile())file=fromExternal;else if(internal.isFile())file=internal;
+        }
         Bitmap bitmap=null;
         if(file.exists())try{android.graphics.ImageDecoder.Source source=android.graphics.ImageDecoder.createSource(file);bitmap=android.graphics.ImageDecoder.decodeBitmap(source,(decoder,info,s)->{int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);});}catch(IOException e){Log.e("AliveClean","Photo decode failed",e);}
         if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);

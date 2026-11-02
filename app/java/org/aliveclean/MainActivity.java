@@ -112,29 +112,30 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
     private void importBusy(boolean busy){importing=busy;showScene();}
 
-    /** Stores the wallpaper that is actually showing, so the AOD sphere can use its
-     * colours instead of the renderer's built-in fallback gradient. */
+    /** The AOD view runs inside SystemUI, which cannot read our private files, so the
+     * photo the scene is built from is copied next to it in the external files
+     * directory. That copy is what the always-on sphere blurs. */
     private void captureWallpaper() {
         try {
-            WallpaperManager manager = WallpaperManager.getInstance(this);
-            android.graphics.drawable.Drawable drawable = manager.getDrawable();
-            if (drawable == null) return;
-            int width = Math.max(1, drawable.getIntrinsicWidth()), height = Math.max(1, drawable.getIntrinsicHeight());
-            float scale = Math.min(1f, 1440f / Math.max(width, height));
-            android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
-                    Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale)),
-                    android.graphics.Bitmap.Config.ARGB_8888);
-            android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
-            drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
-            drawable.draw(canvas);
-            java.io.File target = new java.io.File(getFilesDir(), SceneOptions.WALLPAPER);
-            try (java.io.FileOutputStream stream = new java.io.FileOutputStream(target)) {
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream);
+            SceneOptions chosen = new SceneOptions(draft);
+            java.io.File source = new java.io.File(getFilesDir(), chosen.photo);
+            if (!source.isFile()) return;
+            java.io.File external = getExternalFilesDir(null);
+            java.io.File[] targets = external == null
+                    ? new java.io.File[]{new java.io.File(getFilesDir(), SceneOptions.WALLPAPER)}
+                    : new java.io.File[]{new java.io.File(getFilesDir(), SceneOptions.WALLPAPER),
+                                         new java.io.File(external, SceneOptions.WALLPAPER)};
+            for (java.io.File target : targets) {
+                try (java.io.InputStream in = new java.io.FileInputStream(source);
+                     java.io.OutputStream out = new java.io.FileOutputStream(target)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int read;
+                    while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+                }
             }
-            bitmap.recycle();
-            android.util.Log.i("AliveClean", "wallpaper captured " + target.length() + "B");
+            android.util.Log.i("AliveClean", "wallpaper mirrored from " + chosen.photo);
         } catch (Throwable failure) {
-            android.util.Log.w("AliveClean", "wallpaper capture failed", failure);
+            android.util.Log.w("AliveClean", "wallpaper mirror failed", failure);
         }
     }
 

@@ -116,3 +116,34 @@ NotificationShadeWindowView (root, 1200x2608)
 ### 卡在哪
 - 换气熔断：连续 6 轮思考无正文就被强制停，导致每轮实际只能推进一步。压缩插件疑似有 bug，压缩不出新窗口。
 - 硬件侧：无线 10.11.48.92:39795 常 10060 超时，改用 USB `9eb96e8a`；大 APK 只能走 USB 装。
+
+## 2026-11-02 14:24 · AOD 卡点已解决（真因不是 z 序）
+
+稳定息屏下场景现在能正常显示。三个真因，逐个修掉：
+
+1. **渲染器根本没初始化**：`RenderLoop` 拿的是 SystemUI 的 Context，`getAssets()` 解析到 SystemUI 的 APK，
+   `shader/photo/aod/lensPhoto/lens_decorator.png` 直接 `FileNotFoundException`。改成
+   `context.createPackageContext("org.aliveclean", 0)`，并且 `RenderLoop` 在
+   `getApplicationContext()` 为 null 时回落到传入的 Context。
+2. **native 库加载不了**：`lib/arm64-v8a/libalive_clean.so` 在 APK 里是 DEFLATE 压缩的，LSPosed 的模块
+   类加载器无法映射。`tools/apk_layout.py` 现在把所有 `lib/**/*.so` 存成 STORED，由 `zipalign -p` 做页对齐。
+   （这个错以前是 `UnsatisfiedLinkError`，被吞在 `AliveGL` 线程里，只看到「没有画面」。）
+3. **宿主选错**：外层 `com.android.keyguard.widget.AodView` 的 index 0 会被内层
+   `com.miui.aod.AODView` 的整屏壁纸盖住。现在改成 `TextureView`（画进窗口自己的缓冲，按视图层级合成），
+   并加了宿主迁移监视：内层 AODView 一出现就把场景搬进它的 index 0（壁纸之上、时钟之下）。
+
+顺带：多次崩溃会让 LSPosed 进安全模式（全部模块停用），只能重启手机恢复 —— 调试时如果突然一条日志都没有，
+先看 `/data/adb/lspd/log/` 里有没有 `System UI crashed too many times`。
+
+## 2026-11-02 14:24 · 小米超级壁纸素材已删
+
+按用户要求移除。注意：超级壁纸的素材只是 `assets/xiaomi/packs`（317 MB）与 6 张 banner，
+但 `Xiaomi*` 那套 Java（AOD 时钟、桌面预览、应用态检测）和 HyperOS 主路径共用，整块删会连带 15 处编译错误。
+所以采取的是：删 packs + banner + 首页入口卡片，保留代码骨架。
+APK 从 654 MB 降到 321 MB。
+
+## 设备状态
+
+2026-11-02 14:34 USB 与无线（10.11.48.149:39795）同时失联，裝机验证暂停在「320MB 包待安装」。
+恢复连接后先跑：`adb -s <sn> install -r dist/HyperAlive-0.5.0-preview-arm64-v8a.apk`，
+再按第 5 节的回路复验 AOD。

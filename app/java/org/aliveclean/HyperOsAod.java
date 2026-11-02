@@ -118,6 +118,53 @@ final class HyperOsAod {
 
     private static java.lang.ref.WeakReference<AodSurface> activeSurface;
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
+    private static java.lang.ref.WeakReference<View> overlayView;
+    private static android.view.WindowManager overlayWindows;
+
+    /** Hosts the scene in our own window. MIUI keeps clearing the children of its
+     * AODView, which detached our surface and restarted the animation; owning the
+     * window removes that whole class of flicker. The window covers only the upper
+     * part of the screen, so the stock clock below stays untouched. */
+    static void showOverlay(Context context) {
+        hideOverlay();
+        try {
+            android.view.WindowManager windows =
+                    (android.view.WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+            AodSurface surface = new AodSurface(context);
+            surface.setTag(TAG);
+            android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
+            frame.setBackgroundColor(0x00000000);
+            frame.addView(surface, new android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    (int) (metrics.heightPixels * 0.46f),
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
+                    android.graphics.PixelFormat.TRANSLUCENT);
+            params.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
+            windows.addView(frame, params);
+            overlayView = new java.lang.ref.WeakReference<>(frame);
+            overlayWindows = windows;
+            Log.i(TAG, "scene overlay added " + metrics.widthPixels + "x" + params.height);
+        } catch (Throwable failure) {
+            Log.w(TAG, "scene overlay failed", failure);
+        }
+    }
+
+    static void hideOverlay() {
+        View view = overlayView == null ? null : overlayView.get();
+        if (view == null || overlayWindows == null) return;
+        try { overlayWindows.removeView(view); } catch (Throwable ignored) { }
+        overlayView = null;
+        Log.i(TAG, "scene overlay removed");
+    }
 
     /** Injects into the stock AOD window itself, which keeps the stock clock above. */
     static boolean hasInjectedView() {
@@ -146,6 +193,8 @@ final class HyperOsAod {
     }
 
     private static void attach(ViewGroup root) {
+        // When our own window is up, injecting into MIUI's tree would draw a second
+        // sphere and reintroduce the detach churn, so that path stays off.
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
         if (!aodSceneEnabled(context)) return;

@@ -134,14 +134,40 @@ final class AliveAodStyle {
             if (spinner != null) {
                 XposedHelpers.findAndHookMethod(spinner, "setAdapter", android.widget.SpinnerAdapter.class, new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam call) {
+                        if (extending) return;
                         Object adapter = call.args[0];
                         if (!(adapter instanceof android.widget.ArrayAdapter)) return;
                         android.widget.ArrayAdapter<?> array = (android.widget.ArrayAdapter<?>) adapter;
                         if (array.getCount() != 2) return;
                         if (!"自定义".equals(String.valueOf(array.getItem(0)))) return;
                         if (!"和锁屏样式一致".equals(String.valueOf(array.getItem(1)))) return;
-                        styleAdapter = new java.lang.ref.WeakReference<>(array);
-                        Trace.log("T28", "style adapter tracked (no replacement)");
+                        // Append into the adapter's own backing list: the adapter, its item
+                        // layout, fonts and selection highlight all stay MIUI's.
+                        try {
+                            java.lang.reflect.Field objectsField = android.widget.ArrayAdapter.class.getDeclaredField("mObjects");
+                            objectsField.setAccessible(true);
+                            Object backing = objectsField.get(array);
+                            if (!(backing instanceof List)) return;
+                            @SuppressWarnings("unchecked")
+                            List<Object> items = (List<Object>) backing;
+                            if (items.contains("HyperAlive 样式")) return;
+                            boolean mutable = true;
+                            try {
+                                items.add("HyperAlive 样式");
+                            } catch (UnsupportedOperationException immutable) {
+                                mutable = false;
+                            }
+                            if (!mutable) {
+                                List<Object> copy = new ArrayList<>(items);
+                                copy.add("HyperAlive 样式");
+                                objectsField.set(array, copy);
+                            }
+                            array.notifyDataSetChanged();
+                            styleAdapter = new java.lang.ref.WeakReference<>(array);
+                            Trace.log("T28", "style item appended, count=" + array.getCount());
+                        } catch (Throwable failure) {
+                            Trace.log("T28", "append failed", failure);
+                        }
                     }
                 });
                 XposedHelpers.findAndHookMethod(spinner, "setOnItemSelectedListener",
@@ -150,21 +176,6 @@ final class AliveAodStyle {
                         Object listener = call.args[0];
                         if (listener == null || listener instanceof OurListener) return;
                         call.args[0] = new OurListener((android.widget.AdapterView.OnItemSelectedListener) listener);
-                    }
-                });
-            }
-            if (!arrayHooked) {
-                arrayHooked = true;
-                XposedHelpers.findAndHookMethod(android.widget.ArrayAdapter.class, "getCount", new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam call) {
-                        if (!isStyleAdapter(call.thisObject)) return;
-                        call.setResult(((Integer) call.getResult()) + 1);
-                    }
-                });
-                XposedHelpers.findAndHookMethod(android.widget.ArrayAdapter.class, "getItem", int.class, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam call) {
-                        if (!isStyleAdapter(call.thisObject)) return;
-                        if ((Integer) call.args[0] == 2) call.setResult("HyperAlive 样式");
                     }
                 });
             }
@@ -199,12 +210,7 @@ final class AliveAodStyle {
     }
 
     private static java.lang.ref.WeakReference<android.widget.ArrayAdapter<?>> styleAdapter;
-    private static boolean arrayHooked;
-
-    private static boolean isStyleAdapter(Object candidate) {
-        android.widget.ArrayAdapter<?> adapter = styleAdapter == null ? null : styleAdapter.get();
-        return adapter != null && adapter == candidate;
-    }
+    private static boolean extending;
 
     /** Delegates native positions, owns the appended one. */
     private static final class OurListener implements android.widget.AdapterView.OnItemSelectedListener {
@@ -216,12 +222,17 @@ final class AliveAodStyle {
 
         @Override public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
             if (position == 2) {
+                // Let MIUI do its own work for the value it understands ("和锁屏样式一致"),
+                // then mark the choice as ours. The delegate sees the native index 1.
+                delegate.onItemSelected(parent, view, 1, id);
                 android.content.Context context = parent.getContext();
                 android.content.ContentResolver cr = context.getContentResolver();
                 android.provider.Settings.Secure.putInt(cr, KEY_SHOW_STYLE, 3);
                 android.provider.Settings.Secure.putInt(cr, KEY_FULL_AOD, 1);
                 android.provider.Settings.Secure.putInt(cr, KEY_OURS, 1);
-                Trace.log("T29", "picked HyperAlive style via spinner");
+                Trace.log("T29", "picked HyperAlive style: aod_show_style="
+                        + android.provider.Settings.Secure.getInt(cr, KEY_SHOW_STYLE, -1)
+                        + " ours=" + android.provider.Settings.Secure.getInt(cr, KEY_OURS, -1));
                 return;
             }
             delegate.onItemSelected(parent, view, position, id);

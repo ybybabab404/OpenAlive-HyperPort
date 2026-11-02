@@ -355,10 +355,7 @@ final class HyperOsAod {
             surface = new Surface(texture);
             activeSurface = new java.lang.ref.WeakReference<>(this);
             loop = new RenderLoop(appContext);
-            // Start from the home composition and transition into the always-on one, so the
-            // sphere grows out of the wallpaper instead of popping in on the first frame.
-            loop.mode(1, false);
-            postDelayed(() -> { if (loop != null) loop.mode(0, true); }, 420L);
+            loop.mode(0);
             loop.attach(surface, width, height);
             Log.i(TAG, "texture available " + width + "x" + height);
         }

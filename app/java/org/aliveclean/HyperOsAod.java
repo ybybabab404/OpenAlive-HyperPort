@@ -191,7 +191,7 @@ final class HyperOsAod {
                 // rebuilt the SurfaceTexture and restarted the flow, which is what the
                 // flicker was. Require three consecutive misses before touching it.
                 if (surface.getParent() == null) {
-                    if (++misses < 3) { next(); return; }
+                    if (++misses < 8) { next(); return; }
                     ViewGroup host = findInnerAod(root);
                     (host != null ? host : root).addView(surface, 0,
                             new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -213,7 +213,7 @@ final class HyperOsAod {
             }
 
             private void next() {
-                if (++tries < 20) root.postDelayed(this, 300);
+                if (++tries < 100) root.postDelayed(this, 300);
                 else Log.i(TAG, "supervise done, parent="
                         + (surface.getParent() == null ? "null"
                         : surface.getParent().getClass().getName()));

@@ -71,7 +71,7 @@ final class HyperOsAod {
             }
         });
         XposedBridge.hookAllMethods(service, "onDreamingStopped", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) { playExit(); AodOverlay.hide(); }
+            @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.hide(); }
         });
         Log.i(TAG, "doze service hook installed");
     }

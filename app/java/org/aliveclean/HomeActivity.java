@@ -86,7 +86,7 @@ public final class HomeActivity extends Activity {
                 if(destination!=null)shortcutCount++;
             }
             shortcuts.setVisibility(shortcutCount==0?View.GONE:View.VISIBLE);
-            int extensionAnchor=shortcutCount==0?xiaomi.getId():shortcuts.getId();
+            int extensionAnchor=shortcutCount==0?vivo.getId():shortcuts.getId();
             View extensions=ui.find(root,"system_center_extension");ViewGroup.LayoutParams extensionsLp=extensions.getLayoutParams();
             replaceAnchor(extensionsLp,ui.id("id","system_center_theme"),extensionAnchor);extensions.setLayoutParams(extensionsLp);
             View light=ui.find(root,"system_more_light_effect");

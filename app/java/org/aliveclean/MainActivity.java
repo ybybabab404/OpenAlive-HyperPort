@@ -63,6 +63,8 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     }
     private void choosePhoto(){
         SceneOptions chosen=new SceneOptions(draft);
+        android.util.Log.i("AliveClean","commit aod="+chosen.aod+" cosmic="+chosen.cosmic
+                +" lock="+chosen.lock+" home="+chosen.home+" vivo="+chosen.vivo);
         importTarget=chosen.pairedFrame()?(mode==0?2:0):(mode==2?1:0);
         String title=chosen.pairedFrame()?(mode==0?"相框照片":"锁屏与桌面照片"):mode==2?"桌面照片":"照片";
         if(chosen.cosmic!=0){startActivity(new Intent(this,DynamicLibraryActivity.class));return;}

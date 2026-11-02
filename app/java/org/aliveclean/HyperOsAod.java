@@ -63,8 +63,24 @@ final class HyperOsAod {
         Log.i(TAG, "doze service hook installed");
     }
 
+    private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
+
+    /** Injects into the stock AOD window itself, which keeps the stock clock above. */
+    static boolean hasInjectedView() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        return root != null && root.findViewWithTag(TAG) != null;
+    }
+
+    static boolean injectIntoAod() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        if (root == null) return false;
+        attach(root);
+        return root.findViewWithTag(TAG) != null;
+    }
+
     private static void attach(ViewGroup root) {
         Context context = root.getContext();
+        aodRoot = new java.lang.ref.WeakReference<>(root);
         if (!ownsWallpaper(context)) return;
         if (root.findViewWithTag(TAG) != null) return;
         AodSurface surface = new AodSurface(context);

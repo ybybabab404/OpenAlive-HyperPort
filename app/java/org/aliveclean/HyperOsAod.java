@@ -49,6 +49,20 @@ final class HyperOsAod {
         if (!installed) Log.i(TAG, "no AOD view class in this process");
     }
 
+    /** HyperOS 4 keeps the AOD inside the doze service; a window overlay is the
+     * only place a third party scene can live without touching the stock clock. */
+    static void installDoze(ClassLoader loader) {
+        Class<?> service = XposedHelpers.findClassIfExists("com.android.keyguard.doze.MiuiDozeService", loader);
+        if (service == null) { Log.i(TAG, "no MiuiDozeService"); return; }
+        XposedBridge.hookAllMethods(service, "onDreamingStarted", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.show((android.app.Service) param.thisObject); }
+        });
+        XposedBridge.hookAllMethods(service, "onDreamingStopped", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.hide(); }
+        });
+        Log.i(TAG, "doze service hook installed");
+    }
+
     private static void attach(ViewGroup root) {
         Context context = root.getContext();
         if (!ownsWallpaper(context)) return;

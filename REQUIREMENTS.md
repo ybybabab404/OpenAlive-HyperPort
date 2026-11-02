@@ -50,3 +50,54 @@ python tools/deploy.py --build
 ```
 
 真·增量（只传变动部分）还做不到：`aapt2 --split` 只能按资源**配置**拆，不能按 assets 拆；要拆只能把 244MB 素材挪到独立包（org.aliveclean.media），但那要改 70 处 `getAssets()` 调用。已确认这条路，等要做时按「媒体包 + 首次解包到私有目录」实现。
+
+## 六、关键发现：全屏 AOD 才是闪烁的真解（2026-11-02 22:00 用户实测）
+
+- 用户在系统设置里把「显示模式」改为 **和锁屏样式一致（全屏 AOD）** 后：
+  **闪烁消失**，进场/退场动画**流畅**。
+- 对照实验：18:14 版（`0544483`）、18:52 版（`d7c7217`）在「自定义」模式下仍会闪，
+  说明闪烁不是代码回归，而是 **AOD 显示模式**决定的。
+- 以前所有"修闪烁"的尝试，都是在错误模式下的渲染路径上较劲。
+
+### 全屏 AOD 是怎么被打开的（拆 `全屏AOD_1.0.apk` 得到）
+
+该 APK（`cn.domexie.hyperos_hook.full_aod`，6KB dex）只有三个 hook：
+
+1. `com.miui.aod`：`com.miui.aod.Utils.isSupportFsAod()` → 恒返回 `true`
+2. `com.android.systemui`：`SystemUIInitializer.init()` 之前，
+   把 `com.miui.utils.configs.MiuiConfigs.SUPPORT_FULL_AOD` 置 `true`
+3. 自身进程：`MainActivity.isModuleActivated()` → true（仅状态显示）
+
+这两处一开，系统设置里出现「和锁屏样式一致」，且真的生效。
+
+## 七、新方案：显示模式新增第三项「HyperAlive 样式」（已记录，未实现）
+
+### 目标
+
+在「息屏与锁屏编辑 → 显示模式」里，除现有的
+`自定义（普通 AOD）`、`和锁屏样式一致（全屏 AOD）`，**再增加一项** `HyperAlive 样式`。
+
+- 选中 `HyperAlive 样式`：底层按**全屏 AOD** 运行（这是流畅不闪的前提），同时启用模块的
+  球体 / 壁纸后处理效果。
+- 选中其它任何选项：模块**完全不介入**，保持 MIUI 默认行为。
+
+### 硬约束
+
+1. **不改动原有选项**：不重命名、不隐藏、不改变语义。
+2. **不占用别人的逻辑**：不 hook「和锁屏样式一致」的既有实现；与 `full_aod` 这类模块必须能共存。
+   只**新建**自己的样式项。
+3. **默认行为不变**：没选 `HyperAlive 样式` 时，效果 / hook / 窗口一律不生效。
+4. 只在 `com.miui.aod`、`com.android.systemui` 两个进程内工作。
+
+### 实现前待查
+
+- [ ] 「显示模式」存在哪个 key（Settings.Secure / System / MIUI 私有 prefs），枚举值是什么。
+- [ ] 该列表是 Spinner / Preference / 自定义 View，最小侵入点在哪。
+- [ ] 自定义样式值存**独立 key**（如 `alive_aod_style`），绝不写 MIUI 的 key。
+- [ ] 选中时如何让系统"以为是全屏 AOD"：优先读取 `isSupportFsAod()` 与 `SUPPORT_FULL_AOD` 的结果，
+      不 hook 它们；若系统不具备该能力则在 `com.miui.aod` 内部走全屏 AOD 分支。
+- [ ] 与「全屏AOD」模块共存测试，不能双重 hook 或崩溃。
+
+### 状态
+
+📌 仅记录，未实现（用户 2026-11-02 22:06 指示先记下来）。

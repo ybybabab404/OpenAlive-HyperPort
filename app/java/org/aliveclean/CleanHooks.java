@@ -13,6 +13,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
     @Override public void handleLoadPackage(XC_LoadPackage.LoadPackageParam p) {
         boolean colorOsEditor = "com.oplus.wallpapers".equals(p.packageName);
         boolean systemUi = "com.android.systemui".equals(p.packageName);
+        boolean miuiAod = "com.miui.aod".equals(p.packageName);
         Log.i(TAG, "loaded into " + p.packageName);
         if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
         if (colorOsEditor) {

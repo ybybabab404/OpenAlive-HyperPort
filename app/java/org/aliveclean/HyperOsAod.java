@@ -59,12 +59,9 @@ final class HyperOsAod {
             @Override protected void afterHookedMethod(MethodHookParam param) {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
                 AodOverlay.show(svc);
-                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
-                // SharedPreferences does not notify across processes, so the scene
-                // chosen in the app is only visible if we rebuild the host here.
-                handler.postDelayed(new Runnable() {
-                    @Override public void run() { refreshScene(); }
-                }, 900);
+                // The host is built fresh on every doze entry and RenderLoop reads the
+                // applied scene in its constructor, so rebuilding it again here only
+                // detached the surface (clock blinked, flow restarted). Removed.
                 handler.postDelayed(new Runnable() {
                     @Override public void run() { dumpTree("dozing"); }
                 }, 3000);

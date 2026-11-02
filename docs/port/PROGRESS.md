@@ -147,3 +147,12 @@ APK 从 654 MB 降到 321 MB。
 2026-11-02 14:34 USB 与无线（10.11.48.149:39795）同时失联，裝机验证暂停在「320MB 包待安装」。
 恢复连接后先跑：`adb -s <sn> install -r dist/HyperAlive-0.5.0-preview-arm64-v8a.apk`，
 再按第 5 节的回路复验 AOD。
+
+## 2026-11-02 20:00 实测小结
+
+- 息屏球取壁纸：`AodWallpaperProvider`（content://org.aliveclean.aodwallpaper/photo）→ RenderLoop.loadPhoto 优先读，systemui 侧不再走兜底图。commit d868f73。
+- 球亮度：lens_photo_frag 末尾 `fragColor.rgb *= 0.55`；用户确认要暗，方向已定。
+- 时钟：必须压在效果之上。做法＝等 inner com.miui.aod.AODView 出现再 addView(0)，不再先挂外层 root 再搬迁（那样会盖住时钟并闪一次）。commit 4126052 之前那次。
+- 闪烁：MIUI 会清空 AODView 子视图；`supervise()` 连续 8 次（≈2.4s）检测不到父容器才重挂，其余情况不动。3 次息屏实测 2 次重挂，仍偶发，属结构性问题。
+- 尝试过自建 overlay 窗口承载场景：窗口建起来了但场景未渲染（空帧、球消失、时钟位置被挤动），已回滚。
+- 部署：新增 `tools/deploy.py`（USB 优先、同包跳过、push+pm install）。`adb install --incremental` 在本机报 Bad file descriptor，不可用。

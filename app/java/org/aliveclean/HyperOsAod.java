@@ -7,6 +7,7 @@ import android.graphics.PixelFormat;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.ViewGroup;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -55,7 +56,14 @@ final class HyperOsAod {
         Class<?> service = XposedHelpers.findClassIfExists("com.android.keyguard.doze.MiuiDozeService", loader);
         if (service == null) { Log.i(TAG, "no MiuiDozeService"); return; }
         XposedBridge.hookAllMethods(service, "onDreamingStarted", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.show((android.app.Service) param.thisObject); }
+            @Override protected void afterHookedMethod(MethodHookParam param) {
+                final android.app.Service svc = (android.app.Service) param.thisObject;
+                AodOverlay.show(svc);
+                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                handler.postDelayed(new Runnable() {
+                    @Override public void run() { dumpTree("dozing"); }
+                }, 3000);
+            }
         });
         XposedBridge.hookAllMethods(service, "onDreamingStopped", new XC_MethodHook() {
             @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.hide(); }
@@ -89,6 +97,60 @@ final class HyperOsAod {
         root.addView(surface, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         Log.i(TAG, "ambient surface attached");
+        root.postDelayed(new Runnable() {
+            @Override public void run() { dumpTree("after-attach"); }
+        }, 1500);
+    }
+
+    /** Diagnostic: prints the real hierarchy the AOD lives in, so we can see
+     * which sibling covers the scene surface and where the depth wallpaper
+     * foreground sits. Each node gets its own log line to stay under the
+     * logcat line limit. */
+    static void dumpTree(String why) {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        if (root == null) { Log.i(TAG, "tree[" + why + "]: no aod root"); return; }
+        View top = root.getRootView();
+        Log.i(TAG, "tree[" + why + "]: rootView=" + top.getClass().getName()
+                + " aod=" + root.getClass().getName()
+                + " aodParent=" + (root.getParent() instanceof View
+                        ? ((View) root.getParent()).getClass().getName() : String.valueOf(root.getParent())));
+        walk(top, 0);
+    }
+
+    private static void walk(View view, int depth) {
+        if (depth > 18) return;
+        StringBuilder line = new StringBuilder(160);
+        for (int i = 0; i < depth; i++) line.append("  ");
+        line.append(view.getClass().getSimpleName())
+            .append(" vis=").append(visibilityName(view.getVisibility()))
+            .append(" a=").append(view.getAlpha())
+            .append(" ").append(view.getWidth()).append('x').append(view.getHeight())
+            .append(" @").append(view.getLeft()).append(',').append(view.getTop());
+        if (view.getElevation() != 0f) line.append(" elev=").append(view.getElevation());
+        if (view.getTranslationZ() != 0f) line.append(" tz=").append(view.getTranslationZ());
+        if (view instanceof SurfaceView) {
+            line.append(" surfaceValid=").append(((SurfaceView) view).getHolder().getSurface().isValid());
+        }
+        if (view.getTag() != null) line.append(" tag=").append(view.getTag());
+        String name = view.getClass().getName();
+        if (name.contains("Wallpaper") || name.contains("Scrim") || name.contains("Pictorial")) {
+            line.append("  <<< ").append(name);
+        }
+        Log.i(TAG, "tree[" + depth + "] " + line);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            int count = group.getChildCount();
+            for (int i = 0; i < count; i++) walk(group.getChildAt(i), depth + 1);
+        }
+    }
+
+    private static String visibilityName(int visibility) {
+        switch (visibility) {
+            case View.VISIBLE: return "V";
+            case View.INVISIBLE: return "I";
+            case View.GONE: return "G";
+            default: return "?";
+        }
     }
 
     private static boolean ownsWallpaper(Context context) {

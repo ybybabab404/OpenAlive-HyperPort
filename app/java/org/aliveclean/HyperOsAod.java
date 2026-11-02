@@ -77,20 +77,42 @@ final class HyperOsAod {
     }
 
 
-    /** Leaving AOD runs the very transition the editor preview plays between the
-     * always-on and home compositions, so the sphere opens back into the wallpaper
-     * instead of being cut off. */
+    /** The AOD window is torn down the instant dozing stops, so an animation inside it
+     * can never be seen. The last frame is copied into its own overlay window first and
+     * that copy does the leaving: it expands slightly and fades, so the sphere opens
+     * back into the wallpaper instead of vanishing. */
     static void playExit() {
         AodSurface surface = activeSurface == null ? null : activeSurface.get();
-        if (surface != null && surface.exitWithTransition()) {
-            Log.i(TAG, "exit transition started");
-            return;
-        }
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        View scene = root == null ? null : root.findViewWithTag(TAG);
-        if (scene != null && scene.getParent() instanceof ViewGroup) {
-            ((ViewGroup) scene.getParent()).removeView(scene);
-            Log.i(TAG, "scene removed without transition");
+        if (surface == null) return;
+        try {
+            int width = Math.max(1, surface.getWidth()), height = Math.max(1, surface.getHeight());
+            android.graphics.Bitmap frame = surface.getBitmap(width / 2, height / 2);
+            if (frame == null) { surface.detachNow(); return; }
+            Context context = surface.getContext();
+            android.widget.ImageView view = new android.widget.ImageView(context);
+            view.setImageBitmap(frame);
+            view.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            android.view.WindowManager windows =
+                    (android.view.WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    android.graphics.PixelFormat.TRANSLUCENT);
+            windows.addView(view, params);
+            view.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f).setDuration(320L)
+                    .withEndAction(() -> {
+                        try { windows.removeView(view); } catch (Throwable ignored) { }
+                        frame.recycle();
+                    }).start();
+            surface.detachNow();
+            Log.i(TAG, "exit overlay started");
+        } catch (Throwable failure) {
+            Log.w(TAG, "exit overlay failed", failure);
+            surface.detachNow();
         }
     }
 
@@ -313,8 +335,13 @@ final class HyperOsAod {
         }
 
 
+
+        void detachNow() {
+            if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
+        }
+
         /** Plays the same mode transition the editor preview uses, then detaches. */
-        private boolean exitWithTransition() {
+        private boolean exitWithTransitionUnused() {
             if (loop == null) return false;
             loop.mode(1, true);
             postDelayed(() -> {

@@ -54,7 +54,6 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
                 @Override public void stereoSensitivity(int value){draft.edit().putInt("stereo_sensitivity",value).apply();}
             },this);
             showScene();
-            if(getFilesDir()!=null)captureWallpaper();
         }catch(Exception e){
             android.util.Log.e("AliveClean","Official editor initialization failed",e);
             new android.app.AlertDialog.Builder(this).setTitle("编辑页面无法打开").setMessage(e.toString())
@@ -112,39 +111,11 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
     private void importBusy(boolean busy){importing=busy;showScene();}
 
-    /** The AOD view runs inside SystemUI, which cannot read our private files, so the
-     * photo the scene is built from is copied next to it in the external files
-     * directory. That copy is what the always-on sphere blurs. */
-    private void captureWallpaper() {
-        try {
-            SceneOptions chosen = new SceneOptions(draft);
-            java.io.File source = new java.io.File(getFilesDir(), chosen.photo);
-            if (!source.isFile()) return;
-            java.io.File external = getExternalFilesDir(null);
-            java.io.File[] targets = external == null
-                    ? new java.io.File[]{new java.io.File(getFilesDir(), SceneOptions.WALLPAPER)}
-                    : new java.io.File[]{new java.io.File(getFilesDir(), SceneOptions.WALLPAPER),
-                                         new java.io.File(external, SceneOptions.WALLPAPER)};
-            for (java.io.File target : targets) {
-                try (java.io.InputStream in = new java.io.FileInputStream(source);
-                     java.io.OutputStream out = new java.io.FileOutputStream(target)) {
-                    byte[] buffer = new byte[64 * 1024];
-                    int read;
-                    while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
-                }
-            }
-            android.util.Log.i("AliveClean", "wallpaper mirrored from " + chosen.photo);
-        } catch (Throwable failure) {
-            android.util.Log.w("AliveClean", "wallpaper mirror failed", failure);
-        }
-    }
-
     private void commitDraft(){
         SceneOptions chosen=new SceneOptions(draft);
         // The SystemUI bridge may become ready a little after the editor. Do not
         // make applying a wallpaper depend on that race: the bridge observes the
         // committed configuration and attaches the AOD clock when it is ready.
-        captureWallpaper();
         if(chosen.save(getSharedPreferences(SceneOptions.APPLIED,0))){
             SceneProvider.changed(this);
             if(chosen.aod>=0&&PlatformProfile.isColorOs(this)){

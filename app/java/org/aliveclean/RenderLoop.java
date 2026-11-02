@@ -270,6 +270,14 @@ final class RenderLoop {
         // The AOD sphere is the wallpaper the user applied, so prefer the copy captured
         // at apply time over whatever scene photo the options point at.
         if(primary&&mode==0){
+            try(android.content.res.AssetFileDescriptor descriptor=context.getContentResolver()
+                    .openAssetFileDescriptor(AodWallpaperProvider.PHOTO,"r")){
+                if(descriptor!=null){
+                    Bitmap fromProvider=BitmapFactory.decodeFileDescriptor(descriptor.getFileDescriptor());
+                    if(fromProvider!=null){int id=upload(fromProvider);fromProvider.recycle();return id;}
+                }
+            }catch(Throwable ignored){}
+
             File external=context.getExternalFilesDir(null);
             File fromExternal=external==null?null:new File(external,SceneOptions.WALLPAPER);
             File internal=new File(context.getFilesDir(),SceneOptions.WALLPAPER);

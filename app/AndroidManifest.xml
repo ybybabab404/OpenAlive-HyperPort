@@ -38,6 +38,7 @@
     <activity android:screenOrientation="portrait" android:name=".XiaomiLibraryActivity" android:exported="false"/>
     <activity android:screenOrientation="portrait" android:name=".XiaomiDesktopSettingsActivity" android:exported="false"/>
     <provider android:name=".XiaomiState" android:authorities="org.aliveclean.xiaomi" android:exported="false"/>
+    <provider android:name=".AodWallpaperProvider" android:authorities="org.aliveclean.aodwallpaper" android:exported="true"/>
     <activity android:screenOrientation="portrait" android:name=".XiaomiPreviewActivity$Earth" android:process=":xiaomi_preview_earth" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" android:launchMode="singleTop" android:theme="@android:style/Theme.Material.NoActionBar"/>
     <service android:name=".XiaomiWallpaper$Earth" android:process=":xiaomi_earth" android:exported="true" android:permission="android.permission.BIND_WALLPAPER"><intent-filter><action android:name="android.service.wallpaper.WallpaperService"/></intent-filter><meta-data android:name="android.service.wallpaper" android:resource="@xml/xiaomi_wallpaper"/></service>
     <activity android:screenOrientation="portrait" android:name=".XiaomiPreviewActivity$Moon" android:process=":xiaomi_preview_moon" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" android:launchMode="singleTop" android:theme="@android:style/Theme.Material.NoActionBar"/>

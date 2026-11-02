@@ -31,18 +31,27 @@ final class HyperOsAod {
         for (String name : VIEWS) {
             Class<?> view = XposedHelpers.findClassIfExists(name, loader);
             if (view == null || !ViewGroup.class.isAssignableFrom(view)) continue;
+            // MIUI builds a throwaway AodView for the keyguard stage and destroys it on
+            // the way into doze; attaching there destroyed our TextureView and restarted
+            // the flow. Debounce: only attach to a host that is still attached to a window
+            // after it had time to settle.
+            if (true) { }
             XposedBridge.hookAllConstructors(view, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     final ViewGroup root = (ViewGroup) param.thisObject;
-                    root.post(new Runnable() {
+                    root.postDelayed(new Runnable() {
                         @Override public void run() {
+                            if (!root.isAttachedToWindow() || root.getWindowToken() == null) {
+                                Log.i(TAG, "skipped a transient AOD host");
+                                return;
+                            }
                             try {
                                 attach(root);
                             } catch (Throwable error) {
                                 Log.e(TAG, "attach failed", error);
                             }
                         }
-                    });
+                    }, 1200);
                 }
             });
             Log.i(TAG, "AOD view hook installed on " + name);
@@ -134,6 +143,90 @@ final class HyperOsAod {
                     (android.view.WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
             android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
             AodSurface surface = new AodSurface(context);
+            surface.setTag(TAG);
+            android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
+            frame.setBackgroundColor(0x00000000);
+            frame.addView(surface, new android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    (int) (metrics.heightPixels * 0.46f),
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+                            | android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                    android.graphics.PixelFormat.TRANSLUCENT);
+            params.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
+            windows.addView(frame, params);
+            overlayView = new java.lang.ref.WeakReference<>(frame);
+            overlayWindows = windows;
+            Log.i(TAG, "scene overlay added " + metrics.widthPixels + "x" + params.height);
+        } catch (Throwable failure) {
+            Log.w(TAG, "scene overlay failed", failure);
+        }
+    }
+
+    static void hideOverlay() {
+        View view = overlayView == null ? null : overlayView.get();
+        if (view == null || overlayWindows == null) return;
+        try { overlayWindows.removeView(view); } catch (Throwable ignored) { }
+        overlayView = null;
+        Log.i(TAG, "scene overlay removed");
+    }
+
+    /** Injects into the stock AOD window itself, which keeps the stock clock above. */
+    static boolean hasInjectedView() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        return root != null && root.findViewWithTag(TAG) != null;
+    }
+
+    /** Rebuilds the scene host so a style picked in the app (written to another
+     * process) is re-read on every doze entry. */
+    static void refreshScene() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        if (root == null) return;
+        View old = root.findViewWithTag(TAG);
+        if (old != null && old.getParent() instanceof ViewGroup) {
+            ((ViewGroup) old.getParent()).removeView(old);
+            Log.i(TAG, "scene host dropped for refresh");
+        }
+        attach(root);
+    }
+
+    static boolean injectIntoAod() {
+        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        if (root == null) return false;
+        attach(root);
+        return root.findViewWithTag(TAG) != null;
+    }
+
+    private static void attach(ViewGroup root) {
+        // When our own window is up, injecting into MIUI's tree would draw a second
+        // sphere and reintroduce the detach churn, so that path stays off.
+        Context context = root.getContext();
+        aodRoot = new java.lang.ref.WeakReference<>(root);
+        if (!aodSceneEnabled(context)) return;
+        if (root.findViewWithTag(TAG) != null) return;
+        // Reuse the existing surface whenever one exists: creating a new AodSurface
+        // destroys the old SurfaceTexture and restarts RenderLoop, which is exactly the
+        // flicker seen when entering AOD from the lock screen. Only the parent changes.
+        AodSurface previous = liveSurface == null ? null : liveSurface.get();
+        if (previous != null) {
+            if (previous.getParent() != target) {
+                if (previous.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) previous.getParent()).removeView(previous);
+                }
+                target.addView(previous, 0, new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                Log.i(TAG, "scene surface moved to " + target.getClass().getSimpleName());
+            }
+            return;
+        }
+        AodSurface surface = new AodSurface(context);
             surface.setTag(TAG);
             android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
             frame.setBackgroundColor(0x00000000);

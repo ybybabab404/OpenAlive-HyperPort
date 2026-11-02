@@ -22,7 +22,7 @@ final class AodOverlay {
             view = new AodView(service);
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.TYPE_DREAM,
+                    (2038 /* TYPE_APPLICATION_OVERLAY */),
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                             | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
@@ -47,8 +47,11 @@ final class AodOverlay {
 
     private static boolean ownsWallpaper(Context context) {
         try {
-            android.app.WallpaperInfo info = android.app.WallpaperManager.getInstance(context).getWallpaperInfo();
-            return info != null && "org.aliveclean".equals(info.getPackageName());
+            android.app.WallpaperManager manager = android.app.WallpaperManager.getInstance(context);
+            android.app.WallpaperInfo home = manager.getWallpaperInfo();
+            if (home != null && "org.aliveclean".equals(home.getPackageName())) return true;
+            android.app.WallpaperInfo lock = manager.getWallpaperInfo(android.app.WallpaperManager.FLAG_LOCK);
+            return lock != null && "org.aliveclean".equals(lock.getPackageName());
         } catch (Throwable unavailable) { return false; }
     }
 

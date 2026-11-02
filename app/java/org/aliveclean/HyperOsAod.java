@@ -77,8 +77,11 @@ final class HyperOsAod {
 
     private static boolean ownsWallpaper(Context context) {
         try {
-            WallpaperInfo info = WallpaperManager.getInstance(context).getWallpaperInfo();
-            return info != null && "org.aliveclean".equals(info.getPackageName());
+            WallpaperManager manager = WallpaperManager.getInstance(context);
+            WallpaperInfo home = manager.getWallpaperInfo();
+            if (home != null && "org.aliveclean".equals(home.getPackageName())) return true;
+            WallpaperInfo lock = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
+            return lock != null && "org.aliveclean".equals(lock.getPackageName());
         } catch (Throwable unavailable) {
             return false;
         }

@@ -85,6 +85,18 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
             WallpaperManager manager=WallpaperManager.getInstance(this);
             previousWallpaperId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
             previousLockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
+            if(PlatformProfile.isHyperOs(this)){
+                // The HyperOS live picker answers RESULT_CANCELED for third-party
+                // components, so bind the wallpaper through the system adapter.
+                awaitingApply=true;
+                new Thread(()->{
+                    String failure=null;
+                    try{SceneApply.apply(this);}catch(Exception error){failure=error.getMessage();}
+                    final String message=failure;
+                    runOnUiThread(()->{awaitingApply=false;if(message==null)commitDraft();else toast("壁纸应用失败："+message);});
+                },"SceneApply").start();
+                return;
+            }
             awaitingApply=true;
             pickerResultReliable=WallpaperPicker.open(this,new ComponentName(this,CleanWallpaper.class),20);
         }catch(RuntimeException e){awaitingApply=false;android.util.Log.e("AliveClean","Wallpaper picker failed",e);toast("无法打开壁纸应用页面："+e.getMessage());}

@@ -30,7 +30,7 @@
 | C1 | 包名必须是 `org.aliveclean`（native 符号写死） | ✅ |
 | C2 | 构建走 `tools/build_release.py`（aapt2→javac→d8→zip→zipalign→apksigner），不是 Gradle | ✅ |
 | C3 | 每次对话把所有要求汇总进本文档，防止遗忘 | ✅ 本条即为此 |
-| C4 | 以后优先用**增量更新**（只推变动的 dex/资源），不要每次装 320MB 整包 | 📌 已测量，待改造 | APK 320MB 构成：assets/native-clock 88MB、wallpapers 77MB、xiaomi 28MB、flyme-video 26MB、vivo 25MB → 共 244MB 是很少变的素材；代码+shader+lib 约 77MB。`adb install --incremental` 在本机报 Bad file descriptor，不可用。方案：aapt2 分片（base + 素材 split），素材只装一次 |
+| C4 | 以后优先用**增量更新**（只推变动的 dex/资源），不要每次装 320MB 整包 | 🔄 一半：`tools/deploy.py` 已加（USB 优先、同包跳过、push+pm install）；真正的体量拆分待做 | APK 320MB 构成：assets/native-clock 88MB、wallpapers 77MB、xiaomi 28MB、flyme-video 26MB、vivo 25MB → 共 244MB 是很少变的素材；代码+shader+lib 约 77MB。`adb install --incremental` 在本机报 Bad file descriptor，不可用。方案：aapt2 分片（base + 素材 split），素材只装一次 |
 
 ## 四、已知坑（避免重复踩）
 
@@ -38,3 +38,15 @@
 - AOD 视图跑在 SystemUI 进程，读不到 `org.aliveclean` 私有目录（SELinux），必须走 provider。
 - `mode(0)` 是异步投递，attach 时 `mode` 可能还是默认值，判定不要依赖它。
 - 模块多次崩溃会让 LSPosed 进安全模式（模块全停），只能重启手机恢复。
+
+## 五、构建/部署命令
+
+```bash
+# 改完代码后一条命令：优先 USB，没 USB 自动试无线地址，同包会跳过
+python tools/deploy.py
+
+# 强制重编再装
+python tools/deploy.py --build
+```
+
+真·增量（只传变动部分）还做不到：`aapt2 --split` 只能按资源**配置**拆，不能按 assets 拆；要拆只能把 244MB 素材挪到独立包（org.aliveclean.media），但那要改 70 处 `getAssets()` 调用。已确认这条路，等要做时按「媒体包 + 首次解包到私有目录」实现。

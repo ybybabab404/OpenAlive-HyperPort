@@ -178,7 +178,12 @@ final class RenderLoop {
         sailContinuousAod=options.cosmic==0&&options.aod==0&&options.sailContinuousAod;
         if(options.cosmic!=0){
             boolean dark=(context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
-            cosmic=WallpaperRenderer.create(context.getAssets(),options.cosmic,dark,width,height,mode,options.cosmicKeepLock,this::schedule);
+            // The cosmic scene ships three palettes (aod/keyguard/unlock). The AOD palette is
+            // deliberately amber, which made the always-on screen look like a different
+            // wallpaper than the one previewed in the editor. Use the keyguard palette
+            // in AOD too so what you pick is what you get.
+            int palette=mode==0?1:mode;
+            cosmic=WallpaperRenderer.create(context.getAssets(),options.cosmic,dark,width,height,palette,options.cosmicKeepLock,this::schedule);
             if(cosmic instanceof StereoRenderer)((StereoRenderer)cosmic).configure(options.stereoSensitivity,options.stereoAodAnimation);
             if(cosmic instanceof StereoRenderer)stereoSensor=new StereoSensor(context,handler,(x,y,z,time)->{
                 if(cosmic instanceof StereoRenderer){((StereoMotion)cosmic.motion()).gyroscope(x,y,z,time);if(cosmic.motion().active())schedule();}

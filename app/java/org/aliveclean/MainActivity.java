@@ -39,7 +39,11 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         try{
             editor=new OfficialEditor(this,new OfficialEditor.Actions(){
                 @Override public void scene(int value){mode=value;showScene();}
-                @Override public void choose(String key,int value){SharedPreferences.Editor edit=draft.edit().putInt(key,value);if(key.equals("aod"))edit.putInt("cosmic",0);edit.apply();showScene();}
+                @Override public void choose(String key,int value){SharedPreferences.Editor edit=draft.edit().putInt(key,value);
+                    // Only drop the cosmic scene when the user actually changes the AOD
+                    // style. The editor also reports the unchanged value while syncing its
+                    // controls, and that used to wipe the scene picked a moment earlier.
+                    if(key.equals("aod")&&value!=draft.getInt("aod",0))edit.putInt("cosmic",0);edit.apply();showScene();}
                 @Override public void photo(){choosePhoto();}
                 @Override public void crop(){openFrameCrop(new SceneOptions(draft).framePhoto,false);}
                 @Override public void example(){loadPhotoExample();}

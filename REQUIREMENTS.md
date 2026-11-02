@@ -146,3 +146,38 @@ python tools/deploy.py --build
   config，属于 Gemini 框架的数据层，需再确认 `AodStateItemConfig` 构造参数含义。
 
 📌 结论：结构清晰，可行；下一步是确认 `AodStateItemConfig` 与 `getShowStyle` 的实现（`com.miui.aod.Utils`）。
+
+### 七之实现探查 2（2026-11-02 22:14，`com.miui.aod.Utils`）
+
+「显示模式」的真身：**`Settings.Secure` 的 `aod_show_style`（int）**。
+取值语义（从 `Utils` 读出来的）：
+
+| 值 | 含义 | 判定函数 |
+|---|---|---|
+| 0 | 自定义 / 普通 AOD（息屏临时显示） | `isShowTemporary` |
+| 1 | 定时 | `isTimingStyle` |
+| 2 | 常亮（keycode goto 关闭时的默认） | `resolveShowStyle` 里 `i==0 && !isKeycodeGotoEnable()` → 2 |
+| 3 | 和锁屏样式一致（全屏 AOD） | `isFsAodSameToLock` + `AttentionManager.supportAttention` |
+
+另一个相关 key：**`Settings.Secure` 的 `full_screen_aod_on`（0/1）**，
+`isFsAodSameToLock(context) = isSupportFsAod() && getFsAodStyle(context)==1`。
+
+写入点统一是 `Utils.setShowStyle` / `Utils.setDisplayMode` → `putInt("aod_show_style", v)`；
+读是 `Utils.getShowStyle`（在 AOD 进程里读 `CachedSettings.Secure`）。
+
+### 七之实现方案（定稿，按用户约束）
+
+1. **自己的状态**：只写自己的 key `alive_aod_style`（本模块 SharedPreferences 或 Secure 独立 key），
+   绝不改写 `aod_show_style` 的语义给别人看。
+2. **选中 HyperAlive 样式时**：写入 MIUI 自己的 `aod_show_style = 3`（= 和锁屏一致），
+   并在需要时把 `full_screen_aod_on = 1`。这就是「底层走全屏 AOD」。
+   —— 写的是 MIUI 的公开 key，不是别的模块的私有状态；别的模块做同样的事不会互相破坏。
+3. **UI 显示"选中我们这一项"**：只 hook `AodDisplayModeScreen.aodDisplayItemsStyle()`（私有方法），
+   当我们的 flag 为真时返回我们自己发明的字符串 `"alive"`；不改 `Utils.getShowStyle`，
+   因此渲染路径拿到的永远是 3。
+4. **选择我们这一项**：hook `AodDisplayModeScreen.aodDisplayItemsSet(Context,String)`，
+   当 value 是 `"alive"` 时：写 `aod_show_style=3` + flag=true + 返回成功（value 回显 `"alive"`）。
+5. **用户改选任何 MIUI 原生选项**：hook `Utils.setShowStyle` 之后清掉我们的 flag
+   （值仍是原值，不做翻译），这样 UI 回到原生选项、渲染不受影响。
+6. **列表里多出一行**：向 `AodDisplayModeScreen` 的 `aodItemsConfig` 插入一个 `AodStateItemConfig`；
+   若 Gemini 框架不允许，退化为方法级注入该 Screen 的 item 列表。此项待验证。

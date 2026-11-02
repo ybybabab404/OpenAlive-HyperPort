@@ -22,6 +22,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         }
         if (systemUi && PlatformProfile.hasVendorClass(p.classLoader))
             step("coloros clock fonts (systemui)", () -> ColorOsNativeClockFonts.install(p.classLoader));
+        if (miuiAod) step("hyperalive aod style", () -> AliveAodStyle.install(p.classLoader));
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(p.classLoader));
         if (systemUi) step("hyperos doze", () -> HyperOsAod.installDoze(p.classLoader));
         if (!"android".equals(p.packageName) && !systemUi) return;

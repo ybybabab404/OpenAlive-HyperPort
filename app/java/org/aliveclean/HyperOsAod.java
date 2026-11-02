@@ -236,27 +236,6 @@ final class HyperOsAod {
 
 
 
-    /** The always-on sphere takes its colours from the wallpaper the user applied, the
-     * way the stock effect does. WallpaperManager hands SystemUI the palette directly,
-     * which works for live wallpapers too (there is no bitmap to read). */
-    private static void applyWallpaperPalette(RenderLoop loop, Context host) {
-        try {
-            WallpaperManager manager = WallpaperManager.getInstance(host);
-            android.app.WallpaperColors colors = manager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM);
-            if (colors == null) colors = manager.getWallpaperColors(WallpaperManager.FLAG_LOCK);
-            if (colors == null) { Log.i(TAG, "no wallpaper colours"); return; }
-            int primary = colors.getPrimaryColor().toArgb();
-            android.graphics.Color secondaryColor = colors.getSecondaryColor();
-            android.graphics.Color tertiaryColor = colors.getTertiaryColor();
-            int secondary = secondaryColor != null ? secondaryColor.toArgb() : primary;
-            int tertiary = tertiaryColor != null ? tertiaryColor.toArgb() : primary;
-            loop.aodPalette(primary, secondary, tertiary);
-            Log.i(TAG, "wallpaper palette " + Integer.toHexString(primary) + "/" + Integer.toHexString(secondary));
-        } catch (Throwable failure) {
-            Log.w(TAG, "wallpaper palette unavailable", failure);
-        }
-    }
-
     /** The AOD lives in SystemUI, so its context resolves SystemUI's assets and data
      * directory. Everything the renderer reads (shaders, scene options) belongs to our
      * own package, so build a context for it instead of borrowing the host's. */
@@ -317,7 +296,6 @@ final class HyperOsAod {
         @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
             surface = new Surface(texture);
             loop = new RenderLoop(appContext);
-            applyWallpaperPalette(loop, context);
             loop.mode(0);
             loop.attach(surface, width, height);
             Log.i(TAG, "texture available " + width + "x" + height);

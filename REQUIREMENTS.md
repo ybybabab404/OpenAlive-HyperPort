@@ -30,7 +30,7 @@
 | C1 | 包名必须是 `org.aliveclean`（native 符号写死） | ✅ |
 | C2 | 构建走 `tools/build_release.py`（aapt2→javac→d8→zip→zipalign→apksigner），不是 Gradle | ✅ |
 | C3 | 每次对话把所有要求汇总进本文档，防止遗忘 | ✅ 本条即为此 |
-| C4 | 以后优先用**增量更新**（只推变动的 dex/资源），不要每次装 320MB 整包 | 📌 待落实 |
+| C4 | 以后优先用**增量更新**（只推变动的 dex/资源），不要每次装 320MB 整包 | 📌 已测量，待改造 | APK 320MB 构成：assets/native-clock 88MB、wallpapers 77MB、xiaomi 28MB、flyme-video 26MB、vivo 25MB → 共 244MB 是很少变的素材；代码+shader+lib 约 77MB。`adb install --incremental` 在本机报 Bad file descriptor，不可用。方案：aapt2 分片（base + 素材 split），素材只装一次 |
 
 ## 四、已知坑（避免重复踩）
 

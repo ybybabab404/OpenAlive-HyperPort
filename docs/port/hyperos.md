@@ -68,3 +68,22 @@ HyperOS 上这三处都不存在。直接加载的结果是：每个钩子都抛
 
 1. LSPosed 中启用模块并勾选作用域
 2. 在壁纸选择器里应用 HyperAlive 壁纸并观察 AOD
+
+## 当前进度（2026-11-02 12:55）
+
+已确认并跑通：
+
+- HyperOS 4 的 AOD 宿主是 `com.android.systemui`（`AodShowing=true` 时只有 SystemUI 在跑，`com.miui.aod` 不启动）
+- `CleanHooks` 改为每个 install 单独 try/catch；此前 `ModuleActivationHook.install()` 抛异常会中断整个 handleLoadPackage
+- 钩子已生效：`HyperAliveAod: AOD view hook installed on com.android.keyguard.widget.AodView`
+- 壁纸应用改走 system UID（`SceneApply`），HyperOS 的 live picker 对第三方组件固定回 RESULT_CANCELED
+- 桌面与锁屏已能显示场景（用户确认）
+
+进行中：
+
+- AOD 场景层：`AodOverlay` 在 `MiuiDozeService#onDreamingStarted` 时挂 `TYPE_APPLICATION_OVERLAY` 窗口（`TYPE_DREAM` 需要 dream token，`BadTokenException` 已排除该路径）
+- 判定「壁纸是否属于本模块」时同时看 FLAG_SYSTEM 与 FLAG_LOCK，因为 HyperOS 的锁屏壁纸是 `MiuiKeyguardPictorialWallpaper`
+
+已知问题：
+
+- 若 AOD 仍不显示，next: 把 overlay 的 `setAlpha` 与 window flag 调整（AOD 需要 `FLAG_LAYOUT_NO_LIMITS` 与亮度控制），或改为在 `AodView` 内部注入而不是独立窗口

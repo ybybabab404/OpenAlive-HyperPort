@@ -46,7 +46,7 @@ final class HyperOsAod {
                                 return;
                             }
                             try {
-                                attach(root);
+                                attach(root, "ctor");
                             } catch (Throwable error) {
                                 Log.e(TAG, "attach failed", error);
                             }
@@ -200,15 +200,21 @@ final class HyperOsAod {
     static boolean injectIntoAod() {
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
         if (root == null) return false;
-        attach(root);
+        attach(root, "doze");
         return root.findViewWithTag(TAG) != null;
     }
 
-    private static void attach(ViewGroup root) {
+    private static void attach(ViewGroup root) { attach(root, "direct"); }
+
+    private static void attach(ViewGroup root, String origin) {
         // When our own window is up, injecting into MIUI's tree would draw a second
         // sphere and reintroduce the detach churn, so that path stays off.
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
+        AodSurface live = liveSurface == null ? null : liveSurface.get();
+        Log.i(TAG, "attach origin=" + origin + " root=" + System.identityHashCode(root)
+                + " live=" + (live == null ? 0 : System.identityHashCode(live))
+                + " attached=" + (live != null && live.isAttachedToWindow()));
         if (!aodSceneEnabled(context)) return;
         if (root.findViewWithTag(TAG) != null) return;
         // Reuse the existing surface whenever one exists: creating a new AodSurface
@@ -326,7 +332,10 @@ final class HyperOsAod {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         Log.i(TAG, "ambient surface attached to " + target.getClass().getName()
                 + " children=" + target.getChildCount());
-        supervise(root, surface);
+        // supervise() re-attached on every transient detach, and each re-attach destroyed
+        // the SurfaceTexture and restarted the flow — the flicker. Attachment is now
+        // driven once by the debounced host check plus onDreamingStarted.
+        // supervise(root, surface);
         root.postDelayed(new Runnable() {
             @Override public void run() { dumpTree("after-attach"); }
         }, 1500);

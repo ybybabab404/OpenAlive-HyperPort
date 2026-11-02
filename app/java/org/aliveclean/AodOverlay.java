@@ -16,7 +16,8 @@ final class AodOverlay {
     private static RenderLoop loop;
 
     static void show(Service service) {
-        if (view != null) return;
+        Trace.log("T10", "overlay#show enter");
+        if (view != null) { Trace.log("T10", "overlay#show already"); return; }
         if (!ownsWallpaper(service)) { Log.i(TAG, "overlay skipped: wallpaper is not ours"); return; }
         if (HyperOsAod.injectIntoAod()) { Log.i(TAG, "injected into the AOD view"); return; }
         try {
@@ -40,6 +41,7 @@ final class AodOverlay {
 
     /** AOD fades out during the wake animation; keep the scene until the screen is on. */
     static void hide() {
+        Trace.log("T11", "overlay#hide");
         if (view == null && !HyperOsAod.hasInjectedView()) return;
         if (view == null) return;
         try { ((WindowManager) view.getContext().getSystemService(Context.WINDOW_SERVICE)).removeView(view); }

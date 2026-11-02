@@ -9,7 +9,6 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -21,6 +20,7 @@ import de.robv.android.xposed.XposedHelpers;
  * it, leaving the stock clock, notifications and gestures untouched above. */
 final class HyperOsAod {
     private static final String TAG = "HyperAliveAod";
+    private static java.lang.ref.WeakReference<AodSurface> liveSurface;
     private static final String[] VIEWS = {
             "com.android.keyguard.widget.AodView",
             "com.miui.aod.AODView"
@@ -31,30 +31,21 @@ final class HyperOsAod {
         for (String name : VIEWS) {
             Class<?> view = XposedHelpers.findClassIfExists(name, loader);
             if (view == null || !ViewGroup.class.isAssignableFrom(view)) continue;
-            // MIUI builds a throwaway AodView for the keyguard stage and destroys it on
-            // the way into doze; attaching there destroyed our TextureView and restarted
-            // the flow. Debounce: only attach to a host that is still attached to a window
-            // after it had time to settle.
-            if (true) { }
             XposedBridge.hookAllConstructors(view, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     final ViewGroup root = (ViewGroup) param.thisObject;
-                    root.postDelayed(new Runnable() {
+                    root.post(new Runnable() {
                         @Override public void run() {
-                            if (!root.isAttachedToWindow() || root.getWindowToken() == null) {
-                                Log.i(TAG, "skipped a transient AOD host");
-                                return;
-                            }
                             try {
-                                attach(root, "ctor");
+                                attach(root);
                             } catch (Throwable error) {
                                 Log.e(TAG, "attach failed", error);
                             }
                         }
-                    }, 1200);
+                    });
                 }
             });
-            Log.i(TAG, "AOD view hook installed on " + name);
+            Trace.log("T01", "hooks installed for " + name);
             installed = true;
         }
         if (!installed) Log.i(TAG, "no AOD view class in this process");
@@ -68,17 +59,24 @@ final class HyperOsAod {
         XposedBridge.hookAllMethods(service, "onDreamingStarted", new XC_MethodHook() {
             @Override protected void afterHookedMethod(MethodHookParam param) {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
+                Trace.log("T07", "dreaming started");
                 AodOverlay.show(svc);
-                // The host is built fresh on every doze entry and RenderLoop reads the
-                // applied scene in its constructor, so rebuilding it again here only
-                // detached the surface (clock blinked, flow restarted). Removed.
+                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                // SharedPreferences does not notify across processes, so the scene
+                // chosen in the app is only visible if we rebuild the host here.
+                handler.postDelayed(new Runnable() {
+                    @Override public void run() { refreshScene(); }
+                }, 900);
                 handler.postDelayed(new Runnable() {
                     @Override public void run() { dumpTree("dozing"); }
                 }, 3000);
             }
         });
         XposedBridge.hookAllMethods(service, "onDreamingStopped", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) { AodOverlay.hide(); }
+            @Override protected void afterHookedMethod(MethodHookParam param) {
+                Trace.log("T08", "dreaming stopped");
+                AodOverlay.hide();
+            }
         });
         Log.i(TAG, "doze service hook installed");
     }
@@ -126,10 +124,6 @@ final class HyperOsAod {
     private static java.lang.ref.WeakReference<AodSurface> activeSurface;
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
     private static java.lang.ref.WeakReference<View> overlayView;
-    /** MIUI can build a second AOD host (keyguard entry vs. doze entry). Two surfaces
-     *  fight over the same window and each rebuild restarted the flow, which is the
-     *  flicker seen when entering AOD from the lock screen. Keep exactly one. */
-    private static java.lang.ref.WeakReference<AodSurface> liveSurface;
     private static android.view.WindowManager overlayWindows;
 
     /** Hosts the scene in our own window. MIUI keeps clearing the children of its
@@ -143,6 +137,7 @@ final class HyperOsAod {
                     (android.view.WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
             android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
             AodSurface surface = new AodSurface(context);
+        liveSurface = new java.lang.ref.WeakReference<>(surface);
             surface.setTag(TAG);
             android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
             frame.setBackgroundColor(0x00000000);
@@ -157,98 +152,7 @@ final class HyperOsAod {
                             | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                             | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                             | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
-                            | android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-                    android.graphics.PixelFormat.TRANSLUCENT);
-            params.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
-            windows.addView(frame, params);
-            overlayView = new java.lang.ref.WeakReference<>(frame);
-            overlayWindows = windows;
-            Log.i(TAG, "scene overlay added " + metrics.widthPixels + "x" + params.height);
-        } catch (Throwable failure) {
-            Log.w(TAG, "scene overlay failed", failure);
-        }
-    }
-
-    static void hideOverlay() {
-        View view = overlayView == null ? null : overlayView.get();
-        if (view == null || overlayWindows == null) return;
-        try { overlayWindows.removeView(view); } catch (Throwable ignored) { }
-        overlayView = null;
-        Log.i(TAG, "scene overlay removed");
-    }
-
-    /** Injects into the stock AOD window itself, which keeps the stock clock above. */
-    static boolean hasInjectedView() {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        return root != null && root.findViewWithTag(TAG) != null;
-    }
-
-    /** Rebuilds the scene host so a style picked in the app (written to another
-     * process) is re-read on every doze entry. */
-    static void refreshScene() {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        if (root == null) return;
-        View old = root.findViewWithTag(TAG);
-        if (old != null && old.getParent() instanceof ViewGroup) {
-            ((ViewGroup) old.getParent()).removeView(old);
-            Log.i(TAG, "scene host dropped for refresh");
-        }
-        attach(root);
-    }
-
-    static boolean injectIntoAod() {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        if (root == null) return false;
-        attach(root, "doze");
-        return root.findViewWithTag(TAG) != null;
-    }
-
-    private static void attach(ViewGroup root) { attach(root, "direct"); }
-
-    private static void attach(ViewGroup root, String origin) {
-        // When our own window is up, injecting into MIUI's tree would draw a second
-        // sphere and reintroduce the detach churn, so that path stays off.
-        Context context = root.getContext();
-        aodRoot = new java.lang.ref.WeakReference<>(root);
-        AodSurface live = liveSurface == null ? null : liveSurface.get();
-        Log.i(TAG, "attach origin=" + origin + " root=" + System.identityHashCode(root)
-                + " live=" + (live == null ? 0 : System.identityHashCode(live))
-                + " attached=" + (live != null && live.isAttachedToWindow()));
-        if (!aodSceneEnabled(context)) return;
-        if (root.findViewWithTag(TAG) != null) return;
-        // Reuse the existing surface whenever one exists: creating a new AodSurface
-        // destroys the old SurfaceTexture and restarts RenderLoop, which is exactly the
-        // flicker seen when entering AOD from the lock screen. Only the parent changes.
-        AodSurface previous = liveSurface == null ? null : liveSurface.get();
-        if (previous != null) {
-            if (previous.getParent() != target) {
-                if (previous.getParent() instanceof ViewGroup) {
-                    ((ViewGroup) previous.getParent()).removeView(previous);
-                }
-                target.addView(previous, 0, new ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                Log.i(TAG, "scene surface moved to " + target.getClass().getSimpleName());
-            }
-            return;
-        }
-        AodSurface surface = new AodSurface(context);
-            surface.setTag(TAG);
-            android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
-            frame.setBackgroundColor(0x00000000);
-            frame.addView(surface, new android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
-            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    (int) (metrics.heightPixels * 0.46f),
-                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
-                            | android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
                     android.graphics.PixelFormat.TRANSLUCENT);
             params.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
             windows.addView(frame, params);
@@ -300,16 +204,16 @@ final class HyperOsAod {
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
         if (!aodSceneEnabled(context)) return;
-        if (root.findViewWithTag(TAG) != null) return;
-        // Entering AOD from the lock screen builds a second AOD host while the first is
-        // still alive. Replacing it tears down a working SurfaceTexture and restarts the
-        // flow, which is the flicker. Keep the surface that is already on screen and
-        // just remember the new root for lookups.
-        AodSurface previous = liveSurface == null ? null : liveSurface.get();
-        if (previous != null && previous.isAttachedToWindow() && previous.getParent() != null) {
-            Log.i(TAG, "second AOD host ignored, keeping the live surface");
+        // Exactly one scene surface per process: MIUI builds several AodView hosts while
+        // entering doze (keyguard one, then the doze one). A second surface means two
+        // balls, and whichever host is torn down makes the visible one restart.
+        AodSurface existing = liveSurface == null ? null : liveSurface.get();
+        if (existing != null) {
+            Trace.log("T03", "attach skipped, live surface id=" + System.identityHashCode(existing));
             return;
         }
+
+        if (root.findViewWithTag(TAG) != null) return;
         // The inner com.miui.aod.AODView paints the AOD wallpaper full screen, so a
         // surface added to the outer AodView sits *under* that wallpaper. Inject into
         // the inner container instead: wallpaper below, stock clock above.
@@ -326,15 +230,13 @@ final class HyperOsAod {
         }
         AodSurface surface = new AodSurface(context);
         surface.setTag(TAG);
-        liveSurface = new java.lang.ref.WeakReference<>(surface);
         surface.setAlpha(1f);
         target.addView(surface, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        Log.i(TAG, "ambient surface attached to " + target.getClass().getName()
-                + " children=" + target.getChildCount());
-        // supervise() re-attached on every transient detach, and each re-attach destroyed
-        // the SurfaceTexture and restarted the flow — the flicker. Attachment is now
-        // driven once by the debounced host check plus onDreamingStarted.
+        Trace.log("T04", "surface#create id=" + System.identityHashCode(surface)
+                + " host=" + System.identityHashCode(target) + " children=" + target.getChildCount());
+        // supervise() re-attached on every transient detach; each re-attach destroyed the
+        // SurfaceTexture and restarted the flow. Attachment is driven by doze start only.
         // supervise(root, surface);
         root.postDelayed(new Runnable() {
             @Override public void run() { dumpTree("after-attach"); }
@@ -536,7 +438,7 @@ final class HyperOsAod {
             loop = new RenderLoop(appContext);
             loop.mode(0);
             loop.attach(surface, width, height);
-            Log.i(TAG, "texture available " + width + "x" + height);
+            Trace.log("T05", "texture#available id=" + System.identityHashCode(this) + " " + width + "x" + height);
         }
 
         @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {

@@ -7,10 +7,13 @@ def write_entry(archive,name,data):
     # Android R+ requires STORED resources. zipalign cannot fix DEFLATED data.
     compressed_pack=name.startswith('assets/xiaomi/packs/') and name.endswith('.xz')
     direct_media=name.startswith('assets/flyme-video/') and name.endswith('.mp4')
+    # LSPosed loads module native libraries straight out of the APK: they must be
+    # uncompressed so zipalign -p can page-align them.
+    native_lib=name.startswith('lib/') and name.endswith('.so')
     entry=zipfile.ZipInfo(name,date_time=(2009,1,1,0,0,0))
     entry.create_system=3
     entry.external_attr=0o100644 << 16
-    archive.writestr(entry,data,compress_type=zipfile.ZIP_STORED if name=='resources.arsc' or compressed_pack or direct_media else zipfile.ZIP_DEFLATED,compresslevel=9)
+    archive.writestr(entry,data,compress_type=zipfile.ZIP_STORED if name=='resources.arsc' or compressed_pack or direct_media or native_lib else zipfile.ZIP_DEFLATED,compresslevel=9)
 
 def inspect(data,alignment=RESOURCE_ALIGNMENT):
     source=io.BytesIO(data)

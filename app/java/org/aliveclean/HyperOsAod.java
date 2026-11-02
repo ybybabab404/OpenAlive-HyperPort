@@ -3,10 +3,10 @@ package org.aliveclean;
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.content.Context;
-import android.graphics.PixelFormat;
+import android.graphics.SurfaceTexture;
 import android.util.Log;
-import android.view.SurfaceHolder;
-import android.view.SurfaceView;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import de.robv.android.xposed.XC_MethodHook;
@@ -91,15 +91,78 @@ final class HyperOsAod {
         aodRoot = new java.lang.ref.WeakReference<>(root);
         if (!ownsWallpaper(context)) return;
         if (root.findViewWithTag(TAG) != null) return;
+        // The inner com.miui.aod.AODView paints the AOD wallpaper full screen, so a
+        // surface added to the outer AodView sits *under* that wallpaper. Inject into
+        // the inner container instead: wallpaper below, stock clock above.
+        ViewGroup target = findInnerAod(root);
+        if (target == null) {
+            target = root;
+            Log.i(TAG, "inner AODView not up yet, falling back to outer host");
+            root.postDelayed(new Runnable() {
+                @Override public void run() { injectIntoAod(); }
+            }, 400);
+        }
         AodSurface surface = new AodSurface(context);
         surface.setTag(TAG);
-        surface.setAlpha(0.85f);
-        root.addView(surface, 0, new ViewGroup.LayoutParams(
+        surface.setAlpha(1f);
+        target.addView(surface, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        Log.i(TAG, "ambient surface attached");
+        Log.i(TAG, "ambient surface attached to " + target.getClass().getName()
+                + " children=" + target.getChildCount());
+        supervise(root, surface);
         root.postDelayed(new Runnable() {
             @Override public void run() { dumpTree("after-attach"); }
         }, 1500);
+    }
+
+    /** The inner com.miui.aod.AODView is inflated after the outer AodView, so the
+     * first attach usually lands on the outer host and stays hidden behind the AOD
+     * wallpaper. Watch for the inner container and move the scene into it. */
+    private static void supervise(final ViewGroup root, final AodSurface surface) {
+        root.postDelayed(new Runnable() {
+            int tries;
+
+            @Override public void run() {
+                if (surface.getParent() == null) {
+                    ViewGroup host = findInnerAod(root);
+                    (host != null ? host : root).addView(surface, 0,
+                            new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT));
+                    Log.i(TAG, "scene re-attached after detach");
+                }
+                ViewGroup inner = findInnerAod(root);
+                if (inner != null && surface.getParent() != inner) {
+                    if (surface.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) surface.getParent()).removeView(surface);
+                    }
+                    inner.addView(surface, 0, new ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    Log.i(TAG, "scene moved into inner AODView");
+                }
+                if (++tries < 20) root.postDelayed(this, 300);
+                else Log.i(TAG, "supervise done, parent="
+                        + (surface.getParent() == null ? "null"
+                        : surface.getParent().getClass().getName()));
+            }
+        }, 300);
+    }
+
+    /** Finds the full-screen com.miui.aod.AODView that paints the AOD wallpaper. */
+    private static ViewGroup findInnerAod(ViewGroup root) {
+        String own = root.getClass().getName();
+        if ("com.miui.aod.AODView".equals(own) || "AODView".equals(root.getClass().getSimpleName())) {
+            return root;
+        }
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (!(child instanceof ViewGroup)) continue;
+            String name = child.getClass().getName();
+            if ("com.miui.aod.AODView".equals(name)
+                    || "AODView".equals(child.getClass().getSimpleName())) {
+                return (ViewGroup) child;
+            }
+        }
+        return null;
     }
 
     /** Diagnostic: prints the real hierarchy the AOD lives in, so we can see
@@ -128,8 +191,8 @@ final class HyperOsAod {
             .append(" @").append(view.getLeft()).append(',').append(view.getTop());
         if (view.getElevation() != 0f) line.append(" elev=").append(view.getElevation());
         if (view.getTranslationZ() != 0f) line.append(" tz=").append(view.getTranslationZ());
-        if (view instanceof SurfaceView) {
-            line.append(" surfaceValid=").append(((SurfaceView) view).getHolder().getSurface().isValid());
+        if (view instanceof TextureView) {
+            line.append(" textureAvailable=").append(((TextureView) view).isAvailable());
         }
         if (view.getTag() != null) line.append(" tag=").append(view.getTag());
         String name = view.getClass().getName();
@@ -153,6 +216,18 @@ final class HyperOsAod {
         }
     }
 
+    /** The AOD lives in SystemUI, so its context resolves SystemUI's assets and data
+     * directory. Everything the renderer reads (shaders, scene options) belongs to our
+     * own package, so build a context for it instead of borrowing the host's. */
+    private static Context moduleContext(Context base) {
+        try {
+            return base.createPackageContext("org.aliveclean", 0);
+        } catch (Throwable unavailable) {
+            Log.w(TAG, "module context unavailable, using the host context", unavailable);
+            return base;
+        }
+    }
+
     private static boolean ownsWallpaper(Context context) {
         try {
             WallpaperManager manager = WallpaperManager.getInstance(context);
@@ -165,32 +240,45 @@ final class HyperOsAod {
         }
     }
 
-    private static final class AodSurface extends SurfaceView implements SurfaceHolder.Callback {
+    /** A TextureView, not a SurfaceView: the AOD window paints an opaque wallpaper
+     * over its own buffer, so a SurfaceView's separate layer stays hidden below it.
+     * A TextureView renders into the window buffer and therefore composites in
+     * normal view order: above the wallpaper, below the stock clock. */
+    private static final class AodSurface extends TextureView implements TextureView.SurfaceTextureListener {
+        private final Context appContext;
         private RenderLoop loop;
+        private Surface surface;
 
         AodSurface(Context context) {
             super(context);
-            getHolder().addCallback(this);
-            getHolder().setFormat(PixelFormat.TRANSLUCENT);
+            appContext = moduleContext(context);
+            setSurfaceTextureListener(this);
+            setOpaque(false);
         }
 
-        @Override public void surfaceCreated(SurfaceHolder holder) {
-            loop = new RenderLoop(getContext());
+        @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+            surface = new Surface(texture);
+            loop = new RenderLoop(appContext);
             loop.mode(0);
-            loop.attach(holder.getSurface(), getWidth(), getHeight());
-            Log.i(TAG, "surface created " + getWidth() + "x" + getHeight());
+            loop.attach(surface, width, height);
+            Log.i(TAG, "texture available " + width + "x" + height);
         }
 
-        @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            if (loop != null) loop.attach(holder.getSurface(), width, height);
+        @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
+            if (loop != null && surface != null) loop.attach(surface, width, height);
         }
 
-        @Override public void surfaceDestroyed(SurfaceHolder holder) {
+        @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
             if (loop != null) { loop.close(); loop = null; }
+            if (surface != null) { surface.release(); surface = null; }
+            return true;
         }
+
+        @Override public void onSurfaceTextureUpdated(SurfaceTexture texture) {}
 
         @Override protected void onDetachedFromWindow() {
             if (loop != null) { loop.close(); loop = null; }
+            if (surface != null) { surface.release(); surface = null; }
             super.onDetachedFromWindow();
         }
     }

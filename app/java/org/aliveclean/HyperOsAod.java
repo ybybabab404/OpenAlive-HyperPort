@@ -180,24 +180,36 @@ final class HyperOsAod {
     private static void supervise(final ViewGroup root, final AodSurface surface) {
         root.postDelayed(new Runnable() {
             int tries;
+            int misses;
 
             @Override public void run() {
+                // MIUI rebuilds its AOD children while dreaming, so the surface is
+                // briefly parentless on healthy frames. Re-adding on the first miss
+                // rebuilt the SurfaceTexture and restarted the flow, which is what the
+                // flicker was. Require three consecutive misses before touching it.
                 if (surface.getParent() == null) {
+                    if (++misses < 3) { next(); return; }
                     ViewGroup host = findInnerAod(root);
                     (host != null ? host : root).addView(surface, 0,
                             new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT));
-                    Log.i(TAG, "scene re-attached after detach");
-                }
-                ViewGroup inner = findInnerAod(root);
-                if (inner != null && surface.getParent() != inner) {
-                    if (surface.getParent() instanceof ViewGroup) {
+                    misses = 0;
+                    Log.i(TAG, "scene re-attached after misses");
+                } else {
+                    misses = 0;
+                    ViewGroup inner = findInnerAod(root);
+                    if (inner != null && surface.getParent() != inner) {
                         ((ViewGroup) surface.getParent()).removeView(surface);
+                        inner.addView(surface, 0, new ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT));
+                        Log.i(TAG, "scene moved into inner AODView");
                     }
-                    inner.addView(surface, 0, new ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                    Log.i(TAG, "scene moved into inner AODView");
                 }
+                next();
+            }
+
+            private void next() {
                 if (++tries < 20) root.postDelayed(this, 300);
                 else Log.i(TAG, "supervise done, parent="
                         + (surface.getParent() == null ? "null"

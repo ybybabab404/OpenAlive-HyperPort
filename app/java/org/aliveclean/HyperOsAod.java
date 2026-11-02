@@ -146,7 +146,8 @@ final class HyperOsAod {
                             | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                             | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                             | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
+                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+                            | android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                     android.graphics.PixelFormat.TRANSLUCENT);
             params.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
             windows.addView(frame, params);

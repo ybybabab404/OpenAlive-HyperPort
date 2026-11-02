@@ -123,3 +123,26 @@ python tools/deploy.py --build
 4. 自己的状态存独立 key（`alive_aod_style`），**从不写 MIUI 的 key**。
 
 结论：行为层完全独立；UI 列表在"双方都用方法级注入"时可叠加，属于尽力而为。
+
+### 七之实现探查（2026-11-02 22:13，拆 com.miui.aod v?)
+
+「显示模式」这一页不是传统 Preference，是小米 Gemini 设置框架的一张 Screen：
+
+- 类：`com.miui.aod.gemini.AodDisplayModeScreen`（extends `GeminiScreenConfig`）
+- 页面里有三个 item：
+  - `SETTINGS_KEY_AOD_DISPLAY_ITEMS_STYLE`（样式，值 = `Utils.getShowStyle(context)`，整数）
+  - `SETTINGS_KEY_AOD_DISPLAY_ITEMS_SCHEDULED`（定时）
+  - `AOD_BATTERY_SAVER`
+- 取值/设值：
+  - 读：`Utils.getShowStyle(Context)` → int
+  - 写：`Utils.setShowStyle(Context, int)`
+  - 合法值集合：`getAvailableShowStyles(Context)` → `List<Integer>`，
+    `set()` 里会校验 `availableShowStyles.contains(value)`，不在集合里直接返回 `not_support`
+- 所以新增一项的**最小侵入点**是：
+  1. hook `getAvailableShowStyles()` 把自己的 int 值加进返回列表；
+  2. hook `AodDisplayModeScreen.set()`（或 `aodDisplayItemsSet`）在我们自己的值被选中时改写为「全屏 AOD」的值；
+  3. `getShowStyle()` 读时若我们自己的 key 为真，返回我们自己的值（让 UI 选中我们那一项）。
+- 列表项本身由 `aodItemsConfig`（`AodStateItemConfig` 列表）驱动，加第四项需要往这个 list 里插一个
+  config，属于 Gemini 框架的数据层，需再确认 `AodStateItemConfig` 构造参数含义。
+
+📌 结论：结构清晰，可行；下一步是确认 `AodStateItemConfig` 与 `getShowStyle` 的实现（`com.miui.aod.Utils`）。

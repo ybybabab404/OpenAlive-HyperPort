@@ -156,3 +156,12 @@ APK 从 654 MB 降到 321 MB。
 - 闪烁：MIUI 会清空 AODView 子视图；`supervise()` 连续 8 次（≈2.4s）检测不到父容器才重挂，其余情况不动。3 次息屏实测 2 次重挂，仍偶发，属结构性问题。
 - 尝试过自建 overlay 窗口承载场景：窗口建起来了但场景未渲染（空帧、球消失、时钟位置被挤动），已回滚。
 - 部署：新增 `tools/deploy.py`（USB 优先、同包跳过、push+pm install）。`adb install --incremental` 在本机报 Bad file descriptor，不可用。
+
+## 2026-11-03 21:57 系统个性化入口已落地（真机验证）
+
+- 新文件 `app/java/org/aliveclean/PersonalizeEntry.java`：hook `PersonalizeActivity.onResume`，在 `personalize_constraintlayout` 里把「新卡 + 原生卡」装进一个 vertical LinearLayout。
+- 关键坑：`theme_personlize_card_view` 的父容器不是标准 ConstraintLayout 行为，直接改 LayoutParams 约束无效（新卡会盖住息屏行）；改成 LinearLayout 堆叠后才正确。
+- 行复用 `R.layout.miuix_preference_main_layout` 并由 activity context 直接 inflate（不要用 ThemePreferenceViewStyle 包一层，否则字号/内边距不一致），padding 抄 `aod_item`。
+- 卡片用反射 `com.miui.support.cardview.CardView`，`setCardBackgroundColor` → `setRadius`（顺序不能反，setRadius 会重包 SmoothContainerDrawable）→ `setCardElevation(0)`。
+- `app/res/values/strings.xml` 的 `xposed_scope` 增加 `com.android.thememanager`。
+- 真机 10.11.48.149:39795 验证：HyperAlive 独立卡片位于「正在使用」下方，息屏等 8 项完整保留，点击进入 org.aliveclean.HomeActivity；重复 onResume 不重复注入（tag 去重）。

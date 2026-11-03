@@ -146,3 +146,14 @@ python tools/deploy.py --build
   config，属于 Gemini 框架的数据层，需再确认 `AodStateItemConfig` 构造参数含义。
 
 📌 结论：结构清晰，可行；下一步是确认 `AodStateItemConfig` 与 `getShowStyle` 的实现（`com.miui.aod.Utils`）。
+
+## 八、系统个性化入口（2026-11-03）
+
+| # | 要求 | 状态 | 备注 |
+|---|---|---|---|
+| D1 | 在「主题壁纸」的「系统个性化」页注入一个 HyperAlive 入口，位置在「正在使用」与息屏卡之间 | ✅ 已实现 | `PersonalizeEntry.java`，hook `PersonalizeActivity.onResume` |
+| D2 | 入口 UI 与原生入口完全一致，用原生实现，不自绘 | ✅ | 复用 `com.miui.support.cardview.CardView` + `miuix_preference_main_layout`；行高/图标/文字与原生行一致（167px 行高、102px 图标） |
+| D3 | 入口必须独立成卡片，与其它入口不相连（参照设置页「小米澎湃AI」） | ✅ | 新卡与原卡放进同一个 vertical LinearLayout，卡间 12dp |
+| D4 | 点击进入项目应用主页 | ✅ | `org.aliveclean.HomeActivity` |
+| D5 | 不得挤掉/替换原生入口（息屏等 8 项必须原样保留） | ✅ | 已实测 aod_item 仍在，HyperAlive 卡片独立在上 |
+| D6 | 模块需在主题壁纸进程生效 | ✅ | `xposed_scope` 增加 `com.android.thememanager`；LSPosed 里需勾选主题壁纸 |

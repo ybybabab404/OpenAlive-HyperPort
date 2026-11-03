@@ -14,7 +14,9 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         boolean colorOsEditor = "com.oplus.wallpapers".equals(p.packageName);
         boolean systemUi = "com.android.systemui".equals(p.packageName);
         boolean miuiAod = "com.miui.aod".equals(p.packageName);
+        boolean themeManager = "com.android.thememanager".equals(p.packageName);
         Log.i(TAG, "loaded into " + p.packageName);
+        if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(p.classLoader));
         if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
         if (colorOsEditor) {
             step("coloros clock policy", () -> NativeClockApplyPolicy.install(p.classLoader));

@@ -4,6 +4,14 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.os.Bundle;
+import android.app.ActivityOptions;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -153,7 +161,7 @@ public final class PersonalizeEntry {
 
         ImageView icon = row.findViewById(android.R.id.icon);
         if (icon != null) {
-            Drawable appIcon = appIcon(activity, SELF_PKG);
+            Drawable appIcon = roundedIcon(activity, appIcon(activity, SELF_PKG));
             if (appIcon != null) icon.setImageDrawable(appIcon);
             icon.setVisibility(appIcon == null ? View.GONE : View.VISIBLE);
         }
@@ -174,12 +182,40 @@ public final class PersonalizeEntry {
         }
     }
 
+    /** Same geometry as the stock icons: 28dp squircle, ~16% corner radius, centred in the 34dp box. */
+    private static Drawable roundedIcon(Activity activity, Drawable source) {
+        if (source == null) return null;
+        try {
+            int size = dp(activity, 28);
+            Bitmap raw = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas rawCanvas = new Canvas(raw);
+            source.setBounds(0, 0, size, size);
+            source.draw(rawCanvas);
+
+            Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setShader(new BitmapShader(raw, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+            new Canvas(out).drawRoundRect(new RectF(0, 0, size, size), size * 0.16f, size * 0.16f, paint);
+            return new android.graphics.drawable.BitmapDrawable(activity.getResources(), out);
+        } catch (Throwable t) {
+            Log.w(TAG, "personalize: icon shape failed", t);
+            return source;
+        }
+    }
+
     private static void openHome(Context context) {
         try {
             Intent intent = new Intent(Intent.ACTION_MAIN);
             intent.setClassName(SELF_PKG, HOME_ACTIVITY);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
+            int enter = context.getResources().getIdentifier("activity_open_enter", "anim", HOST_PKG);
+            int exit = context.getResources().getIdentifier("activity_open_exit", "anim", HOST_PKG);
+            if (enter != 0 && exit != 0) {
+                Bundle options = ActivityOptions.makeCustomAnimation(context, enter, exit).toBundle();
+                context.startActivity(intent, options);
+            } else {
+                context.startActivity(intent);
+            }
         } catch (Throwable t) {
             Log.w(TAG, "personalize: open home failed", t);
         }

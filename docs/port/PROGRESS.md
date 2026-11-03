@@ -165,3 +165,12 @@ APK 从 654 MB 降到 321 MB。
 - 卡片用反射 `com.miui.support.cardview.CardView`，`setCardBackgroundColor` → `setRadius`（顺序不能反，setRadius 会重包 SmoothContainerDrawable）→ `setCardElevation(0)`。
 - `app/res/values/strings.xml` 的 `xposed_scope` 增加 `com.android.thememanager`。
 - 真机 10.11.48.149:39795 验证：HyperAlive 独立卡片位于「正在使用」下方，息屏等 8 项完整保留，点击进入 org.aliveclean.HomeActivity；重复 onResume 不重复注入（tag 去重）。
+
+## 2026-11-03 22:17 息屏页闪退：定位 + 兜底（已并入主线）
+
+- 现象：进入「息屏」设置页，`com.miui.aod` 直接崩溃，`InflateException: layout/settings_item, Index 2 out of bounds for length 2`，栈在 `SettingsView.onFinishInflate → updateAodSpinnerContentDescription → getSelectedItem`。
+- 结论：不是我们的代码。`Utils.isSupportFsAod()` 为 true 时 MIUI 只建 2 项下拉（自定义 / 和锁屏样式一致），但 `setSelection(Utils.getFsAodStyle())` 拿到的默认索引是 2。第三方全屏 AOD 模块把 `isSupportFsAod()` 恒置 true，所以这台机器每次进息屏都踩。
+- 已排除：`aod_show_style` 3→0、删除 `alive_aod_style`、`pm clear com.miui.aod`（三次都仍崩），所以不是数据残留。
+- 处理：`app/java/org/aliveclean/AodSettingsGuard.java` + `CleanHooks` 的 `miuiAod` 分支。在 `SettingsView` inflate 前把越界 spinner 夹回 0；只在越界时动手，不写设置、不改变正常机型的任何行为。
+- 验证：`am start -n com.miui.aod/com.miui.aod.settings.AodStyleCategoriesActivity` 页面正常打开，0 次 FATAL，日志 `aod spinner clamped 2 -> 0 (count 2)`。
+- 为什么并入主线：崩溃条件是「全屏AOD 已开启 + 持久化索引越界」。装了全屏AOD模块的机器（本项目的目标用户）都会遇到；不装的机器 `isSupportFsAod()` 为 false，那段代码根本不执行，兜底也不会触发。

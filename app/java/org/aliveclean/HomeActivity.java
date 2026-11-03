@@ -8,7 +8,7 @@ import android.widget.*;
 import java.util.ArrayList;
 
 /** Bind our destinations to the original personalization home layout. */
-public final class HomeActivity extends Activity {
+public class HomeActivity extends Activity {
     private SettingsUi ui;
     private HomeActivationStatus activation;
     private final ArrayList<HomeScenePreview> previews=new ArrayList<>();

@@ -174,3 +174,11 @@ APK 从 654 MB 降到 321 MB。
 - 处理：`app/java/org/aliveclean/AodSettingsGuard.java` + `CleanHooks` 的 `miuiAod` 分支。在 `SettingsView` inflate 前把越界 spinner 夹回 0；只在越界时动手，不写设置、不改变正常机型的任何行为。
 - 验证：`am start -n com.miui.aod/com.miui.aod.settings.AodStyleCategoriesActivity` 页面正常打开，0 次 FATAL，日志 `aod spinner clamped 2 -> 0 (count 2)`。
 - 为什么并入主线：崩溃条件是「全屏AOD 已开启 + 持久化索引越界」。装了全屏AOD模块的机器（本项目的目标用户）都会遇到；不装的机器 `isSupportFsAod()` 为 false，那段代码根本不执行，兜底也不会触发。
+
+## 2026-11-03 23:10 入口跳转改成「原生透明窗口 + 窗口动画」
+
+- 现象对照：主题壁纸里 息屏/壁纸/主题/图标/字体/息屏通知/指纹样式 都是同应用推页；锁屏样式本身就是跳转。用户还发现从息屏入口进入时第三方能识别到「两个应用同时在前台」。
+- 结论：息屏页是 com.miui.aod 的**透明窗口 Activity**——底层主题壁纸没有销毁，新页只是盖上去滑入，所以既是跨应用又像同应用推页。
+- 做法（`HomeEntryActivity` + `Theme.HyperAlive.Entry`）：windowIsTranslucent=true、windowBackground 透明、backgroundDimEnabled=false，并用 `android:windowAnimationStyle` 套 MIUI 自己的 activity_open_enter/exit（原样复制到 `res/anim/hla_*.xml`，没有手写插值动画）。`HomeActivity` 去掉 final 供继承。
+- 实测：`dumpsys activity activities` 里 org.aliveclean 任务 `translucent=true` 且与 com.android.thememanager 任务同时 `visible=true`——与原生息屏入口一致；页面内容本身不透明，无透底。
+- 注意：不要用 `ActivityOptions.makeCustomAnimation`（跨任务会被忽略），也不要给 Activity 设别的 taskAffinity（Android 不允许跨包共享 task，实测仍落在自己的任务里）。

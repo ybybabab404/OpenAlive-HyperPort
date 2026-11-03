@@ -10,8 +10,6 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import android.os.Bundle;
-import android.app.ActivityOptions;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -41,7 +39,7 @@ public final class PersonalizeEntry {
     private static final String HOST_PKG = "com.android.thememanager";
     private static final String ACTIVITY = HOST_PKG + ".settings.personalize.activity.PersonalizeActivity";
     private static final String SELF_PKG = "org.aliveclean";
-    private static final String HOME_ACTIVITY = "org.aliveclean.HomeActivity";
+    private static final String HOME_ACTIVITY = "org.aliveclean.HomeEntryActivity";
     private static final String TITLE = "HyperAlive";
     private static final String MARK = "hyperalive.personalize.card";
     private static final int GAP_DP = 12;
@@ -208,14 +206,7 @@ public final class PersonalizeEntry {
             Intent intent = new Intent(Intent.ACTION_MAIN);
             intent.setClassName(SELF_PKG, HOME_ACTIVITY);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            int enter = context.getResources().getIdentifier("activity_open_enter", "anim", HOST_PKG);
-            int exit = context.getResources().getIdentifier("activity_open_exit", "anim", HOST_PKG);
-            if (enter != 0 && exit != 0) {
-                Bundle options = ActivityOptions.makeCustomAnimation(context, enter, exit).toBundle();
-                context.startActivity(intent, options);
-            } else {
-                context.startActivity(intent);
-            }
+            context.startActivity(intent);
         } catch (Throwable t) {
             Log.w(TAG, "personalize: open home failed", t);
         }

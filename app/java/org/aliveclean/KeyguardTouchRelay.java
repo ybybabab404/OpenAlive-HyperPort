@@ -150,11 +150,6 @@ final class KeyguardTouchRelay {
         if (action==MotionEvent.ACTION_DOWN) {
             startX=event.getX();startRawY=event.getRawY();decided=false;hijacked=false;
             dumpOnce(view);
-            if (!allowedArea(view,event)) {
-                hijacked=true;decided=true;
-                param.args[0]=cancelOf(event);
-                note("clock-header",startRawY);
-            }
             return;
         }
         if (action==MotionEvent.ACTION_MOVE) {

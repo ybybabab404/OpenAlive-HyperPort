@@ -30,7 +30,7 @@ final class KeyguardTouchRelay {
     private static final long MOVE_INTERVAL_MS=40L;
 
     private static Messenger channel;
-    private static float startX,startY;
+    private static float startX,startRawY;
     private static boolean decided,hijacked;
     private static long liquidCheckedAt;
     private static boolean liquidApplied;
@@ -108,16 +108,16 @@ final class KeyguardTouchRelay {
         if (view==null||view.getHeight()<=0)return;
         int action=event.getActionMasked();
         if (action==MotionEvent.ACTION_DOWN) {
-            startX=event.getX();startY=event.getY();decided=false;hijacked=false;
+            startX=event.getX();startRawY=event.getRawY();decided=false;hijacked=false;
             return;
         }
         if (action==MotionEvent.ACTION_MOVE) {
             if (!decided) {
-                float up=startY-event.getY(),side=Math.abs(event.getX()-startX);
+                float up=startRawY-event.getRawY(),side=Math.abs(event.getX()-startX);
                 if (up>dp(view,24)&&up>side) {
                     decided=true;
-                    hijacked=startY<view.getHeight()*0.85f;
-                    if (hijacked) Log.i(TAG,"lock swipe captured startY="+startY+" h="+view.getHeight());
+                    hijacked=startRawY<unlockBandTop(view);
+                    if (hijacked) Log.i(TAG,"lock swipe captured rawY="+startRawY+" screen="+screenHeight(view));
                 }
             }
             if (hijacked) param.args[0]=cancelOf(event);
@@ -135,6 +135,19 @@ final class KeyguardTouchRelay {
         MotionEvent copy=MotionEvent.obtain(source);
         copy.setAction(MotionEvent.ACTION_CANCEL);
         return copy;
+    }
+
+    /** Bottom band that still unlocks. Derived from the live view height so every screen size,
+     *  aspect ratio and navigation mode gets the same 10% strip instead of a baked pixel value. */
+    private static int screenHeight(View view) {
+        return view.getResources().getDisplayMetrics().heightPixels;
+    }
+
+    /** Bottom strip that still unlocks, expressed as 10% of the real display height so every screen
+     *  size and aspect ratio gets the same physical share of the screen. Raw screen coordinates are
+     *  used on purpose: the keyguard view can be inset, and a view-relative y made the band drift. */
+    private static float unlockBandTop(View view) {
+        return screenHeight(view)*0.90f;
     }
 
     private static float dp(View view,float value) {

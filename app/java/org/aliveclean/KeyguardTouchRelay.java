@@ -30,6 +30,10 @@ final class KeyguardTouchRelay {
     private static final long MOVE_INTERVAL_MS=40L;
 
     private static Messenger channel;
+    private static float startX,startY;
+    private static boolean decided,hijacked;
+    private static long liquidCheckedAt;
+    private static boolean liquidApplied;
     private static boolean channelFailed;
     private static long lastMove;
     private static int forwarded;
@@ -49,7 +53,9 @@ final class KeyguardTouchRelay {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
                     try {
                         if (param.args==null||param.args.length!=1||!(param.args[0] instanceof MotionEvent))return;
-                        forward(param.thisObject,(MotionEvent)param.args[0]);
+                        MotionEvent event=(MotionEvent)param.args[0];
+                        if (liquid()) gate(param,event);
+                        forward(param.thisObject,event);
                     } catch (Throwable error) {
                         Log.w(TAG,"lock touch relay failed",error);
                     }
@@ -89,6 +95,63 @@ final class KeyguardTouchRelay {
             channel=null;
             Log.w(TAG,"lock touch channel dropped",dead);
         }
+    }
+
+    /**
+     * With a liquid scene applied, an upward drag that does not start in the bottom band must not
+     * unlock the phone: it belongs to the water. The shade still gets the DOWN, so taps on
+     * notifications keep working; the moment the drag is recognised we cancel the gesture for the
+     * subtree, which returns the panel to rest instead of dismissing the keyguard.
+     */
+    private static void gate(XC_MethodHook.MethodHookParam param,MotionEvent event) {
+        View view=param.thisObject instanceof View?(View)param.thisObject:null;
+        if (view==null||view.getHeight()<=0)return;
+        int action=event.getActionMasked();
+        if (action==MotionEvent.ACTION_DOWN) {
+            startX=event.getX();startY=event.getY();decided=false;hijacked=false;
+            return;
+        }
+        if (action==MotionEvent.ACTION_MOVE) {
+            if (!decided) {
+                float up=startY-event.getY(),side=Math.abs(event.getX()-startX);
+                if (up>dp(view,24)&&up>side) {
+                    decided=true;
+                    hijacked=startY<view.getHeight()*0.85f;
+                    if (hijacked) Log.i(TAG,"lock swipe captured startY="+startY+" h="+view.getHeight());
+                }
+            }
+            if (hijacked) param.args[0]=cancelOf(event);
+            return;
+        }
+        if (hijacked&&(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL)) {
+            param.args[0]=cancelOf(event);
+        }
+        if (action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL) {
+            decided=false;hijacked=false;
+        }
+    }
+
+    private static MotionEvent cancelOf(MotionEvent source) {
+        MotionEvent copy=MotionEvent.obtain(source);
+        copy.setAction(MotionEvent.ACTION_CANCEL);
+        return copy;
+    }
+
+    private static float dp(View view,float value) {
+        return value*view.getResources().getDisplayMetrics().density;
+    }
+
+    private static boolean liquid() {
+        long now=SystemClock.uptimeMillis();
+        if (now-liquidCheckedAt<1000L) return liquidApplied;
+        liquidCheckedAt=now;
+        try {
+            Bundle result=application().getContentResolver().call(SCENE,"configuration",null,null);
+            liquidApplied=result!=null&&result.getBoolean("vivo_liquid",false);
+        } catch (Throwable unavailable) {
+            liquidApplied=false;
+        }
+        return liquidApplied;
     }
 
     private static boolean locked() {

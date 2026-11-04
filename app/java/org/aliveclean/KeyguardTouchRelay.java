@@ -42,6 +42,7 @@ final class KeyguardTouchRelay {
     private static int consumers;
     private static int captures;
     private static int probe;
+    private static java.lang.ref.WeakReference<View> clockRef=new java.lang.ref.WeakReference<>(null);
     private static boolean dumped;
     private static java.lang.ref.WeakReference<View> headerRef=new java.lang.ref.WeakReference<>(null);
     private static final android.graphics.Rect headerRect=new android.graphics.Rect();
@@ -63,7 +64,8 @@ final class KeyguardTouchRelay {
                     try {
                         if (param.args==null||param.args.length!=1||!(param.args[0] instanceof MotionEvent))return;
                         MotionEvent event=(MotionEvent)param.args[0];
-                        if (event.getActionMasked()==MotionEvent.ACTION_DOWN&&probe<3) {
+                        if (liquid()&&locked()) pinClock(param.thisObject);
+        if (event.getActionMasked()==MotionEvent.ACTION_DOWN&&probe<3) {
                             probe++;
                             Log.i(TAG,"lock probe liquid="+liquid()+" locked="+locked());
                         }
@@ -215,7 +217,7 @@ final class KeyguardTouchRelay {
         container.getLocationOnScreen(location);
         headerRect.set(location[0],location[1],location[0]+container.getWidth(),location[1]+container.getHeight());
         if (container.getWidth()>0&&container.getHeight()>0&&headerRect.contains((int)event.getRawX(),(int)event.getRawY())) return true;
-        return event.getRawY()>=root.getResources().getDisplayMetrics().heightPixels*0.90f;
+        return event.getRawY()>=root.getResources().getDisplayMetrics().heightPixels*0.88f;
     }
 
     private static View findBySimpleName(View view,String simple) {
@@ -230,6 +232,24 @@ final class KeyguardTouchRelay {
             }
         }
         return null;
+    }
+
+    /** The clock header feeds the digits' translation and alpha from the drag; zeroing those values
+     *  on every keyguard touch keeps the clock still without depending on where the touch started. */
+    private static void pinClock(Object source) {
+        View root=source instanceof View?(View)source:null;
+        if (root==null) return;
+        View clock=clockRef.get();
+        if (clock==null||clock.getWindowToken()==null) {
+            clock=findBySimpleName(root,"Clock");
+            if (clock==null) return;
+            clockRef=new java.lang.ref.WeakReference<>(clock);
+        }
+        clock.setTranslationX(0f);
+        clock.setTranslationY(0f);
+        clock.setScaleX(1f);
+        clock.setScaleY(1f);
+        clock.setAlpha(1f);
     }
 
     private static void note(String kind,float rawY) {
@@ -254,7 +274,7 @@ final class KeyguardTouchRelay {
      *  size and aspect ratio gets the same physical share of the screen. Raw screen coordinates are
      *  used on purpose: the keyguard view can be inset, and a view-relative y made the band drift. */
     private static float unlockBandTop(View view) {
-        return screenHeight(view)*0.90f;
+        return screenHeight(view)*0.88f;
     }
 
     private static float dp(View view,float value) {

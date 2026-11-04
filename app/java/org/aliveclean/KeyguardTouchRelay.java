@@ -41,6 +41,8 @@ final class KeyguardTouchRelay {
     private static int forwarded;
     private static int consumers;
     private static int captures;
+    private static int probe;
+    private static boolean dumped;
     private static int titlesLogged;
 
     private static final String[] SHADE_VIEWS={
@@ -59,6 +61,10 @@ final class KeyguardTouchRelay {
                     try {
                         if (param.args==null||param.args.length!=1||!(param.args[0] instanceof MotionEvent))return;
                         MotionEvent event=(MotionEvent)param.args[0];
+                        if (event.getActionMasked()==MotionEvent.ACTION_DOWN&&probe<3) {
+                            probe++;
+                            Log.i(TAG,"lock probe liquid="+liquid()+" locked="+locked());
+                        }
                         if (liquid()) gate(param,event);
                         forward(param.thisObject,event);
                     } catch (Throwable error) {
@@ -149,13 +155,6 @@ final class KeyguardTouchRelay {
                     // Upward drag: the water owns everything above the unlock strip.
                     decided=true;hijacked=startRawY<unlockBandTop(view);
                     if (hijacked) note("vertical",startRawY);
-                } else if (travel>slop&&travel>=rise) {
-                    // Sideways drags only bend the clock when they happen in the clock block; below
-                    // it the same gesture belongs to notifications and media cards, so it is left
-                    // alone there and only the clock zone goes to the water.
-                    decided=true;
-                    hijacked=startRawY<screenHeight(view)*CLOCK_ZONE;
-                    if (hijacked) note("horizontal",startRawY);
                 }
             }
             if (hijacked) param.args[0]=cancelOf(event);
@@ -166,6 +165,31 @@ final class KeyguardTouchRelay {
         }
         if (action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL) {
             decided=false;hijacked=false;
+        }
+    }
+
+    /** One shot: names of every view under the keyguard window, so the clock that deforms under a
+     *  finger can be identified by class instead of guessed from a screen region. */
+    private static void dumpOnce(View root) {
+        if (dumped) return;
+        dumped=true;
+        try {
+            java.util.ArrayList<String> names=new java.util.ArrayList<>();
+            collect(root.getRootView(),names,0);
+            Log.i(TAG,"keyguard views: "+android.text.TextUtils.join(",",names));
+        } catch (Throwable error) {
+            Log.w(TAG,"keyguard view dump failed",error);
+        }
+    }
+
+    private static void collect(View view,java.util.List<String> names,int depth) {
+        if (view==null||names.size()>=60||depth>14) return;
+        String name=view.getClass().getName();
+        String simple=name.substring(name.lastIndexOf('.')+1);
+        names.add(depth+" "+simple);
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group=(android.view.ViewGroup)view;
+            for (int i=0;i<group.getChildCount();i++) collect(group.getChildAt(i),names,depth+1);
         }
     }
 

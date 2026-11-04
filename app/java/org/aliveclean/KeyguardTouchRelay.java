@@ -28,6 +28,8 @@ final class KeyguardTouchRelay {
     private static final String TAG="AliveClean";
     private static final Uri SCENE=Uri.parse("content://org.aliveclean.scene/configuration");
     private static final long MOVE_INTERVAL_MS=40L;
+    /** Upper share of the screen that holds the lock clock and its touch deformation. */
+    private static final float CLOCK_ZONE=0.45f;
 
     private static Messenger channel;
     private static float startX,startRawY;
@@ -148,10 +150,12 @@ final class KeyguardTouchRelay {
                     decided=true;hijacked=startRawY<unlockBandTop(view);
                     if (hijacked) note("vertical",startRawY);
                 } else if (travel>slop&&travel>=rise) {
-                    // Sideways drag on the keyguard slides the clock and bends its gradient; that
-                    // stock reaction is what fights the ripple, so it is handed to the water too.
-                    decided=true;hijacked=true;
-                    note("horizontal",startRawY);
+                    // Sideways drags only bend the clock when they happen in the clock block; below
+                    // it the same gesture belongs to notifications and media cards, so it is left
+                    // alone there and only the clock zone goes to the water.
+                    decided=true;
+                    hijacked=startRawY<screenHeight(view)*CLOCK_ZONE;
+                    if (hijacked) note("horizontal",startRawY);
                 }
             }
             if (hijacked) param.args[0]=cancelOf(event);

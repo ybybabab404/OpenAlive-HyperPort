@@ -90,15 +90,15 @@ final class WallpaperPicker {
         int homeId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
         android.util.Log.i("AliveClean","wallpaper check: result="+result+" reliable="+reliableResult
                 +" home="+homeName+" homeId="+homeId+" prevHome="+previousHomeId+" expected="+expected.flattenToShortString());
-        if(home!=null&&expected.equals(home.getComponent())
-                &&(confirmed||homeId!=previousHomeId))return true;
+        // Already our component: that is success. Re-applying the same wallpaper does not change
+        // the wallpaper id, so requiring an id change produced a false "未应用" every second time.
+        if(home!=null&&expected.equals(home.getComponent()))return true;
         if(Build.VERSION.SDK_INT>=34){
             WallpaperInfo lock=manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
             int lockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
             String lockName=lock==null?null:lock.getComponent().flattenToShortString();
             android.util.Log.i("AliveClean","wallpaper check lock: "+lockName+" lockId="+lockId+" prevLock="+previousLockId);
-            if(lock!=null&&expected.equals(lock.getComponent())
-                    &&(confirmed||lockId!=previousLockId))return true;
+            if(lock!=null&&expected.equals(lock.getComponent()))return true;
         }
         return false;
     }

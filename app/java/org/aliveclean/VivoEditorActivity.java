@@ -96,12 +96,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         if(options==null)return;
         updateSlotDetails();
         getSharedPreferences("vivo.editor",0).edit().putString("family."+options.family,options.json()).apply();
-        // Vivo is a wallpaper style, not an AOD mode. Never write "aod" here: the previous
-        // unconditional putInt("aod",101) leaked the full-screen-AOD marker into the shared
-        // draft, and the next Flyme/system wallpaper apply copied that stale value into the
-        // applied scene (MainActivity.commitDraft copies the whole SceneOptions snapshot).
-        // Leaving the key untouched preserves whatever mode the user actually chose.
-        getSharedPreferences(SceneOptions.DRAFT,0).edit().putString("vivo",options.json()).putInt("cosmic",0).putInt("lock",0).putInt("home",6).apply();
+        getSharedPreferences(SceneOptions.DRAFT,0).edit().putString("vivo",options.json()).putInt("cosmic",0).putInt("aod",101).putInt("lock",0).putInt("home",6).apply();
     }
     private void showPanel(int tab){
         if(panel!=null)panel.dismiss();panel=new Dialog(this);LinearLayout body=new LinearLayout(ui);body.setOrientation(1);body.setPadding(0,ui.dp(14),0,ui.dp(18));

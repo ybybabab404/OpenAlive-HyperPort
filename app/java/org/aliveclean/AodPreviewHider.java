@@ -53,6 +53,9 @@ public final class AodPreviewHider {
     }
 
     private static void watch(Activity page) {
+        // 只有模块壁纸生效时才动这个块；用系统壁纸时预览必须原样留给系统，
+        // 之前无条件折叠，导致「和锁屏样式一致」的原生预览也被藏了。
+        if (!AodWallpaperMode.alive(page)) return;
         final View decor = page.getWindow().getDecorView();
         decor.getViewTreeObserver().addOnPreDrawListener(
                 new ViewTreeObserver.OnPreDrawListener() {

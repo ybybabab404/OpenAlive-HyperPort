@@ -18,6 +18,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(p.classLoader));
         if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
         if (miuiAod) step("aod settings hotfix", () -> AodSettingsGuard.install(p.classLoader));
+        if (miuiAod) step("aod preview hide", () -> AodPreviewHider.install(p.classLoader));
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(p.classLoader));
         if (systemUi) step("lock touch relay", () -> KeyguardTouchRelay.install(p.classLoader));
         if (systemUi) step("hyperos doze", () -> HyperOsAod.installDoze(p.classLoader));

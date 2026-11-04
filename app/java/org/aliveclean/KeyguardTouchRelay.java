@@ -388,6 +388,9 @@ final class KeyguardTouchRelay {
         long now=SystemClock.uptimeMillis();
         if (now-liquidCheckedAt<1000L) return liquidApplied;
         liquidCheckedAt=now;
+        // A switched-away wallpaper leaves a stale configuration behind, so the scene provider alone
+        // is not enough: the wallpaper service must actually be alive for the strip to stay gated.
+        if (!CleanWallpaper.RUNNING) {liquidApplied=false;return false;}
         try {
             Bundle result=application().getContentResolver().call(SCENE,"configuration",null,null);
             liquidApplied=result!=null&&result.getBoolean("vivo_liquid",false);

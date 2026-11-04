@@ -79,7 +79,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     }
     private void openPhotoSource(int source){
         Intent intent=PhotoSources.intent(this,source);
-        if(intent==null){toast(source==PhotoSources.OPPO?"未找到可用的 OPPO 相册，请选择其他来源":"此照片来源不可用，请选择其他来源");return;}
+        if(intent==null){toast(source==PhotoSources.MIUI?"未找到可用的小米相册，请选择其他来源":"此照片来源不可用，请选择其他来源");return;}
         try{startActivityForResult(intent,10);}
         catch(ActivityNotFoundException|SecurityException e){android.util.Log.e("AliveClean","Photo source unavailable",e);toast("无法打开"+PhotoSources.LABELS[source]+"，请选择其他来源");}
     }

@@ -6,12 +6,16 @@ import android.content.pm.PackageManager;
 
 /** Three distinct user-selected image providers; returned URIs are copied privately. */
 final class PhotoSources {
-    static final int OPPO=0,GALLERY=1,FILES=2;
-    static final String[] LABELS={"OPPO 相册","通用相册","Android 文件"};
+    static final int MIUI=0,GALLERY=1,FILES=2;
+    static final String[] LABELS={"小米相册","通用相册","Android 文件"};
 
     static Intent intent(Context context,int source){
-        if(source==OPPO){
+        if(source==MIUI){
             Intent pick=new Intent(Intent.ACTION_PICK).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
+            // HyperOS gallery. PICK is the entry it exposes for external callers; GET_CONTENT would
+            // be taken over by the platform photo picker instead of opening the gallery itself.
+            Intent miui=installed(context,pick,new String[]{"com.miui.gallery"});
+            if(miui!=null)return miui;
             return installed(context,pick,new String[]{"com.coloros.gallery3d","com.oplus.gallery3d"});
         }
         if(source==GALLERY){
@@ -34,7 +38,7 @@ final class PhotoSources {
         Intent pick=new Intent(Intent.ACTION_PICK).setType(mime)
             .putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Intent gallery=installed(context,pick,new String[]{"com.coloros.gallery3d","com.oplus.gallery3d"});
+        Intent gallery=installed(context,pick,new String[]{"com.miui.gallery","com.coloros.gallery3d","com.oplus.gallery3d"});
         if(gallery!=null)return gallery;
         return new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(mime)
             .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple)

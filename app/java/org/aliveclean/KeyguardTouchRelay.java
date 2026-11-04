@@ -47,6 +47,7 @@ final class KeyguardTouchRelay {
     private static boolean clockProbed;
     private static int effectBlocked;
     private static volatile boolean dragging;
+    private static final java.util.HashSet<String> propSeen=new java.util.HashSet<>();
     private static java.lang.ref.WeakReference<View> headerRef=new java.lang.ref.WeakReference<>(null);
     private static final android.graphics.Rect headerRect=new android.graphics.Rect();
     private static int titlesLogged;
@@ -127,7 +128,12 @@ final class KeyguardTouchRelay {
                             try {
                                 if (!dragging||!liquid()||!locked())return;
                                 if (!(param.thisObject instanceof View))return;
-                                if (!insideShade((View)param.thisObject))return;
+                                View target=(View)param.thisObject;
+                                boolean shade=insideShade(target);
+                                String simple=target.getClass().getName();
+                                simple=simple.substring(simple.lastIndexOf('.')+1);
+                                if (propSeen.add(simple)) Log.i(TAG,"animated "+simple+" shade="+shade+" via "+param.method.getName());
+                                if (!shade)return;
                                 param.setResult(null);
                             } catch (Throwable ignored) {}
                         }

@@ -31,6 +31,9 @@ final class RootBridge {
     }
 
     static String prepareAod(Context context)throws Exception {
+        // HyperOS 上没有 ColorOS 的 AodMachineHelperProvider：AOD 由本模块在 systemui 侧的
+        // 渲染路径接管，这里不写任何系统设置（尤其不能写 aod_show_style），所以直接视为完成。
+        if(PlatformProfile.isHyperOs(context))return "壁纸已应用";
         if(android.os.Process.myUid()/100000!=0)throw new IOException("目前仅支持主用户的 ColorOS 息屏配置");
         if(context.getPackageManager().resolveContentProvider("com.oplus.aod.AodMachineHelperProvider",0)==null)throw new IOException("此系统未提供已适配的 ColorOS 息屏接口，请在系统设置中配置");
         String apk=context.getApplicationInfo().sourceDir;

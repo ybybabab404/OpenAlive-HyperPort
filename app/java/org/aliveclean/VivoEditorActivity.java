@@ -257,7 +257,21 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         try{
             WallpaperManager manager=WallpaperManager.getInstance(this);
             previousId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
-            previousLockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);awaitingApply=true;
+            previousLockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
+            if(PlatformProfile.isHyperOs(this)){
+                // HyperOS' live picker answers RESULT_CANCELED for third-party components and does not
+                // rebind an already-current one. Bind through the system-uid adapter, as MainActivity does.
+                awaitingApply=true;
+                android.util.Log.i("AliveClean","vivo apply via SceneApply family="+options.family);
+                new Thread(()->{
+                    String failure=null;
+                    try{SceneApply.apply(this);}catch(Exception error){failure=error.getMessage();}
+                    final String message=failure;
+                    runOnUiThread(()->{awaitingApply=false;if(isDestroyed())return;if(message==null){android.util.Log.i("AliveClean","vivo SceneApply ok");commit();}else{android.util.Log.e("AliveClean","vivo SceneApply failed: "+message);toast("壁纸应用失败："+message);}});
+                },"VivoSceneApply").start();
+                return;
+            }
+            awaitingApply=true;
             pickerResultReliable=WallpaperPicker.open(this,new ComponentName(this,CleanWallpaper.class),20);
         }catch(RuntimeException e){awaitingApply=false;toast("无法打开应用页面："+e.getMessage());}
     }

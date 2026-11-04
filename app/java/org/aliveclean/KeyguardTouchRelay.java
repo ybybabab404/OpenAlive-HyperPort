@@ -46,6 +46,9 @@ final class KeyguardTouchRelay {
     private static boolean dumped;
     private static boolean clockProbed;
     private static int effectBlocked;
+    /** 0 = 完全关闭锁屏形变，1 = 原生幅度。 */
+    private static final float DEFORM_GAIN=0f;
+    private static boolean deformLogged;
     private static volatile boolean dragging;
     private static final java.util.HashSet<String> propSeen=new java.util.HashSet<>();
     private static java.lang.ref.WeakReference<View> headerRef=new java.lang.ref.WeakReference<>(null);
@@ -60,6 +63,7 @@ final class KeyguardTouchRelay {
     static void install(ClassLoader loader) {
         hookClockViews(loader);
         hookPropertyWrites(loader);
+        hookLockDeform(loader);
         int hooked=0;
         for (String name:SHADE_VIEWS) {
             Class<?> view=de.robv.android.xposed.XposedHelpers.findClassIfExists(name,loader);
@@ -155,6 +159,49 @@ final class KeyguardTouchRelay {
             current=parent instanceof View?(View)parent:null;
         }
         return false;
+    }
+
+    /** Native keyguard horizontal-move handler: progress = |distance| / 270px drives
+     *  alpha = 1 - progress and scale = 1 - 0.1 * progress for the clock and notification
+     *  containers. Scaling the incoming distance to zero keeps every view at full opacity and
+     *  size, which is the effect the user wants gone. Only active while the liquid scene is the
+     *  applied wallpaper and the keyguard is showing. */
+    private static void hookLockDeform(ClassLoader loader) {
+        try {
+            Class<?> callback=de.robv.android.xposed.XposedHelpers.findClassIfExists(
+                    "com.android.keyguard.injector.KeyguardPanelViewInjector$bindView$2",loader);
+            if (callback==null) {Log.w(TAG,"lock deform: callback class not found");return;}
+            XposedBridge.hookAllMethods(callback,"onHorizontalMove",new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (deformOff()||!liquid()||!locked())return;
+                        if (param.args==null||param.args.length!=1||!(param.args[0] instanceof Float))return;
+                        float distance=(Float)param.args[0];
+                        if (Float.isNaN(distance)||Float.isInfinite(distance)) distance=0f;
+                        param.args[0]=distance*DEFORM_GAIN;
+                        if (!deformLogged&&distance!=0f) {
+                            deformLogged=true;
+                            Log.i(TAG,"lock deform intercepted distance="+distance+" gain="+DEFORM_GAIN);
+                        }
+                    } catch (Throwable error) {
+                        Log.w(TAG,"lock deform hook failed",error);
+                    }
+                }
+            });
+            Log.i(TAG,"lock deform hook installed");
+        } catch (Throwable error) {
+            Log.w(TAG,"lock deform hook unavailable",error);
+        }
+    }
+
+    /** adb shell settings put system alive_lock_deform_off 1 立即停用，无需重启。 */
+    private static boolean deformOff() {
+        try {
+            return android.provider.Settings.System.getInt(
+                    application().getContentResolver(),"alive_lock_deform_off",0)==1;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static void forward(Object source,MotionEvent event) {

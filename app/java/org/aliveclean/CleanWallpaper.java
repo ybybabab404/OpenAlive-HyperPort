@@ -7,6 +7,9 @@ import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 
 public final class CleanWallpaper extends WallpaperService {
+    /** True while our wallpaper service is bound, i.e. while it really is the current wallpaper. */
+    static volatile boolean RUNNING;
+
     @Override public Engine onCreateEngine(){return new SceneEngine();}
     final class SceneEngine extends Engine implements SceneChannel.Listener {
         RenderLoop renderer;
@@ -30,7 +33,7 @@ public final class CleanWallpaper extends WallpaperService {
         };
         final BroadcastReceiver state=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent intent){if(Intent.ACTION_CONFIGURATION_CHANGED.equals(intent.getAction()))readWallpaperDim();update();refreshVisibility();}};
         @Override public void onCreate(SurfaceHolder holder){
-            super.onCreate(holder);renderer=new RenderLoop(CleanWallpaper.this,isPreview()?SceneOptions.DRAFT:SceneOptions.APPLIED);
+            super.onCreate(holder);RUNNING=true;renderer=new RenderLoop(CleanWallpaper.this,isPreview()?SceneOptions.DRAFT:SceneOptions.APPLIED);
             readWallpaperDim();
             try{getContentResolver().registerContentObserver(android.provider.Settings.Secure.getUriFor("oplus_customize_settings_dark_wallpaper"),false,dimSetting);dimObserverRegistered=true;}
             catch(RuntimeException error){android.util.Log.w("AliveClean","Wallpaper dim observer unavailable",error);}
@@ -120,6 +123,6 @@ public final class CleanWallpaper extends WallpaperService {
             if(usable)renderer.touch(event.getActionMasked(),event.getX()/frame.width(),event.getY()/frame.height());
         }
         @Override public void onSurfaceDestroyed(SurfaceHolder h){renderer.detach();super.onSurfaceDestroyed(h);}
-        @Override public void onDestroy(){SceneChannel.remove(this);displayManager.unregisterDisplayListener(displays);unregisterReceiver(state);if(regionObserverRegistered)getContentResolver().unregisterContentObserver(area);if(dimObserverRegistered)getContentResolver().unregisterContentObserver(dimSetting);renderer.close();super.onDestroy();}
+        @Override public void onDestroy(){SceneChannel.remove(this);displayManager.unregisterDisplayListener(displays);unregisterReceiver(state);if(regionObserverRegistered)getContentResolver().unregisterContentObserver(area);if(dimObserverRegistered)getContentResolver().unregisterContentObserver(dimSetting);renderer.close();RUNNING=false;super.onDestroy();}
     }
 }

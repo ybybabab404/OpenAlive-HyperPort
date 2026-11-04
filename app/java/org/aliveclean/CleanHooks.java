@@ -14,10 +14,13 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         boolean systemUi = "com.android.systemui".equals(p.packageName);
         boolean miuiAod = "com.miui.aod".equals(p.packageName);
         boolean themeManager = "com.android.thememanager".equals(p.packageName);
+        boolean miuiWallpaper = "com.miui.miwallpaper".equals(p.packageName);
         Log.i(TAG, "loaded into " + p.packageName);
         if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(p.classLoader));
         if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
         if (miuiAod) step("aod settings hotfix", () -> AodSettingsGuard.install(p.classLoader));
+        if (miuiWallpaper) step("aod mode wallpaper", () -> AodModeGuard.installWallpaperService(p.classLoader));
+        if ("android".equals(p.packageName)) step("aod mode system", () -> AodModeGuard.installSystemWallpaper(p.classLoader));
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(p.classLoader));
         if (systemUi) step("lock touch relay", () -> KeyguardTouchRelay.install(p.classLoader));
         if (systemUi) step("hyperos doze", () -> HyperOsAod.installDoze(p.classLoader));

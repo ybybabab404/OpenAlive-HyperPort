@@ -43,6 +43,8 @@ final class KeyguardTouchRelay {
     private static int captures;
     private static int probe;
     private static boolean dumped;
+    private static java.lang.ref.WeakReference<View> headerRef=new java.lang.ref.WeakReference<>(null);
+    private static final android.graphics.Rect headerRect=new android.graphics.Rect();
     private static int titlesLogged;
 
     private static final String[] SHADE_VIEWS={
@@ -145,6 +147,12 @@ final class KeyguardTouchRelay {
         int action=event.getActionMasked();
         if (action==MotionEvent.ACTION_DOWN) {
             startX=event.getX();startRawY=event.getRawY();decided=false;hijacked=false;
+            dumpOnce(view);
+            if (insideClockHeader(view,event)) {
+                hijacked=true;decided=true;
+                param.args[0]=cancelOf(event);
+                note("clock-header",startRawY);
+            }
             return;
         }
         if (action==MotionEvent.ACTION_MOVE) {
@@ -191,6 +199,36 @@ final class KeyguardTouchRelay {
             android.view.ViewGroup group=(android.view.ViewGroup)view;
             for (int i=0;i<group.getChildCount();i++) collect(group.getChildAt(i),names,depth+1);
         }
+    }
+
+    /** The lock clock lives in MiuiNotificationShadeHeader; its own drag handling is what bends the
+     *  digits. Touches that start inside that header are cancelled outright, which removes the
+     *  deformation without touching notifications or media cards living further down. */
+    private static boolean insideClockHeader(View root,MotionEvent event) {
+        View header=headerRef.get();
+        if (header==null||header.getWindowToken()==null) {
+            header=findBySimpleName(root,"MiuiNotificationShadeHeader");
+            if (header==null) return false;
+            headerRef=new java.lang.ref.WeakReference<>(header);
+        }
+        int[] location=new int[2];
+        header.getLocationOnScreen(location);
+        headerRect.set(location[0],location[1],location[0]+header.getWidth(),location[1]+header.getHeight());
+        return headerRect.contains((int)event.getRawX(),(int)event.getRawY());
+    }
+
+    private static View findBySimpleName(View view,String simple) {
+        if (view==null) return null;
+        String name=view.getClass().getName();
+        if (name.substring(name.lastIndexOf('.')+1).equals(simple)) return view;
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group=(android.view.ViewGroup)view;
+            for (int i=0;i<group.getChildCount();i++) {
+                View found=findBySimpleName(group.getChildAt(i),simple);
+                if (found!=null) return found;
+            }
+        }
+        return null;
     }
 
     private static void note(String kind,float rawY) {

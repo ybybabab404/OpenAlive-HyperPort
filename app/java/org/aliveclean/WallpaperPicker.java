@@ -86,13 +86,30 @@ final class WallpaperPicker {
             boolean reliableResult,int previousHomeId,int previousLockId){
         boolean confirmed=reliableResult&&result==Activity.RESULT_OK;
         WallpaperInfo home=manager.getWallpaperInfo();
+        String homeName=home==null?null:home.getComponent().flattenToShortString();
+        int homeId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
+        android.util.Log.i("AliveClean","wallpaper check: result="+result+" reliable="+reliableResult
+                +" home="+homeName+" homeId="+homeId+" prevHome="+previousHomeId+" expected="+expected.flattenToShortString());
         if(home!=null&&expected.equals(home.getComponent())
-                &&(confirmed||manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM)!=previousHomeId))return true;
+                &&(confirmed||homeId!=previousHomeId))return true;
         if(Build.VERSION.SDK_INT>=34){
             WallpaperInfo lock=manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
+            int lockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
+            String lockName=lock==null?null:lock.getComponent().flattenToShortString();
+            android.util.Log.i("AliveClean","wallpaper check lock: "+lockName+" lockId="+lockId+" prevLock="+previousLockId);
             if(lock!=null&&expected.equals(lock.getComponent())
-                    &&(confirmed||manager.getWallpaperId(WallpaperManager.FLAG_LOCK)!=previousLockId))return true;
+                    &&(confirmed||lockId!=previousLockId))return true;
         }
         return false;
+    }
+
+    /** The system may publish the new component a moment after the picker returns; re-check once. */
+    static void appliedChecked(WallpaperManager manager,ComponentName expected,int result,
+            boolean reliableResult,int previousHomeId,int previousLockId,Runnable onApplied,Runnable onFailed){
+        if(applied(manager,expected,result,reliableResult,previousHomeId,previousLockId)){onApplied.run();return;}
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+            if(applied(manager,expected,result,reliableResult,previousHomeId,previousLockId))onApplied.run();
+            else onFailed.run();
+        },900);
     }
 }

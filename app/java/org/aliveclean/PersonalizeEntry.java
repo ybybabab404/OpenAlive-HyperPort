@@ -39,7 +39,7 @@ public final class PersonalizeEntry {
     private static final String HOST_PKG = "com.android.thememanager";
     private static final String ACTIVITY = HOST_PKG + ".settings.personalize.activity.PersonalizeActivity";
     private static final String SELF_PKG = "org.aliveclean";
-    private static final String HOME_ACTIVITY = "org.aliveclean.HomeEntryActivity";
+    private static final String HOME_ACTIVITY = "org.aliveclean.HomeActivity";
     private static final String TITLE = "HyperAlive";
     private static final String MARK = "hyperalive.personalize.card";
     private static final int GAP_DP = 12;

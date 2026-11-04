@@ -263,6 +263,13 @@ final class RenderLoop {
         if(!EGL14.eglMakeCurrent(display,window,window,egl))throw new IllegalStateException("eglMakeCurrent");
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}
+        catch(Exception missing){
+            // A stale package handle (app updated while the wallpaper service kept running) can make
+            // this asset unreadable. It is decorative only: fall back to a blank texture instead of
+            // failing the whole renderer, which would drop the wallpaper back to the static image.
+            Log.w("AliveClean","lens decorator unavailable, using blank texture",missing);
+            Bitmap blank=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);decorator=upload(blank);blank.recycle();
+        }
         createScene(options);{if(Diagnostics.TRACE)Log.i("AliveClean","GLES3 scene ready "+w+"x"+h);}
     }
     private int loadPhoto(String name,boolean primary){

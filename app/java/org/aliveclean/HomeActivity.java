@@ -15,17 +15,6 @@ public class HomeActivity extends Activity {
     private int previewLoad;
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
-        // ColorOS can deny SystemUI's cold ContentProvider start even when the
-        // module and provider are installed. Apply its own associated-startup
-        // setting once after installation or an app-data reset.
-        if(PlatformProfile.isColorOs(this)&&!getSharedPreferences("native_clock_startup",0).getBoolean("allowed",false)){
-            new Thread(()->{
-                try{
-                    RootBridge.allowClockStartup(this);
-                    getSharedPreferences("native_clock_startup",0).edit().putBoolean("allowed",true).apply();
-                }catch(Exception failure){android.util.Log.w("OpenAliveClock","Clock startup setup unavailable",failure);}
-            },"OpenAliveClockStartup").start();
-        }
         try{
             ui=new SettingsUi(this);
             LinearLayout screen=SettingsScreen.create(this,ui,"桌面、壁纸和个性化");

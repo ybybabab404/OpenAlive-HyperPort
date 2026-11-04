@@ -11,19 +11,12 @@ public final class CleanHooks implements IXposedHookLoadPackage {
     private static boolean ambientHooked;
 
     @Override public void handleLoadPackage(XC_LoadPackage.LoadPackageParam p) {
-        boolean colorOsEditor = "com.oplus.wallpapers".equals(p.packageName);
         boolean systemUi = "com.android.systemui".equals(p.packageName);
         boolean miuiAod = "com.miui.aod".equals(p.packageName);
         boolean themeManager = "com.android.thememanager".equals(p.packageName);
         Log.i(TAG, "loaded into " + p.packageName);
         if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(p.classLoader));
         if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
-        if (colorOsEditor) {
-            step("coloros clock policy", () -> NativeClockApplyPolicy.install(p.classLoader));
-            step("coloros clock fonts", () -> ColorOsNativeClockFonts.install(p.classLoader));
-        }
-        if (systemUi && PlatformProfile.hasVendorClass(p.classLoader))
-            step("coloros clock fonts (systemui)", () -> ColorOsNativeClockFonts.install(p.classLoader));
         if (miuiAod) step("aod settings hotfix", () -> AodSettingsGuard.install(p.classLoader));
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(p.classLoader));
         if (systemUi) step("hyperos doze", () -> HyperOsAod.installDoze(p.classLoader));
@@ -51,8 +44,6 @@ public final class CleanHooks implements IXposedHookLoadPackage {
                             }
                         });
             });
-        } else if (PlatformProfile.hasVendorClass(p.classLoader)) {
-            step("coloros bridge", () -> ColorOsBridge.install(p.classLoader));
         }
     }
 

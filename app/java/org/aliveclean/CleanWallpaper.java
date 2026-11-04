@@ -29,18 +29,6 @@ public final class CleanWallpaper extends WallpaperService {
             @Override public void onChange(boolean selfChange){readOfficialRegion();}
         };
         final BroadcastReceiver state=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent intent){if(Intent.ACTION_CONFIGURATION_CHANGED.equals(intent.getAction()))readWallpaperDim();update();refreshVisibility();}};
-        final BroadcastReceiver scenes=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent intent){
-            if(isPreview())return;
-            if(ColorOsBridge.ACTION_LAYOUT.equals(intent.getAction())){
-                if(intent.getIntExtra("version",0)!=1)return;
-                AodRegion region=AodRegion.create(intent.getIntExtra("display",-1),intent.getIntExtra("width",0),intent.getIntExtra("height",0),intent.getIntExtra("left",0),intent.getIntExtra("top",0),intent.getIntExtra("right",0),intent.getIntExtra("bottom",0));
-                region(region);
-                return;
-            }
-            if(!ColorOsBridge.ACTION.equals(intent.getAction()))return;
-            int next=intent.getIntExtra("mode",-1);
-            if(next>=0&&next<=2)scene(next,intent.getBooleanExtra("animate",true),intent.getLongExtra("time",android.os.SystemClock.uptimeMillis()),intent.getIntExtra("phase",0),intent.getLongExtra("clock_wake",0),intent.getFloatExtra("vivo_night_level",Float.NaN),intent.getFloatExtra("vivo_aod_mask",Float.NaN));
-        }};
         @Override public void onCreate(SurfaceHolder holder){
             super.onCreate(holder);renderer=new RenderLoop(CleanWallpaper.this,isPreview()?SceneOptions.DRAFT:SceneOptions.APPLIED);
             readWallpaperDim();
@@ -52,16 +40,10 @@ public final class CleanWallpaper extends WallpaperService {
             if(!isPreview())SceneChannel.add(this);
             IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_SCREEN_ON);f.addAction(Intent.ACTION_SCREEN_OFF);f.addAction(Intent.ACTION_USER_PRESENT);
             f.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
-            IntentFilter bridge=new IntentFilter(ColorOsBridge.ACTION);
-            bridge.addAction(ColorOsBridge.ACTION_LAYOUT);
-            // ColorOS SystemUI has its own UID. Allow that signed system sender explicitly,
-            // without exposing wallpaper state changes to ordinary third-party applications.
             if(android.os.Build.VERSION.SDK_INT>=33){
                 registerReceiver(state,f,Context.RECEIVER_NOT_EXPORTED);
-                registerReceiver(scenes,bridge,ColorOsBridge.SENDER_PERMISSION,null,Context.RECEIVER_EXPORTED);
             }else{
                 registerReceiver(state,f);
-                registerReceiver(scenes,bridge,ColorOsBridge.SENDER_PERMISSION,null);
             }
             if(!isPreview())try{
                 getContentResolver().registerContentObserver(android.provider.Settings.System.getUriFor("alive_wallpaper_position"),false,area);
@@ -128,11 +110,15 @@ public final class CleanWallpaper extends WallpaperService {
             else if("action_alive_launcher".equals(action)||"android.wallpaper.keyguard_going_away".equals(action)){ambient=false;renderer.mode(2,animate);}
             return super.onCommand(action,x,y,z,extras,resultRequested);
         }
+        private int touchLogs;
         @Override public void onTouchEvent(android.view.MotionEvent event){
             android.graphics.Rect frame=getSurfaceHolder().getSurfaceFrame();
-            if(renderer!=null&&frame.width()>0&&frame.height()>0)renderer.touch(event.getActionMasked(),event.getX()/frame.width(),event.getY()/frame.height());
+            boolean usable=renderer!=null&&frame.width()>0&&frame.height()>0;
+            if(touchLogs<8){touchLogs++;android.util.Log.i("AliveClean","touch action="+event.getActionMasked()
+                    +" frame="+frame.width()+"x"+frame.height()+" x="+event.getX()+" y="+event.getY()+" usable="+usable);}
+            if(usable)renderer.touch(event.getActionMasked(),event.getX()/frame.width(),event.getY()/frame.height());
         }
         @Override public void onSurfaceDestroyed(SurfaceHolder h){renderer.detach();super.onSurfaceDestroyed(h);}
-        @Override public void onDestroy(){SceneChannel.remove(this);displayManager.unregisterDisplayListener(displays);unregisterReceiver(state);unregisterReceiver(scenes);if(regionObserverRegistered)getContentResolver().unregisterContentObserver(area);if(dimObserverRegistered)getContentResolver().unregisterContentObserver(dimSetting);renderer.close();super.onDestroy();}
+        @Override public void onDestroy(){SceneChannel.remove(this);displayManager.unregisterDisplayListener(displays);unregisterReceiver(state);if(regionObserverRegistered)getContentResolver().unregisterContentObserver(area);if(dimObserverRegistered)getContentResolver().unregisterContentObserver(dimSetting);renderer.close();super.onDestroy();}
     }
 }

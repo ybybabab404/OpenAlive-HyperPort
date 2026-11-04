@@ -118,11 +118,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         // committed configuration and attaches the AOD clock when it is ready.
         if(chosen.save(getSharedPreferences(SceneOptions.APPLIED,0))){
             SceneProvider.changed(this);
-            if(chosen.aod>=0&&PlatformProfile.isColorOs(this)){
-                prepareAod();
-                if(chosen.aod==1&&!SceneChannel.hasClockHost())
-                    toast("壁纸已应用，息屏时钟正在连接");
-            }else toast("壁纸已应用");
+            toast("壁纸已应用");
         }else toast("设置保存失败，请重试");
     }
 

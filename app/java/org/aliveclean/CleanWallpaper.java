@@ -58,6 +58,7 @@ public final class CleanWallpaper extends WallpaperService {
             if(scenesState.mode()==next&&engineDisplayId()==android.view.Display.DEFAULT_DISPLAY)renderer.clockTransition(clockToken);
             {if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Scene mode="+next+" changed="+changed+" animate="+animate+" phase="+phase+" delayMs="+(android.os.SystemClock.uptimeMillis()-time));}
         }
+        @Override public void touch(int action,float x,float y){if(renderer!=null)renderer.touch(action,x,y);}
         @Override public void region(AodRegion region){
             int display=engineDisplayId();
             if(region!=null&&region.displayId==display){receivedLayout=true;renderer.aodRegion(region,display);}

@@ -6,7 +6,7 @@ import java.util.LinkedHashSet;
 
 /** Authenticated scene delivery and frame completion feedback; no per-frame IPC. */
 final class SceneChannel {
-    interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}}
+    interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}}
     private static final LinkedHashSet<Listener> listeners=new LinkedHashSet<>();
     private static Messenger messenger;
     private static volatile Messenger clockFeedback;
@@ -16,6 +16,7 @@ final class SceneChannel {
     private static AodRegion lastArea;
     private static boolean lastBackdrop;
     private static int senderUid=-1;
+    static int touchTrace=6;
     private static int clockApi;
     private static String clockError="";
     static synchronized boolean hasClockHost(){return owner!=null&&owner.isBinderAlive()&&clockApi==4;}
@@ -41,6 +42,12 @@ final class SceneChannel {
                 }else if(message.what==2){
                     AodRegion area=decode(b);if(area==null)return true;lastArea=area;
                     for(Listener l:listeners)l.region(area);
+                }else if(message.what==4){
+                    int action=b.getInt("action",-1);
+                    float x=b.getFloat("x",-1f),y=b.getFloat("y",-1f);
+                    if(action<0||x<0f||y<0f)return true;
+                    if(touchTrace>0){touchTrace--;android.util.Log.i("AliveClean","lock touch relayed action="+action+" x="+x+" y="+y);}
+                    for(Listener l:listeners)l.touch(action,x,y);
                 }else if(message.what==3){
                     boolean covered=b.getBoolean("covered",false);
                     if(covered==lastBackdrop)return true;lastBackdrop=covered;

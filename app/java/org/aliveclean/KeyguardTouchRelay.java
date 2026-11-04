@@ -44,6 +44,9 @@ final class KeyguardTouchRelay {
     private static int probe;
     private static java.lang.ref.WeakReference<View> clockRef=new java.lang.ref.WeakReference<>(null);
     private static boolean dumped;
+    private static boolean clockProbed;
+    private static int effectBlocked;
+    private static volatile boolean dragging;
     private static java.lang.ref.WeakReference<View> headerRef=new java.lang.ref.WeakReference<>(null);
     private static final android.graphics.Rect headerRect=new android.graphics.Rect();
     private static int titlesLogged;
@@ -55,6 +58,7 @@ final class KeyguardTouchRelay {
 
     static void install(ClassLoader loader) {
         hookClockViews(loader);
+        hookPropertyWrites(loader);
         int hooked=0;
         for (String name:SHADE_VIEWS) {
             Class<?> view=de.robv.android.xposed.XposedHelpers.findClassIfExists(name,loader);
@@ -106,6 +110,45 @@ final class KeyguardTouchRelay {
         } catch (Throwable error) {
             Log.w(TAG,"keyguard consumer probe unavailable",error);
         }
+    }
+
+    /** The warp is a native property animation: the keyguard content is scaled, faded and shifted
+     *  while a finger drags it. Resetting those values after the fact loses the race with the
+     *  animator, so the setters themselves are refused for shade views during an active drag. */
+    private static void hookPropertyWrites(ClassLoader loader) {
+        try {
+            Class<?> view=Class.forName("android.view.View",false,loader);
+            String[] names={"setScaleX","setScaleY","setAlpha","setTranslationX","setTranslationY"};
+            for (String name:names) {
+                for (java.lang.reflect.Method method:view.getMethods()) {
+                    if (!method.getName().equals(name)||method.getParameterTypes().length!=1) continue;
+                    XposedBridge.hookMethod(method,new XC_MethodHook(){
+                        @Override protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                if (!dragging||!liquid()||!locked())return;
+                                if (!(param.thisObject instanceof View))return;
+                                if (!insideShade((View)param.thisObject))return;
+                                param.setResult(null);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                }
+            }
+            Log.i(TAG,"property write guard installed");
+        } catch (Throwable error) {
+            Log.w(TAG,"property write guard unavailable",error);
+        }
+    }
+
+    private static boolean insideShade(View view) {
+        View current=view;
+        for (int depth=0;current!=null&&depth<12;depth++) {
+            String name=current.getClass().getName();
+            if (name.contains("NotificationShadeWindowView")||name.contains("NotificationPanelView")) return true;
+            android.view.ViewParent parent=current.getParent();
+            current=parent instanceof View?(View)parent:null;
+        }
+        return false;
     }
 
     private static void forward(Object source,MotionEvent event) {
@@ -239,6 +282,18 @@ final class KeyguardTouchRelay {
             clock=findBySimpleName(root,"Clock");
             if (clock==null) return;
             clockRef=new java.lang.ref.WeakReference<>(clock);
+        }
+        if (!clockProbed) {
+            clockProbed=true;
+            StringBuilder sb=new StringBuilder(clock.getClass().getName()).append(" methods:");
+            for (java.lang.reflect.Method m:clock.getClass().getDeclaredMethods()) {
+                String n=m.getName();
+                if (n.contains("draw")||n.contains("Draw")||n.contains("alpha")||n.contains("Alpha")
+                        ||n.contains("progress")||n.contains("Progress")||n.contains("offset")||n.contains("Offset")
+                        ||n.contains("scale")||n.contains("Scale")||n.contains("update")||n.contains("Update"))
+                    sb.append(' ').append(n);
+            }
+            Log.i(TAG,"clock probe: "+sb);
         }
         clock.setTranslationX(0f);
         clock.setTranslationY(0f);

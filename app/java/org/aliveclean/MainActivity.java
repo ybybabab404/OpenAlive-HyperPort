@@ -27,6 +27,14 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         draft=getSharedPreferences(SceneOptions.DRAFT,0);
         if(!draft.contains("aod"))new SceneOptions(getSharedPreferences(SceneOptions.APPLIED,0)).save(draft);
         if(draft.getInt("aod",0)<0)draft.edit().putInt("aod",0).apply();
+        // One-time repair: the vivo editor used to stamp aod=101 into the shared draft on every open,
+        // which then got committed by any later apply and turned Flyme scenes into full-screen AOD.
+        if(!draft.getBoolean("aod_migrated",false)){
+            int appliedAod=new SceneOptions(getSharedPreferences(SceneOptions.APPLIED,0)).aod;
+            android.content.SharedPreferences.Editor fix=draft.edit().putBoolean("aod_migrated",true);
+            if(draft.getInt("aod",appliedAod)==101&&appliedAod!=101)fix.putInt("aod",appliedAod);
+            fix.apply();
+        }
         if(state==null){
             mode=Math.max(0,Math.min(2,getIntent().getIntExtra("scene",1)));
             draft.edit().remove("vivo").apply();

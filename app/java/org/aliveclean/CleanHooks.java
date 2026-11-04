@@ -21,6 +21,7 @@ public final class CleanHooks implements IXposedHookLoadPackage {
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(p.classLoader));
         if (systemUi) step("lock touch relay", () -> KeyguardTouchRelay.install(p.classLoader));
         if (systemUi) step("hyperos doze", () -> HyperOsAod.installDoze(p.classLoader));
+        if ("android".equals(p.packageName)) step("aod wallpaper mode", () -> AodWallpaperModeHook.install(p.classLoader));
         if (!"android".equals(p.packageName) && !systemUi) return;
         if (!ambientHooked) {
             step("ambient wallpaper info", () -> XposedHelpers.findAndHookMethod(WallpaperInfo.class,

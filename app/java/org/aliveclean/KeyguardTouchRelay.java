@@ -37,6 +37,8 @@ final class KeyguardTouchRelay {
     private static boolean channelFailed;
     private static long lastMove;
     private static int forwarded;
+    private static int consumers;
+    private static int captures;
     private static int titlesLogged;
 
     private static final String[] SHADE_VIEWS={
@@ -45,6 +47,7 @@ final class KeyguardTouchRelay {
     };
 
     static void install(ClassLoader loader) {
+        hookClockViews(loader);
         int hooked=0;
         for (String name:SHADE_VIEWS) {
             Class<?> view=de.robv.android.xposed.XposedHelpers.findClassIfExists(name,loader);
@@ -66,6 +69,31 @@ final class KeyguardTouchRelay {
             Log.i(TAG,"lock touch hook "+name+" count="+count);
         }
         Log.i(TAG,"lock touch relay installed methods="+hooked);
+    }
+
+    /** Reports which keyguard views actually consume a finger down, so the clock that deforms under
+     *  touch can be identified on this ROM instead of guessed by class name. */
+    private static void hookClockViews(ClassLoader loader) {
+        try {
+            Class<?> group=Class.forName("android.view.ViewGroup",false,loader);
+            XposedBridge.hookAllMethods(group,"dispatchTouchEvent",new XC_MethodHook(){
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!liquid()||!locked())return;
+                        if (!(param.args[0] instanceof MotionEvent))return;
+                        MotionEvent event=(MotionEvent)param.args[0];
+                        if (event.getActionMasked()!=MotionEvent.ACTION_DOWN)return;
+                        if (!Boolean.TRUE.equals(param.getResult()))return;
+                        if (consumers>=12)return;
+                        consumers++;
+                        Log.i(TAG,"keyguard consumer "+param.thisObject.getClass().getName());
+                    } catch (Throwable ignored) {}
+                }
+            });
+            Log.i(TAG,"keyguard consumer probe installed");
+        } catch (Throwable error) {
+            Log.w(TAG,"keyguard consumer probe unavailable",error);
+        }
     }
 
     private static void forward(Object source,MotionEvent event) {
@@ -109,6 +137,13 @@ final class KeyguardTouchRelay {
         int action=event.getActionMasked();
         if (action==MotionEvent.ACTION_DOWN) {
             startX=event.getX();startRawY=event.getRawY();decided=false;hijacked=false;
+            if (startRawY<unlockBandTop(view)) {
+                // Everything above the unlock strip belongs to the water, including taps: the stock
+                // clock reacts to a plain finger down by deforming and shifting its gradient.
+                hijacked=true;decided=true;
+                param.args[0]=cancelOf(event);
+                if (captures<6) {captures++;Log.i(TAG,"lock touch captured rawY="+startRawY);}
+            }
             return;
         }
         if (action==MotionEvent.ACTION_MOVE) {

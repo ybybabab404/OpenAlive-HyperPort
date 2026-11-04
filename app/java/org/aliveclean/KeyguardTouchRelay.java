@@ -133,26 +133,25 @@ final class KeyguardTouchRelay {
      */
     private static void gate(XC_MethodHook.MethodHookParam param,MotionEvent event) {
         View view=param.thisObject instanceof View?(View)param.thisObject:null;
-        if (view==null||view.getHeight()<=0)return;
+        if (view==null)return;
         int action=event.getActionMasked();
         if (action==MotionEvent.ACTION_DOWN) {
             startX=event.getX();startRawY=event.getRawY();decided=false;hijacked=false;
-            if (startRawY<unlockBandTop(view)) {
-                // Everything above the unlock strip belongs to the water, including taps: the stock
-                // clock reacts to a plain finger down by deforming and shifting its gradient.
-                hijacked=true;decided=true;
-                param.args[0]=cancelOf(event);
-                if (captures<6) {captures++;Log.i(TAG,"lock touch captured rawY="+startRawY);}
-            }
             return;
         }
         if (action==MotionEvent.ACTION_MOVE) {
             if (!decided) {
-                float up=startRawY-event.getRawY(),side=Math.abs(event.getX()-startX);
-                if (up>dp(view,24)&&up>side) {
-                    decided=true;
-                    hijacked=startRawY<unlockBandTop(view);
-                    if (hijacked) Log.i(TAG,"lock swipe captured rawY="+startRawY+" screen="+screenHeight(view));
+                float rise=startRawY-event.getRawY(),travel=Math.abs(event.getX()-startX);
+                float slop=dp(view,24);
+                if (rise>slop&&rise>travel) {
+                    // Upward drag: the water owns everything above the unlock strip.
+                    decided=true;hijacked=startRawY<unlockBandTop(view);
+                    if (hijacked) note("vertical",startRawY);
+                } else if (travel>slop&&travel>=rise) {
+                    // Sideways drag on the keyguard slides the clock and bends its gradient; that
+                    // stock reaction is what fights the ripple, so it is handed to the water too.
+                    decided=true;hijacked=true;
+                    note("horizontal",startRawY);
                 }
             }
             if (hijacked) param.args[0]=cancelOf(event);
@@ -164,6 +163,12 @@ final class KeyguardTouchRelay {
         if (action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL) {
             decided=false;hijacked=false;
         }
+    }
+
+    private static void note(String kind,float rawY) {
+        if (captures>=6)return;
+        captures++;
+        Log.i(TAG,"lock drag captured "+kind+" rawY="+rawY);
     }
 
     private static MotionEvent cancelOf(MotionEvent source) {

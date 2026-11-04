@@ -148,7 +148,7 @@ final class KeyguardTouchRelay {
         if (action==MotionEvent.ACTION_DOWN) {
             startX=event.getX();startRawY=event.getRawY();decided=false;hijacked=false;
             dumpOnce(view);
-            if (insideClockHeader(view,event)) {
+            if (!allowedArea(view,event)) {
                 hijacked=true;decided=true;
                 param.args[0]=cancelOf(event);
                 note("clock-header",startRawY);
@@ -201,20 +201,21 @@ final class KeyguardTouchRelay {
         }
     }
 
-    /** The lock clock lives in MiuiNotificationShadeHeader; its own drag handling is what bends the
-     *  digits. Touches that start inside that header are cancelled outright, which removes the
-     *  deformation without touching notifications or media cards living further down. */
-    private static boolean insideClockHeader(View root,MotionEvent event) {
-        View header=headerRef.get();
-        if (header==null||header.getWindowToken()==null) {
-            header=findBySimpleName(root,"MiuiNotificationShadeHeader");
-            if (header==null) return false;
-            headerRef=new java.lang.ref.WeakReference<>(header);
+    /** Allow-list instead of a block-list: only the container that hosts notifications and media
+     *  cards, plus the bottom unlock strip, may see a touch. The clock header is therefore excluded
+     *  whatever its layout state is, which a bounds test on that header could not guarantee. */
+    private static boolean allowedArea(View root,MotionEvent event) {
+        View container=headerRef.get();
+        if (container==null||container.getWindowToken()==null) {
+            container=findBySimpleName(root,"MiuiNQSContainer");
+            if (container==null) return true;
+            headerRef=new java.lang.ref.WeakReference<>(container);
         }
         int[] location=new int[2];
-        header.getLocationOnScreen(location);
-        headerRect.set(location[0],location[1],location[0]+header.getWidth(),location[1]+header.getHeight());
-        return headerRect.contains((int)event.getRawX(),(int)event.getRawY());
+        container.getLocationOnScreen(location);
+        headerRect.set(location[0],location[1],location[0]+container.getWidth(),location[1]+container.getHeight());
+        if (container.getWidth()>0&&container.getHeight()>0&&headerRect.contains((int)event.getRawX(),(int)event.getRawY())) return true;
+        return event.getRawY()>=root.getResources().getDisplayMetrics().heightPixels*0.90f;
     }
 
     private static View findBySimpleName(View view,String simple) {

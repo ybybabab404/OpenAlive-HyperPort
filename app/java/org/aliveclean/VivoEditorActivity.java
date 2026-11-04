@@ -96,7 +96,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         if(options==null)return;
         updateSlotDetails();
         getSharedPreferences("vivo.editor",0).edit().putString("family."+options.family,options.json()).apply();
-        getSharedPreferences(SceneOptions.DRAFT,0).edit().putString("vivo",options.json()).putInt("cosmic",0).putInt("aod",101).putInt("lock",0).putInt("home",6).apply();
+        getSharedPreferences(SceneOptions.DRAFT,0).edit().putString("vivo",options.json()).putInt("cosmic",0).putInt("lock",0).putInt("home",6).apply();
     }
     private void showPanel(int tab){
         if(panel!=null)panel.dismiss();panel=new Dialog(this);LinearLayout body=new LinearLayout(ui);body.setOrientation(1);body.setPadding(0,ui.dp(14),0,ui.dp(18));

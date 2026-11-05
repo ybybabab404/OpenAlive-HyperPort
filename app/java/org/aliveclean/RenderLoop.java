@@ -281,7 +281,7 @@ final class RenderLoop {
                     .openAssetFileDescriptor(AodWallpaperProvider.PHOTO,"r")){
                 if(descriptor!=null){
                     Bitmap fromProvider=BitmapFactory.decodeFileDescriptor(descriptor.getFileDescriptor());
-                    if(fromProvider!=null){Log.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());int id=upload(fromProvider);fromProvider.recycle();return id;}
+                    if(fromProvider!=null){Log.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();int id=upload(fromProvider);fromProvider.recycle();return id;}
                     else Log.w("AliveClean","aod provider returned no bitmap");
                 }
             }catch(Throwable failure){Log.w("AliveClean","aod provider read failed",failure);}

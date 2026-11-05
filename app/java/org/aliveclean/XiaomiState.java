@@ -50,15 +50,7 @@ public final class XiaomiState extends ContentProvider {
                 main.post(()->{clients.put(binder,client);send(client,4,motion(c));if(scene!=null)send(client,1,scene);});return result;
             }
             if("unsubscribe".equals(method)){IBinder binder=data.getBinder("client");main.post(()->clients.remove(binder));return result;}
-            if("motionRead".equals(method))return motion(c);
-            if("motionSave".equals(method)){
-                if(data==null)throw new IllegalArgumentException("Missing desktop settings");
-                if(!c.getSharedPreferences("xiaomi",0).edit()
-                        .putInt("desktop.amplitude",XiaomiDesktopMotion.clamp(data.getInt("amplitude")))
-                        .putInt("desktop.responsiveness",XiaomiDesktopMotion.clamp(data.getInt("responsiveness"))).commit())
-                    throw new IllegalStateException("Cannot save desktop settings");
-                Bundle saved=motion(c);main.post(()->dispatch(4,saved));return saved;
-            }
+
             XiaomiPacks.Pack p=XiaomiPacks.get(c,data.getString("family"));
             if("save".equals(method)){
                 int land=data.getInt("land",-1);if(land<0||land>=p.lands)throw new IllegalArgumentException("Invalid landing point");

@@ -36,7 +36,6 @@
     <meta-data android:name="xposeddescription" android:value="HyperAlive · HyperOS 息屏/锁屏/桌面连贯动画"/>
     <meta-data android:name="xposedscope" android:resource="@array/xposed_scope"/>
     <activity android:screenOrientation="portrait" android:name=".XiaomiLibraryActivity" android:exported="false"/>
-    <activity android:screenOrientation="portrait" android:name=".XiaomiDesktopSettingsActivity" android:exported="false"/>
     <provider android:name=".XiaomiState" android:authorities="org.aliveclean.xiaomi" android:exported="false"/>
     <provider android:name=".AodWallpaperProvider" android:authorities="org.aliveclean.aodwallpaper" android:exported="true"/>
     <activity android:screenOrientation="portrait" android:name=".XiaomiPreviewActivity$Earth" android:process=":xiaomi_preview_earth" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" android:launchMode="singleTop" android:theme="@android:style/Theme.Material.NoActionBar"/>

@@ -53,7 +53,7 @@ adb 路径：`C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe
 
 ```
 app/AndroidManifest.xml          package=org.aliveclean  versionCode=58  0.5.0-preview
-app/assets/xposed_init           内容：org.aliveclean.CleanHooks   ← LSPosed legacy 入口
+META-INF/xposed/java_init.list   内容：org.aliveclean.CleanHooks   ← LSPosed API 102 入口
 app/java/org/aliveclean/
   CleanHooks.java                总入口，handleLoadPackage 里分步挂 hook（每步独立 try/catch）
   PlatformProfile.java           判断 ColorOS / HyperOS，缺失 OEM 包时降级为「功能不可用」

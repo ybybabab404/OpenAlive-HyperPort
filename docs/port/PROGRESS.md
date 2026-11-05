@@ -182,3 +182,9 @@ APK 从 654 MB 降到 321 MB。
 - 做法（`HomeEntryActivity` + `Theme.HyperAlive.Entry`）：windowIsTranslucent=true、windowBackground 透明、backgroundDimEnabled=false，并用 `android:windowAnimationStyle` 套 MIUI 自己的 activity_open_enter/exit（原样复制到 `res/anim/hla_*.xml`，没有手写插值动画）。`HomeActivity` 去掉 final 供继承。
 - 实测：`dumpsys activity activities` 里 org.aliveclean 任务 `translucent=true` 且与 com.android.thememanager 任务同时 `visible=true`——与原生息屏入口一致；页面内容本身不透明，无透底。
 - 注意：不要用 `ActivityOptions.makeCustomAnimation`（跨任务会被忽略），也不要给 Activity 设别的 taskAffinity（Android 不允许跨包共享 task，实测仍落在自己的任务里）。
+
+## 2026-11-05 13:47 Xposed API 102 迁移（真机加载验证）
+- 全部 9 个 hook 类改用 `io.github.libxposed.api.XposedModule`；新增 `Xp.java` 兼容层（MethodHook/MethodHookParam/Unhook、hookAllMethods、findAndHookMethod、反射取字段/调方法）。
+- 入口从 `assets/xposed_init` 换成 APK 内 `META-INF/xposed/java_init.list`；构建脚本 `tools/build_release.py` 改为直接使用 `vendor/libxposed/classes.jar`，并写入 `module.prop`、`scope.list`。
+- 真机日志：systemui / thememanager / com.miui.aod:keyguardeditor / android 四个进程均 `module loaded ... api=102`，各 hook 安装日志 `ok`。
+- 已知：android 进程 `WallpaperManagerService missing`（旧代码同样查找该类名，属既有问题，不是本次迁移引入）。

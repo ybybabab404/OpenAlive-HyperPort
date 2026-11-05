@@ -73,7 +73,7 @@ adb connect <ip>:<port>
 全部源码在 `app/java/org/aliveclean/`，约 165 个类。无 Gradle，资源在 `app/res/`，素材在 `app/assets/`。
 
 入口与钩子装配：
-- `CleanHooks.java` — 所有 Xposed 钩子的装配点（`assets/xposed_init` 指向它）。加钩子就在这里加一行 `step("...", () -> Xxx.install(p.classLoader))`。
+- `CleanHooks.java` — 所有 Xposed 钩子的装配点（`META-INF/xposed/java_init.list` 指向它）。加钩子就在这里加一行 `step("...", () -> Xxx.install(p.classLoader))`。
 - `PlatformProfile.java` — 只区分 `UNKNOWN` 和 `HYPEROS`。ColorOS 支持已经整套删除，不要再加回来。
 
 壁纸渲染：
@@ -166,12 +166,12 @@ adb connect <ip>:<port>
 
 现在仓库里还有一些东西看起来可疑但**不能删**：
 
-- `CleanHooks` 全仓库零引用——它是 `assets/xposed_init` 的入口。
+- `CleanHooks` 全仓库零引用——它是 `META-INF/xposed/java_init.list` 的入口。
 - `NativeClockStatusProvider`、`XiaomiLibraryActivity` 零引用——在 `AndroidManifest.xml` 里注册着。
 - `tools/import_*.py` — 一次性素材导入脚本，素材已经进 `app/assets/`，脚本留着是为了改素材时可重跑。
 - `tools/check_layout.py`、`tools/check_xiaomi_assets.py` — 还能运行的检查脚本。
 
-删类之前要查三处：`git grep 类名`、`AndroidManifest.xml`、`assets/xposed_init`。反射用的字符串（`Class.forName("...")`）不会被 grep 到，要单独搜。
+删类之前要查三处：`git grep 类名`、`AndroidManifest.xml`、`META-INF/xposed/java_init.list`。反射用的字符串（`Class.forName("...")`）不会被 grep 到，要单独搜。
 
 ---
 
@@ -184,7 +184,7 @@ adb connect <ip>:<port>
 1. **一次只改一个变量。** 多个改动一起上是没法归因的，出错要整轮返工。
 2. **每次改完必须真机验证，并留下证据**：日志原文、`uiautomator dump` 的节点、截图。没有证据就等于没做。
 3. **改动前先读要改的那段真实代码**，不凭记忆、不凭对话里的转述。
-4. **删代码前先确认零引用**（含 manifest、`xposed_init`、反射字符串）。
+4. **删代码前先确认零引用**（含 manifest、`java_init.list`、反射字符串）。
 5. **报错要贴原文**，不要转述成"编译失败"。
 6. **假设自己可能错。** 每次下结论前问一句：有没有反例能推翻它？如果有，先去验反例。
 7. **不要为了显得勤快而做无效工作。** 该想的想透（可以长考），不该试的别瞎试。

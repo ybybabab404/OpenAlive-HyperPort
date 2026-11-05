@@ -43,7 +43,6 @@ public final class CleanWallpaper extends WallpaperService {
         /** SystemUI announced the wake-up (wallpaper.wakingup): the panel is on and the lock screen
          *  is lighting up right now, which is the only moment the 0->1 animator is guaranteed to
          *  run on frames the user can see. */
-        boolean wakeCue;
         /** End of the wake window: while it lasts the renderer is kept awake even when the
          *  framework has not reported the wallpaper as visible yet, so the animator cannot end
          *  up running on a renderer that is paused for lack of frames. */
@@ -75,7 +74,7 @@ public final class CleanWallpaper extends WallpaperService {
             if(Intent.ACTION_CONFIGURATION_CHANGED.equals(action))readWallpaperDim();
             if(Intent.ACTION_SCREEN_OFF.equals(action)){
                 screenOn=false;ambient=true;settleToken++;
-                panelDark=true;wakeCue=false;cancelLockGrace();
+                panelDark=true;cancelLockGrace();
                 if(renderer!=null&&lastSentMode!=0)send(0,false);
                 android.util.Log.i(TAG,"scene screen off mode=0 panelDark=true");
                 return;
@@ -205,14 +204,14 @@ public final class CleanWallpaper extends WallpaperService {
                         @Override public void run(){
                             if(token!=lockGraceToken||renderer==null)return;
                             if(!keyguardLocked()){
-                                lockGraceActive=false;wakeCue=false;
+                                lockGraceActive=false;
                                 android.util.Log.i(TAG,"scene wake hold unlocked source="+cause
                                         +" mode="+lastSentMode+"->2 (applied)");
                                 send(2,true);
                                 return;
                             }
                             if(android.os.SystemClock.uptimeMillis()>=deadline){
-                                lockGraceActive=false;wakeCue=false;
+                                lockGraceActive=false;
                                 android.util.Log.i(TAG,"scene wake hold dwell source="+cause
                                         +" displayOn="+displayOn()+" mode="+lastSentMode+"->1 (applied)");
                                 send(1,true);
@@ -241,7 +240,7 @@ public final class CleanWallpaper extends WallpaperService {
             if(mode!=0){
                 // A non-AOD composition was committed: the panel is no longer dark, and the wake
                 // window keeps the renderer awake long enough for the 0->1 animator to finish.
-                panelDark=false;wakeCue=false;
+                panelDark=false;
                 wakeUntil=android.os.SystemClock.uptimeMillis()+1600;
             }
             android.util.Log.i(TAG,"scene send mode="+from+"->"+mode+" animate="+animate
@@ -304,7 +303,7 @@ public final class CleanWallpaper extends WallpaperService {
                 // SystemUI lights the panel and starts its own lock-screen wake animation now, and the
                 // display is already on: committing the 0->1 scene here is what makes the wallpaper
                 // transition run in the same window as the lock UI, on frames the user can see.
-                ambient=false;screenOn=true;wakeCue=true;
+                ambient=false;screenOn=true;
                 update("command:"+action);refreshVisibility();
                 return super.onCommand(action,x,y,z,extras,resultRequested);
             }

@@ -46,7 +46,6 @@ final class RenderLoop {
     private boolean visible=true;
     // Wallpaper palette handed over by the AOD host; null means "derive locally".
     private int[] aodPalette;
-    void aodPalette(int primary,int secondary,int tertiary){aodPalette=new int[]{primary,secondary,tertiary};}
     /** Reads the palette of the wallpaper the user applied. Works for live wallpapers
      * too, which is why the sphere cannot simply sample a wallpaper bitmap here. */
     private void readWallpaperPalette(){

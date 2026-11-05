@@ -158,25 +158,6 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     }
 
     interface ImageInput { InputStream open() throws IOException; }
-    private void prepareAod(){
-        importBusy(true);toast("壁纸已应用，正在配置息屏模式");
-        new Thread(()->{
-            String result;boolean success;
-            try{result=RootBridge.prepareAod(this);success=true;}
-            catch(Exception e){android.util.Log.e("AliveClean","AOD setup failed",e);result="壁纸已应用，息屏配置未完成。\n\n"+e.getMessage();success=false;}
-            final String message=result;
-            final boolean ok=success;
-            getSharedPreferences("integration_diagnostics",0).edit().putBoolean("success",ok).putString("message",message).apply();
-            runOnUiThread(()->{if(!isDestroyed()){
-                importBusy(false);
-                if(ok){{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","AOD setup verified");}toast(message);}
-                else new android.app.AlertDialog.Builder(this,R.style.Theme_Clean_Dialog).setTitle("息屏配置未完成").setMessage(message)
-                    .setPositiveButton("重试",(dialog,which)->prepareAod())
-                    .setNeutralButton("复制详情",(dialog,which)->{getSystemService(android.content.ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("OpenAlive",message));toast("已复制错误详情");})
-                    .setNegativeButton("关闭",null).show();
-            }});
-        },"AliveApply").start();
-    }
     private void importImage(ImageInput source) {
         importImage(source,false);
     }

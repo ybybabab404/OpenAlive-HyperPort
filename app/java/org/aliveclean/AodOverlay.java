@@ -43,7 +43,6 @@ final class AodOverlay {
     static void hide() {
         Trace.log("T11", "overlay#hide");
         if (view == null && !HyperOsAod.hasInjectedView()) return;
-        if (view == null) return;
         try { ((WindowManager) view.getContext().getSystemService(Context.WINDOW_SERVICE)).removeView(view); }
         catch (Throwable error) { Log.e(TAG, "overlay remove failed", error); }
         if (loop != null) { loop.close(); loop = null; }

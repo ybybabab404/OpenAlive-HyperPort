@@ -34,12 +34,12 @@ final class Trace {
     private static boolean enabled() {
         int current = state;
         if (current >= 0) return current == 1;
-        boolean on = true;
+        boolean on = false;
         try {
             Context context = Xp.currentApplication();
             if (context != null) {
                 SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-                on = prefs.getBoolean(KEY, true);
+                on = prefs.getBoolean(KEY, false);
             }
         } catch (Throwable ignored) {
             // AndroidAppHelper is only present inside a hooked process; stay on when it is absent.

@@ -6,7 +6,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 import java.util.TimeZone;
 
-/** Original Flyme controls and ALIVE templates behind the native ColorOS transport. */
+/** Original Flyme controls and ALIVE templates behind the native host transport. */
 final class NativeFlymeClockPlugin extends NativeOriginalClockPlugin {
     static final String ID="org.aliveclean.clock.flyme.alive.vertical";
     static final String HORIZONTAL_ID="org.aliveclean.clock.flyme.alive.horizontal";

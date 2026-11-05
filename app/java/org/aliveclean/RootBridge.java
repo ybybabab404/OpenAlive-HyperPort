@@ -7,29 +7,6 @@ import org.json.JSONObject;
 
 /** Invoke only after a user applies this wallpaper. Never execute shell text from a preference. */
 final class RootBridge {
-    static void allowClockStartup(Context context)throws Exception {
-        if(android.os.Process.myUid()/100000!=0)throw new IOException("Clock startup setup supports only the primary user");
-        String command="CLASSPATH="+quote(context.getApplicationInfo().sourceDir)
-                +" /system/bin/app_process /system/bin org.aliveclean.PlatformApply clock-startup";
-        Process process=new ProcessBuilder("su","1000","-c",command).redirectErrorStream(true).start();
-        StringBuilder output=new StringBuilder();
-        Thread reader=new Thread(()->{
-            try(BufferedReader in=new BufferedReader(new InputStreamReader(process.getInputStream(),"UTF-8"))){
-                for(String line;(line=in.readLine())!=null;){
-                    synchronized(output){if(output.length()<4096)output.append(line).append('\n');}
-                }
-            }catch(IOException ignored){}
-        },"OpenAliveClockStartupOutput");
-        reader.start();
-        if(!process.waitFor(20,TimeUnit.SECONDS)){
-            process.destroyForcibly();throw new IOException("ColorOS clock startup setup timed out");
-        }
-        reader.join(1000);
-        String result; synchronized(output){result=output.toString();}
-        if(process.exitValue()!=0||!result.contains("\"clockStartupAllowed\":true"))
-            throw new IOException("ColorOS clock startup setup failed: "+result.trim());
-    }
-
     static String prepareAod(Context context)throws Exception {
         // HyperOS 上没有 ColorOS 的 AodMachineHelperProvider：AOD 由本模块在 systemui 侧的
         // 渲染路径接管，这里不写任何系统设置（尤其不能写 aod_show_style），所以直接视为完成。

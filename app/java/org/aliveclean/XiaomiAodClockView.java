@@ -4,7 +4,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.view.View;
 
-/** Original SuperWallpaperClock, updated by ColorOS's existing AOD minute ticks. */
+/** Original SuperWallpaperClock, updated by the host's existing AOD minute ticks. */
 final class XiaomiAodClockView extends AodClockFace {
     private final XiaomiAodPreview.Renderer renderer;
     private final ClockUpdates updates;

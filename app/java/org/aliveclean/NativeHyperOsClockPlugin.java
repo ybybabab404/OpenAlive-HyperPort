@@ -6,7 +6,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 import java.util.TimeZone;
 
-/** Original HyperOS renderers plugged into the same ColorOS factory contract. */
+/** Original HyperOS renderers plugged into the same host factory contract. */
 final class NativeHyperOsClockPlugin extends NativeOriginalClockPlugin {
     static final String VERTICAL_ID="org.aliveclean.clock.hyperos.classic.vertical";
     static final String HORIZONTAL_ID="org.aliveclean.clock.hyperos.classic.horizontal";

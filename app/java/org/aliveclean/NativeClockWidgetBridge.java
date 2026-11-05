@@ -5,7 +5,7 @@ import java.util.function.BiFunction;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Clock-to-widget protocol. Widget views and their content remain owned by ColorOS. */
+/** Clock-to-widget protocol. Widget views and their content remain owned by the host. */
 final class NativeClockWidgetBridge {
     private BiFunction<String,Bundle,Bundle> callback;
     private int left,top,right,rows=1,columns=4;
@@ -32,7 +32,7 @@ final class NativeClockWidgetBridge {
     void close(){released();callback=null;desired.clear();}
     void blocked(boolean value){blocked=value;if(!blocked)flush();}
     void layout(int left,int top,int right){
-        // Left/right are margins in ColorOS WidgetPosition, not rectangle edges.
+        // Left/right are margins in the host WidgetPosition, not rectangle edges.
         if(left<0||right<0||top<0)return;
         this.left=left;this.top=top;this.right=right;measured=true;publish();
     }
@@ -50,7 +50,7 @@ final class NativeClockWidgetBridge {
     int occupiedRows(boolean large){
         // Lyrics exit can restore showing rows before origin rows (1, 0).
         // Never reserve less space for the large clock than for the widgets
-        // already present. ColorOS rejects bigHeight <= smallHeight and then
+        // already present. The host rejects bigHeight <= smallHeight and then
         // toggles clock size again when the second row callback arrives.
         return ready?(large?Math.max(originalRows,occupiedRows):occupiedRows):0;
     }

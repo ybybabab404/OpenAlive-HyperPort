@@ -221,7 +221,7 @@ final class SceneMotion {
     void followClock(float x,float y){
         aodPosition(x,y);
         if(mode==0&&animation!=null&&animation.isStarted()){
-            // Keep the original play time/curve, retarget only the moving ColorOS anchor.
+            // Keep the original play time/curve, retarget only the moving host anchor.
             if(positionX!=null){positionX.setFloatValues(positionStartX,x);if(animation.getCurrentPlayTime()>=positionX.getTotalDuration())values[LENS+5]=x;}
             if(positionY!=null){positionY.setFloatValues(positionStartY,y);if(animation.getCurrentPlayTime()>=positionY.getTotalDuration())values[LENS+6]=y;}
         }

@@ -103,8 +103,6 @@ if __name__ == '__main__':
                                 'member': member, 'original_file': 'original/'+relative,
                                 'original_sha256': hashlib.sha256(data).hexdigest(),
                                 'sha256': hashlib.sha256(adapted).hexdigest(),
-                                'adaptation': 'hhea/OS2/head and CFF FontBBox line metrics; glyphs and advances unchanged',
-                                'metric_reference': reference_path,
-                                'metric_reference_sha256': hashlib.sha256(reference_data).hexdigest()})
+                                'adaptation': 'hhea/OS2/head and CFF FontBBox line metrics; glyphs and advances unchanged'})
     (destination / 'source.json').write_text(json.dumps(records, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     print('Imported', len(records), 'original clock fonts and ColorOS metric copies')

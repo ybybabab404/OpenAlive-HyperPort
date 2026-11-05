@@ -14,7 +14,6 @@ import java.io.FileNotFoundException;
  * instead: same data, no shared paths on disk. */
 public final class AodWallpaperProvider extends ContentProvider {
     static final String AUTHORITY = "org.aliveclean.aodwallpaper";
-    static final String NAME = "aod-photo.png";
     static final Uri PHOTO = Uri.parse("content://" + AUTHORITY + "/photo");
 
     @Override public boolean onCreate() { return true; }

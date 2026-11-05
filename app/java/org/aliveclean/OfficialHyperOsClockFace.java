@@ -34,7 +34,7 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
     }
     void scene(boolean aod,boolean compact,boolean fullAod)throws Exception{
         // Original flags: 1 AOD, 2 notification, 8 preview, 32 full AOD.
-        // Preview leaves data/settings subscription with the ColorOS host.
+        // Preview leaves data/settings subscription with the host.
         int type=8|(aod?(fullAod?32:1):0)|(compact?2:0);
         if(type==displayType)return;
         List<View> next=new ArrayList<>();
@@ -99,7 +99,7 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
         LayoutInflater inflater=LayoutInflater.from(getContext()).cloneInContext(getContext());
         {
             // Resolve this APK's named system font from the original bundled
-            // file; ColorOS does not register HyperOS font families.
+            // file; the host does not register HyperOS font families.
             // This official APK's compact XML omits the signature child while
             // ClassicClockBaseView unconditionally dereferences it on inflation.
             // Supply only that invisible dependency; retain its original XML,

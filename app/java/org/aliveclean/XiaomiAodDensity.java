@@ -29,14 +29,14 @@ final class XiaomiAodDensity {
             android.util.Log.w("OpenAliveXiaomi","Original auto-density unavailable; using phone policy",unavailable);
         }
         // DisplayDensityConfig.updatePPIOfDevice + AutoDensityPolicy.calcPhoneScale.
-        // MIUI-only device/SKU APIs may be absent on ColorOS. Preserve the public
-        // phone calculation rather than applying ColorOS's larger logical DPI.
+        // MIUI-only device/SKU APIs may be absent on the host. Preserve the public
+        // phone calculation rather than applying the host's larger logical DPI.
         int baseline=platformBaseline>0?platformBaseline:
                 display.getDisplayId()==Display.DEFAULT_DISPLAY?DisplayMetrics.DENSITY_DEVICE_STABLE:m.densityDpi;
         return phoneDensity(m.widthPixels,m.heightPixels,m.xdpi,m.ydpi,m.densityDpi,baseline);
     }
     private static int platformDefaultDpi(Display display){
-        // ColorOS's own KStyleUtil.getInitialDisplayDensity uses this property
+        // The host's own KStyleUtil.getInitialDisplayDensity uses this property
         // before WindowManager's initial density. Reuse that source instead of
         // assuming ro.sf.lcd_density belongs to the largest supported mode.
         // Never use a default-display property for a foldable's secondary screen.

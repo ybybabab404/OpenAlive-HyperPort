@@ -15,7 +15,7 @@ import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Flyme's shipped ALIVE template geometry and font; no ColorOS clock layout involved. */
+/** Flyme's shipped ALIVE template geometry and font; no host clock layout involved. */
 final class FlymeAliveClockTemplate {
     static final String VERTICAL = "flyme.alive.hverticaltime";
     static final String HORIZONTAL = "flyme.alive.hhorizontaltime";

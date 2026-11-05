@@ -10,7 +10,6 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.WindowManager;
 
 /**
  * HyperOS does not deliver wallpaper touches to a third-party WallpaperService, so the liquid scene
@@ -25,9 +24,6 @@ final class KeyguardTouchRelay {
     private static final String TAG="AliveClean";
     private static final Uri SCENE=Uri.parse("content://org.aliveclean.scene/configuration");
     private static final long MOVE_INTERVAL_MS=40L;
-    /** Upper share of the screen that holds the lock clock and its touch deformation. */
-    private static final float CLOCK_ZONE=0.45f;
-
     private static Messenger channel;
     private static float startX,startRawY;
     private static boolean decided,hijacked;
@@ -42,15 +38,11 @@ final class KeyguardTouchRelay {
     private static java.lang.ref.WeakReference<View> clockRef=new java.lang.ref.WeakReference<>(null);
     private static boolean dumped;
     private static boolean clockProbed;
-    private static int effectBlocked;
     /** 0 = 完全关闭锁屏形变，1 = 原生幅度。 */
     private static final float DEFORM_GAIN=0f;
     private static boolean deformLogged;
     private static volatile boolean dragging;
     private static final java.util.HashSet<String> propSeen=new java.util.HashSet<>();
-    private static java.lang.ref.WeakReference<View> headerRef=new java.lang.ref.WeakReference<>(null);
-    private static final android.graphics.Rect headerRect=new android.graphics.Rect();
-    private static int titlesLogged;
 
     private static final String[] SHADE_VIEWS={
         "com.android.systemui.shade.NotificationShadeWindowView",
@@ -289,23 +281,6 @@ final class KeyguardTouchRelay {
             android.view.ViewGroup group=(android.view.ViewGroup)view;
             for (int i=0;i<group.getChildCount();i++) collect(group.getChildAt(i),names,depth+1);
         }
-    }
-
-    /** Allow-list instead of a block-list: only the container that hosts notifications and media
-     *  cards, plus the bottom unlock strip, may see a touch. The clock header is therefore excluded
-     *  whatever its layout state is, which a bounds test on that header could not guarantee. */
-    private static boolean allowedArea(View root,MotionEvent event) {
-        View container=headerRef.get();
-        if (container==null||container.getWindowToken()==null) {
-            container=findBySimpleName(root,"MiuiNQSContainer");
-            if (container==null) return true;
-            headerRef=new java.lang.ref.WeakReference<>(container);
-        }
-        int[] location=new int[2];
-        container.getLocationOnScreen(location);
-        headerRect.set(location[0],location[1],location[0]+container.getWidth(),location[1]+container.getHeight());
-        if (container.getWidth()>0&&container.getHeight()>0&&headerRect.contains((int)event.getRawX(),(int)event.getRawY())) return true;
-        return event.getRawY()>=root.getResources().getDisplayMetrics().heightPixels*0.88f;
     }
 
     private static View findBySimpleName(View view,String simple) {

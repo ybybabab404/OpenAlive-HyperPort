@@ -49,7 +49,7 @@ final class OfficialHyperOsUi extends ContextWrapper {
         if(fontBridge==null){
             // In SystemUI the host belongs to SystemUI, while these adapters
             // belong to the module. Keep the existing module-loader path on
-            // ColorOS; never try to find our font bridge in the host APK.
+            // the host; never try to find our font bridge in the host APK.
             ClassLoader module=OfficialHyperOsUi.class.getClassLoader();
             try{
                 Class<?> candidate=module.loadClass("miui.util.font.MultiLangHelper");

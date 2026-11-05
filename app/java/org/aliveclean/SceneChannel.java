@@ -17,16 +17,7 @@ final class SceneChannel {
     private static boolean lastBackdrop;
     private static int senderUid=-1;
     static int touchTrace=6;
-    private static int clockApi;
-    private static String clockError="";
-    static synchronized boolean hasClockHost(){return owner!=null&&owner.isBinderAlive()&&clockApi==4;}
-    static synchronized String clockStatus(){
-        if(owner==null||!owner.isBinderAlive())return "正在等待系统时钟模块连接";
-        if(hasClockHost())return "息屏使用独立时钟，锁屏保留系统时钟";
-        if(!clockError.isEmpty()||clockApi==0)return "息屏时钟模块初始化失败，请查看模块诊断日志";
-        return "系统仍在运行旧版时钟模块，需要重新加载";
-    }
-    static synchronized IBinder connect(Context context,IBinder source,int api,String error,IBinder feedback)throws Exception {
+    static synchronized IBinder connect(Context context,IBinder source,int api,IBinder feedback)throws Exception {
         if(messenger==null){
             senderUid=context.getPackageManager().getApplicationInfo("com.android.systemui",0).uid;
             main=new Handler(Looper.getMainLooper(),message->{
@@ -66,8 +57,6 @@ final class SceneChannel {
                 for(Listener l:listeners)l.disconnected();
             }),0);
         }
-        clockApi=api;
-        clockError=error==null?"":error;
         clockFeedback=api==4&&feedback!=null?new Messenger(feedback):null;
         return messenger.getBinder();
     }

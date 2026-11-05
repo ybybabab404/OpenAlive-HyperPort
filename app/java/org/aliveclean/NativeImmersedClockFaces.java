@@ -7,7 +7,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 import java.util.TimeZone;
 
-/** Vendor faces for normal scenes, the installed ColorOS plugin for lyrics. */
+/** Vendor faces for normal scenes, the installed system plugin for lyrics. */
 final class NativeImmersedClockFaces implements NativeClockFaces {
     private final NativeClockFaces original;
     final NativeOfficialClockFaces immersed;

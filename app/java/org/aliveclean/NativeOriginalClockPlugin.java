@@ -169,7 +169,7 @@ class NativeOriginalClockPlugin implements IntFunction<View>, BiFunction<String,
                 boolean nextCompact=nextSize==0;
                 if(nextState!=1&&nextState!=2&&nextState!=3&&nextState!=5)nextState=uiState;
                 if(nextState==uiState&&nextSize==nativeClockSize)return null;
-                // UNLOCK is a hidden clock, not a large lockscreen face. ColorOS
+                // UNLOCK is a hidden clock, not a large lockscreen face. The host
                 // can replay it (clockSize=11) when the next sleep starts, before
                 // PANORAMIC_AOD arrives. Keep the last face/size until a visible
                 // scene supplies its geometry; otherwise that replay flashes big.
@@ -184,7 +184,7 @@ class NativeOriginalClockPlugin implements IntFunction<View>, BiFunction<String,
                 }
                 RectF start=transition.capture();
                 if(args != null && args.containsKey("clockSize")) {
-                    // ColorOS SceneKt: 0=small, 1=big, 2=immersed, 10=unlocked.
+                    // Host SceneKt: 0=small, 1=big, 2=immersed, 10=unlocked.
                     compact=nextCompact;
                     nativeClockSize=nextSize;
                 }
@@ -347,7 +347,7 @@ class NativeOriginalClockPlugin implements IntFunction<View>, BiFunction<String,
         int smallHeight=contentHeight(faces.lock(true),width);
         contentHeight(faces.lock(false),width);
         int bigHeight=faces.naturalBigHeight(),minimumBigHeight=faces.minimumBigHeight();
-        // ColorOS always expects small-clock metrics plus a separate big-clock
+        // The host always expects small-clock metrics plus a separate big-clock
         // bundle, regardless of which scene is currently visible.
         int smallWidgets=geometry.widgetExtent(widgets.occupiedRows(false));
         int bigWidgets=geometry.widgetExtent(widgets.occupiedRows(true));

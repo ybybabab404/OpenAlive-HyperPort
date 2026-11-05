@@ -1,7 +1,5 @@
 package org.aliveclean;
 
-import android.app.WallpaperInfo;
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.util.Log;
@@ -79,95 +77,7 @@ final class HyperOsAod {
     }
 
 
-    /** The AOD window is torn down the instant dozing stops, so an animation inside it
-     * can never be seen. The last frame is copied into its own overlay window first and
-     * that copy does the leaving: it expands slightly and fades, so the sphere opens
-     * back into the wallpaper instead of vanishing. */
-    static void playExit() {
-        AodSurface surface = activeSurface == null ? null : activeSurface.get();
-        if (surface == null) return;
-        try {
-            int width = Math.max(1, surface.getWidth()), height = Math.max(1, surface.getHeight());
-            android.graphics.Bitmap frame = surface.getBitmap(width / 2, height / 2);
-            if (frame == null) { surface.detachNow(); return; }
-            Context context = surface.getContext();
-            android.widget.ImageView view = new android.widget.ImageView(context);
-            view.setImageBitmap(frame);
-            view.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-            android.view.WindowManager windows =
-                    (android.view.WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                    android.graphics.PixelFormat.TRANSLUCENT);
-            windows.addView(view, params);
-            view.animate().alpha(0f).scaleX(1.06f).scaleY(1.06f).setDuration(320L)
-                    .withEndAction(() -> {
-                        try { windows.removeView(view); } catch (Throwable ignored) { }
-                        frame.recycle();
-                    }).start();
-            surface.detachNow();
-            Log.i(TAG, "exit overlay started");
-        } catch (Throwable failure) {
-            Log.w(TAG, "exit overlay failed", failure);
-            surface.detachNow();
-        }
-    }
-
-    private static java.lang.ref.WeakReference<AodSurface> activeSurface;
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
-    private static java.lang.ref.WeakReference<View> overlayView;
-    private static android.view.WindowManager overlayWindows;
-
-    /** Hosts the scene in our own window. MIUI keeps clearing the children of its
-     * AODView, which detached our surface and restarted the animation; owning the
-     * window removes that whole class of flicker. The window covers only the upper
-     * part of the screen, so the stock clock below stays untouched. */
-    static void showOverlay(Context context) {
-        hideOverlay();
-        try {
-            android.view.WindowManager windows =
-                    (android.view.WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-            android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-            AodSurface surface = new AodSurface(context);
-        liveSurface = new java.lang.ref.WeakReference<>(surface);
-            surface.setTag(TAG);
-            android.widget.FrameLayout frame = new android.widget.FrameLayout(context);
-            frame.setBackgroundColor(0x00000000);
-            frame.addView(surface, new android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
-            android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams(
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    (int) (metrics.heightPixels * 0.46f),
-                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                            | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                            | android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
-                    android.graphics.PixelFormat.TRANSLUCENT);
-            params.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
-            windows.addView(frame, params);
-            overlayView = new java.lang.ref.WeakReference<>(frame);
-            overlayWindows = windows;
-            Log.i(TAG, "scene overlay added " + metrics.widthPixels + "x" + params.height);
-        } catch (Throwable failure) {
-            Log.w(TAG, "scene overlay failed", failure);
-        }
-    }
-
-    static void hideOverlay() {
-        View view = overlayView == null ? null : overlayView.get();
-        if (view == null || overlayWindows == null) return;
-        try { overlayWindows.removeView(view); } catch (Throwable ignored) { }
-        overlayView = null;
-        Log.i(TAG, "scene overlay removed");
-    }
 
     /** Injects into the stock AOD window itself, which keeps the stock clock above. */
     static boolean hasInjectedView() {
@@ -384,18 +294,6 @@ final class HyperOsAod {
         }
     }
 
-    private static boolean ownsWallpaper(Context context) {
-        try {
-            WallpaperManager manager = WallpaperManager.getInstance(context);
-            WallpaperInfo home = manager.getWallpaperInfo();
-            if (home != null && "org.aliveclean".equals(home.getPackageName())) return true;
-            WallpaperInfo lock = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
-            return lock != null && "org.aliveclean".equals(lock.getPackageName());
-        } catch (Throwable unavailable) {
-            return false;
-        }
-    }
-
     /** A TextureView, not a SurfaceView: the AOD window paints an opaque wallpaper
      * over its own buffer, so a SurfaceView's separate layer stays hidden below it.
      * A TextureView renders into the window buffer and therefore composites in
@@ -414,24 +312,8 @@ final class HyperOsAod {
 
 
 
-        void detachNow() {
-            if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
-        }
-
-        /** Plays the same mode transition the editor preview uses, then detaches. */
-        private boolean exitWithTransitionUnused() {
-            if (loop == null) return false;
-            loop.mode(1, true);
-            postDelayed(() -> {
-                if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
-                Log.i(TAG, "exit transition done");
-            }, 1100L);
-            return true;
-        }
-
         @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
             surface = new Surface(texture);
-            activeSurface = new java.lang.ref.WeakReference<>(this);
             loop = new RenderLoop(appContext);
             loop.mode(0);
             loop.attach(surface, width, height);

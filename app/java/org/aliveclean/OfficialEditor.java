@@ -132,7 +132,7 @@ final class OfficialEditor implements AutoCloseable {
         cosmicAodSwitch.setOnCheckedChangeListener((button,checked)->{if(!bindingKeepLock&&!busy&&options!=null&&options.cosmic!=0)actions.continuous("cosmic_continuous_aod",checked);});
         cosmicHomeSwitch.setOnCheckedChangeListener((button,checked)->{if(!bindingKeepLock&&!busy&&options!=null&&options.cosmic!=0)actions.continuous("cosmic_continuous_home",checked);});
         click(bars[0],"aod_style",()->open(aodPanel));
-        // Notification routing remains the native ColorOS setting; this button
+        // Notification routing remains a native system setting; this button
         // has no portable notification-style backend yet.
         ui.find(bars[0],"aod_notification_switch").setVisibility(View.GONE);
         click(bars[1],"btn_wallpaper_picker",actions::photo);

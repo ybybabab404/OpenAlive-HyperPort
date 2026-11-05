@@ -58,7 +58,7 @@ final class BubbleRenderer implements WallpaperRenderer {
         GLES30.glColorMask(true,true,true,true);
         GLES30.glClearColor(0,0,0,1);GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT|GLES30.GL_DEPTH_BUFFER_BIT);
         // Bubble transparency blends into our own opaque background. Do not
-        // export the intermediate alpha (a*a + dstA*(1-a)) to ColorOS: its
+        // export the intermediate alpha (a*a + dstA*(1-a)) to the host: its
         // launcher snapshot/blur composition can expose a pale layer below.
         // Keep the original RGB blend and animation unchanged.
         GLES30.glColorMask(true,true,true,false);

@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
-import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
@@ -39,8 +38,6 @@ public final class NativeClockStatusProvider extends ContentProvider {
                         +" custom="+state.getInt("customRequests")+" created="+state.getInt("created"));
                 out.println("lastRequest="+state.getString("lastRequest"));
                 out.println("lastEntry="+state.getString("lastEntry"));
-                out.println("materialSeeds="+state.getInt("materialSeeds"));
-                out.println("nativeMaterial="+state.getString("nativeMaterial"));
                 out.println("firstFailure="+state.getString("firstFailure"));
             }
         }catch(Exception unavailable){out.println("loadSnapshot="+unavailable.getClass().getSimpleName());}

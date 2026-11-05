@@ -2,7 +2,7 @@ package org.aliveclean;
 
 import org.json.JSONObject;
 
-/** An editor-local draft. The ColorOS Apply/Cancel actions own persistent settings. */
+/** An editor-local draft. The host Apply/Cancel actions own persistent settings. */
 final class NativeClockEditSession {
     interface Host {
         String read() throws Exception;

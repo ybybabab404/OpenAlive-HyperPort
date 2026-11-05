@@ -16,14 +16,12 @@ public final class PlatformApply {
         System.out.println("ALIVE_ADAPTER_STARTED");
         try{
             if(Process.myUid()!=1000)throw new SecurityException("Platform adapter requires the system UID");
-            if(args.length!=1||(!"local-aod".equals(args[0])&&!"panoramic-aod".equals(args[0])&&!"clock-startup".equals(args[0])&&!"motion-permission".equals(args[0])))throw new IllegalArgumentException("Unsupported operation");
+            if(args.length!=1||(!"local-aod".equals(args[0])&&!"panoramic-aod".equals(args[0])))throw new IllegalArgumentException("Unsupported operation");
             if(android.os.Build.VERSION.SDK_INT<31)throw new UnsupportedOperationException("Local AOD adapter requires Android 12 or later");
-            if("clock-startup".equals(args[0]))throw new UnsupportedOperationException("clock-startup is not used on HyperOS");
             stage="wallpaper";
             Looper.prepareMainLooper();
             Class<?> thread=Class.forName("android.app.ActivityThread");Object instance=thread.getMethod("systemMain").invoke(null);
             Context context=(Context)thread.getMethod("getSystemContext").invoke(instance);
-            if("motion-permission".equals(args[0]))throw new UnsupportedOperationException("motion-permission is not used on HyperOS");
             WallpaperManager manager=WallpaperManager.getInstance(context);
             WallpaperInfo info=AppliedWallpaper.lock(manager);
             if(!AppliedWallpaper.supported(info))throw new IllegalStateException("请在系统壁纸应用器中将 OpenAlive 应用到锁屏或桌面与锁屏");

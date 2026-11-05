@@ -7,7 +7,7 @@ import android.view.*;
 import android.widget.*;
 import java.util.*;
 
-/** Original Vivo layout geometry/font axes adapted to the native ColorOS clock host. */
+/** Original Vivo layout geometry/font axes adapted to the native clock host. */
 final class NativeVivoClockFace extends FrameLayout {
     private final NativeVivoClockStyles.Style style;
     private final OfficialVivoClockUi original;
@@ -162,7 +162,7 @@ final class NativeVivoClockFace extends FrameLayout {
     }
     @Override protected void onMeasure(int ws,int hs){
         int width=MeasureSpec.getSize(ws);nativeHeight=getResources().getDisplayMetrics().heightPixels;
-        // ColorOS's editor theme can disable fallback line spacing. Vivo's
+        // The host editor theme can disable fallback line spacing. Vivo's
         // variable ytde axis extends far below the base font's descent; with
         // that theme default TextView measures 479px for a ~1760px glyph and
         // clips it before any material shader sees the lower half. Request the

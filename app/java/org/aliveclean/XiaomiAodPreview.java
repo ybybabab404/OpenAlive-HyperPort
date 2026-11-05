@@ -44,7 +44,7 @@ final class XiaomiAodPreview {
         XiaomiUi.call(renderer,"inflateView",new Class[]{View.class,style},container,info);
         // The original binds MiClock-Light from its APK for the time digits,
         // but date/city TextViews inherit the ROM's default sans-serif. Supply
-        // the bundled HyperOS MiSans regular face here instead of ColorOS's
+        // the bundled HyperOS MiSans regular face here instead of the host's
         // default, without changing the original time face or other clocks.
         android.graphics.Typeface auxiliary=new android.graphics.Typeface.Builder(host.getAssets(),
                 "native-clock/runtime/hyperos/fonts/MiSansVF.ttf").setWeight(400).build();
@@ -59,7 +59,7 @@ final class XiaomiAodPreview {
         content=view.findViewById(ui.getResources().getIdentifier("single_clock_container","id","com.miui.aod"));
         if(content==null)throw new IllegalStateException("Original Xiaomi AOD clock content missing");
         // Battery visuals now have a host-owned passive container. Notifications
-        // still belong to ColorOS; detach their original vendor controller.
+        // still belong to the host; detach their original vendor controller.
         for(String id:new String[]{"aod_icons_container"}){
             View unused=view.findViewById(ui.getResources().getIdentifier(id,"id","com.miui.aod"));
             if(unused!=null&&unused.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)unused.getParent()).removeView(unused);

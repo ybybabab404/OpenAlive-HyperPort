@@ -37,7 +37,8 @@ HyperOS 上这三处都不存在。直接加载的结果是：每个钩子都抛
 
 - `com.android.systemui`：只装 `ModuleActivationHook`；只有检测到 ColorOS 类时才装
   `ColorOsBridge` 与字体钩子，HyperOS 上不再注册任何永不命中的钩子。
-- `com.oplus.wallpapers`：保留原 ColorOS 时钟编辑器路径。
+- `com.oplus.wallpapers`：已不再注册。CleanHooks 重写后模块只注册 `com.android.systemui`、`com.miui.aod`、`com.android.thememanager` 与 `android`，
+  上游那条时钟编辑器注入路径不再随模块安装。
 - `android`：保留 `supportsAmbientMode` 与 `AMBIENT_WALLPAPER` 权限适配（这与 OEM 无关，
   HyperOS 也需要它才能让第三方动态壁纸进 AOD 列表）。
 

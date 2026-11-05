@@ -14,6 +14,12 @@ public final class CleanWallpaper extends WallpaperService {
      *  keyguard settles, then a 1s beat for at most SETTLE_LIMIT steps. */
     static final long[] SETTLE_DELAYS={0,80,160,280,450,700,1000,1400,1900,2500,3200};
     static final int SETTLE_LIMIT=40;
+    /** Wake-up hold window: the AOD composition is kept while the keyguard is sampled every
+     *  WAKE_POLL ms, so a wake that unlocks before the window closes goes straight 0->2 while a real
+     *  lock stay commits 0->1. The window sits just above the fastest measured direct-to-home unlock
+     *  (~340ms) so that path stays a single 0->2 without a 1 frame. See update(). */
+    static final long WAKE_DWELL=450L;
+    static final long WAKE_POLL=50L;
     /** True while our wallpaper service is bound, i.e. while it really is the current wallpaper. */
     static volatile boolean RUNNING;
 
@@ -69,7 +75,7 @@ public final class CleanWallpaper extends WallpaperService {
             if(Intent.ACTION_CONFIGURATION_CHANGED.equals(action))readWallpaperDim();
             if(Intent.ACTION_SCREEN_OFF.equals(action)){
                 screenOn=false;ambient=true;settleToken++;
-                panelDark=true;wakeCue=false;
+                panelDark=true;wakeCue=false;cancelLockGrace();
                 if(renderer!=null&&lastSentMode!=0)send(0,false);
                 android.util.Log.i(TAG,"scene screen off mode=0 panelDark=true");
                 return;
@@ -179,35 +185,45 @@ public final class CleanWallpaper extends WallpaperService {
             int before=scenesState.mode();
             int mode=isPreview()?1:scenesState.fallback(ambient,locked);
             if(!isPreview()&&mode==1&&lastSentMode==0&&!ambient){
-                // The wake-up transition has to start while the panel lights up, not after a fixed
-                // delay: SystemUI announces exactly that edge with wallpaper.wakingup, and the
-                // display is already on when it arrives, so the 0->1 animator runs on frames the
-                // user actually sees. The timer below stays as the fallback for wakes that never
-                // deliver the cue.
-                if(wakeCue&&displayOn()){
-                    wakeCue=false;
-                    android.util.Log.i(TAG,"scene wake cue source="+source+" locked="+locked
-                            +" visible="+renderVisible+" wallpaper="+wallpaperVisible
-                            +" panelDark="+panelDark+" mode="+before+"->1 (applied)");
-                    send(1,true);
-                    return;
-                }
+                // Wake-up hold. SystemUI delivers the same wake sequence whether the user will linger
+                // on the lock screen or pass straight through to the home screen — the waking-up
+                // reason, keyguard showing state and every lifecycle callback are identical, only the
+                // unlock timing differs. So instead of committing the 0->1 scene the instant the panel
+                // lights up, keep painting the AOD composition and sample the keyguard at a fine
+                // interval: an unlock inside the hold window means this was a screen-off-to-home wake,
+                // so the scene goes straight 0->2 with no lock frame; if the keyguard is still locked
+                // when the window closes the user really sat on the lock screen, so it commits 0->1 and
+                // the later unlock takes it 1->2. The window sits just above the fastest measured
+                // direct-to-home unlock (~340ms) so that path stays a single 0->2.
                 if(!lockGraceActive){
                     lockGraceActive=true;
                     final int token=++lockGraceToken;
                     final String cause=source;
-                    handler.postDelayed(new Runnable(){public void run(){
-                        if(token!=lockGraceToken||renderer==null)return;
-                        lockGraceActive=false;
-                        boolean nowLocked=keyguardLocked();
-                        int nowMode=scenesState.fallback(ambient,nowLocked);
-                        android.util.Log.i(TAG,"scene lock grace source="+cause+" ambient="+ambient
-                                +" locked="+nowLocked+" mode="+lastSentMode+"->"+nowMode);
-                        if(nowMode!=lastSentMode)send(nowMode,nowMode!=1);
-                    }},300);
+                    final long deadline=android.os.SystemClock.uptimeMillis()+WAKE_DWELL;
+                    handler.postDelayed(new Runnable(){
+                        private final Runnable self=this;
+                        @Override public void run(){
+                            if(token!=lockGraceToken||renderer==null)return;
+                            if(!keyguardLocked()){
+                                lockGraceActive=false;wakeCue=false;
+                                android.util.Log.i(TAG,"scene wake hold unlocked source="+cause
+                                        +" mode="+lastSentMode+"->2 (applied)");
+                                send(2,true);
+                                return;
+                            }
+                            if(android.os.SystemClock.uptimeMillis()>=deadline){
+                                lockGraceActive=false;wakeCue=false;
+                                android.util.Log.i(TAG,"scene wake hold dwell source="+cause
+                                        +" displayOn="+displayOn()+" mode="+lastSentMode+"->1 (applied)");
+                                send(1,true);
+                                return;
+                            }
+                            handler.postDelayed(self,WAKE_POLL);
+                        }
+                    },WAKE_POLL);
                 }
                 android.util.Log.i(TAG,"scene reconcile source="+source+" ambient="+ambient+" locked="+locked
-                        +" authoritative="+scenesState.authoritative()+" mode="+before+"->1 (deferred)");
+                        +" authoritative="+scenesState.authoritative()+" mode="+before+"->1 (holding)");
                 return;
             }
             cancelLockGrace();

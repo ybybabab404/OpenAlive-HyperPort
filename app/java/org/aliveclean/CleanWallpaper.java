@@ -87,12 +87,14 @@ public final class CleanWallpaper extends WallpaperService {
         }
         @Override public void scene(int next,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask){
             boolean changed=scenesState.accept(next,time,phase);
-            if(changed){ambient=next==0;lastSentMode=next;renderer.mode(next,animate,nightLevel,aodMask);}
+            if(changed||(next==1&&lastSentMode!=1)){ambient=next==0;lastSentMode=next;renderer.mode(next,animate,nightLevel,aodMask);}
             refreshVisibility();
             if(scenesState.mode()==next&&engineDisplayId()==android.view.Display.DEFAULT_DISPLAY)renderer.clockTransition(clockToken);
             android.util.Log.i(TAG,"scene push mode="+next+" changed="+changed+" animate="+animate+" phase="+phase+" delayMs="+(android.os.SystemClock.uptimeMillis()-time));
         }
-        @Override public void touch(int action,float x,float y){if(renderer!=null)renderer.touch(action,x,y);}
+        @Override public void touch(int action,float x,float y){
+            if(renderer!=null)renderer.touch(action,x,y);
+        }
         @Override public void region(AodRegion region){
             int display=engineDisplayId();
             if(region!=null&&region.displayId==display){receivedLayout=true;renderer.aodRegion(region,display);}
@@ -160,15 +162,15 @@ public final class CleanWallpaper extends WallpaperService {
                     lockGraceActive=true;
                     final int token=++lockGraceToken;
                     final String cause=source;
-                    handler.postDelayed(new Runnable(){@Override public void run(){
+                    handler.postDelayed(new Runnable(){public void run(){
                         if(token!=lockGraceToken||renderer==null)return;
                         lockGraceActive=false;
                         boolean nowLocked=keyguardLocked();
                         int nowMode=scenesState.fallback(ambient,nowLocked);
-                        android.util.Log.i(TAG,"scene lock grace source="+cause+" locked="+nowLocked
-                                +" mode="+lastSentMode+"->"+nowMode);
-                        if(nowMode!=lastSentMode)send(nowMode,true);
-                    }},120);
+                        android.util.Log.i(TAG,"scene lock grace source="+cause+" ambient="+ambient
+                                +" locked="+nowLocked+" mode="+lastSentMode+"->"+nowMode);
+                        if(nowMode!=lastSentMode)send(nowMode,nowMode!=1);
+                    }},300);
                 }
                 android.util.Log.i(TAG,"scene reconcile source="+source+" ambient="+ambient+" locked="+locked
                         +" authoritative="+scenesState.authoritative()+" mode="+before+"->1 (deferred)");

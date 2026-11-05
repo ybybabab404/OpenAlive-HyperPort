@@ -16,7 +16,7 @@
 
 上游 OpenAlive 以 ColorOS 17 为主要目标，集成点有三处：
 
-1. `com.android.systemui` 内的 AOD 面板、解锁接力、通知光效（`ColorOsBridge` 及其子类）
+1. `com.android.systemui` 内的 AOD 面板、解锁接力
 2. `com.oplus.wallpapers` 内的原生时钟编辑器（`NativeClockApplyPolicy`、`ColorOsNativeClockFonts`）
 3. `com.oplus.aod.AodMachineHelperProvider` 等系统 provider（`PlatformApply` 以 system UID 调用）
 
@@ -53,7 +53,7 @@ HyperOS 上这三处都不存在。直接加载的结果是：每个钩子都抛
 | --- | --- | --- |
 | AOD 面板动画 | HyperOS 的 AOD 由 `com.miui.aod` 自绘，第三方壁纸不参与合成 | 需要 hook `com.miui.aod` 的时钟视图并复用 `XiaomiSurfaceLease` 的思路把 GL 场景送进去 |
 | 锁屏编辑器原生时钟 | ColorOS 编辑器专属 | HyperOS 的锁屏时钟在 `miui.systemui.plugin` 里，需要另做一套注入 |
-| 解锁接力 / 通知光效 | 依赖 ColorOS SystemUI 类 | 需要针对 HyperOS 的 SystemUI 类重写 |
+| 解锁接力 | 依赖 ColorOS SystemUI 类 | 需要针对 HyperOS 的 SystemUI 类重写 |
 
 这三项都写在 `ColorOs*` 类里，HyperOS 上不会被加载，也不会影响其余功能。
 

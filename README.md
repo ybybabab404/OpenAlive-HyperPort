@@ -17,7 +17,6 @@ HyperAlive 是 [OpenAlive](https://github.com/Maga-King/OpenAlive) 的移植分�
 | Vivo Alive（液态 / 光栅 / 闪卡） | 可用 | 复用 Vivo 原版渲染器 |
 | 息屏动画衔接（ColorOS AOD 面板） | 仅 ColorOS | HyperOS 的 AOD 由 `com.miui.aod` 自绘，不承接第三方壁纸 |
 | 锁屏编辑器原生时钟（ColorOS） | 仅 ColorOS | 依赖 `com.oplus.wallpapers` 的编辑器 |
-| 通知光效 | 仅 ColorOS | 依赖 SystemUI 的 ColorOS 类 |
 
 ## 安装
 

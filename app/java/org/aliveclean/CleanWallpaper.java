@@ -30,6 +30,18 @@ public final class CleanWallpaper extends WallpaperService {
         boolean screenOn=true;
         int lockGraceToken;
         boolean lockGraceActive;
+        /** The panel went dark (screen off or dozing), so the composition the renderer holds is
+         *  the AOD one and the next wake-up has to animate away from it. Cleared when a non-AOD
+         *  composition is committed. */
+        boolean panelDark;
+        /** SystemUI announced the wake-up (wallpaper.wakingup): the panel is on and the lock screen
+         *  is lighting up right now, which is the only moment the 0->1 animator is guaranteed to
+         *  run on frames the user can see. */
+        boolean wakeCue;
+        /** End of the wake window: while it lasts the renderer is kept awake even when the
+         *  framework has not reported the wallpaper as visible yet, so the animator cannot end
+         *  up running on a renderer that is paused for lack of frames. */
+        long wakeUntil;
         int settleToken,settleStep;
         final android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
         final android.database.ContentObserver dimSetting=new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())){
@@ -39,6 +51,10 @@ public final class CleanWallpaper extends WallpaperService {
         final android.hardware.display.DisplayManager.DisplayListener displays=new android.hardware.display.DisplayManager.DisplayListener(){
             public void onDisplayAdded(int id){refreshVisibility();}
             public void onDisplayRemoved(int id){refreshVisibility();}
+            // Display state is only used to keep the renderer awake; the scene itself is decided
+            // from the keyguard and from the wake-up cue (see update()). Sending a mode here fired
+            // before ACTION_SCREEN_ON, so the !screenOn branch reverted it, and it also fired while
+            // dozing (a lit panel in AOD is STATE_ON), which flashed the lock composition.
             public void onDisplayChanged(int id){if(id==engineDisplayId())refreshVisibility();}
         };
         final android.database.ContentObserver area=new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())){
@@ -53,8 +69,9 @@ public final class CleanWallpaper extends WallpaperService {
             if(Intent.ACTION_CONFIGURATION_CHANGED.equals(action))readWallpaperDim();
             if(Intent.ACTION_SCREEN_OFF.equals(action)){
                 screenOn=false;ambient=true;settleToken++;
+                panelDark=true;wakeCue=false;
                 if(renderer!=null&&lastSentMode!=0)send(0,false);
-                android.util.Log.i(TAG,"scene screen off mode=0");
+                android.util.Log.i(TAG,"scene screen off mode=0 panelDark=true");
                 return;
             }
             if(Intent.ACTION_SCREEN_ON.equals(action)){screenOn=true;ambient=false;}else if(Intent.ACTION_USER_PRESENT.equals(action)){screenOn=true;ambient=false;}
@@ -117,6 +134,10 @@ public final class CleanWallpaper extends WallpaperService {
                 if(region!=null)renderer.aodRegion(region,display.getDisplayId());
             }catch(RuntimeException error){android.util.Log.w("AliveClean","AOD region unavailable",error);}
         }
+        private boolean displayOn(){
+            android.view.Display display=engineDisplay();
+            return display!=null&&display.getState()==android.view.Display.STATE_ON;
+        }
         private boolean keyguardLocked(){
             KeyguardManager k=getSystemService(KeyguardManager.class);
             return k!=null&&k.isKeyguardLocked();
@@ -158,6 +179,19 @@ public final class CleanWallpaper extends WallpaperService {
             int before=scenesState.mode();
             int mode=isPreview()?1:scenesState.fallback(ambient,locked);
             if(!isPreview()&&mode==1&&lastSentMode==0&&!ambient){
+                // The wake-up transition has to start while the panel lights up, not after a fixed
+                // delay: SystemUI announces exactly that edge with wallpaper.wakingup, and the
+                // display is already on when it arrives, so the 0->1 animator runs on frames the
+                // user actually sees. The timer below stays as the fallback for wakes that never
+                // deliver the cue.
+                if(wakeCue&&displayOn()){
+                    wakeCue=false;
+                    android.util.Log.i(TAG,"scene wake cue source="+source+" locked="+locked
+                            +" visible="+renderVisible+" wallpaper="+wallpaperVisible
+                            +" panelDark="+panelDark+" mode="+before+"->1 (applied)");
+                    send(1,true);
+                    return;
+                }
                 if(!lockGraceActive){
                     lockGraceActive=true;
                     final int token=++lockGraceToken;
@@ -185,7 +219,18 @@ public final class CleanWallpaper extends WallpaperService {
         private void cancelLockGrace(){lockGraceActive=false;lockGraceToken++;}
         private void send(int mode,boolean animate){
             cancelLockGrace();
-            lastSentMode=mode;renderer.mode(mode,animate);
+            int from=lastSentMode;
+            boolean wasDark=panelDark;
+            lastSentMode=mode;
+            if(mode!=0){
+                // A non-AOD composition was committed: the panel is no longer dark, and the wake
+                // window keeps the renderer awake long enough for the 0->1 animator to finish.
+                panelDark=false;wakeCue=false;
+                wakeUntil=android.os.SystemClock.uptimeMillis()+1600;
+            }
+            android.util.Log.i(TAG,"scene send mode="+from+"->"+mode+" animate="+animate
+                    +" visible="+renderVisible+" wallpaper="+wallpaperVisible+" wasDark="+wasDark);
+            renderer.mode(mode,animate);
         }
         private void readWallpaperDim(){
             boolean night=(getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
@@ -194,11 +239,29 @@ public final class CleanWallpaper extends WallpaperService {
             catch(RuntimeException error){android.util.Log.w("AliveClean","Wallpaper dim setting unavailable",error);}
             renderer.vivoDarkWallpaper(dim);
         }
-        @Override public void onSurfaceChanged(SurfaceHolder h,int format,int w,int height){super.onSurfaceChanged(h,format,w,height);{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Surface changed "+w+"x"+height);}lastSentMode=-1;update("surface");renderer.attach(h.getSurface(),w,height);readOfficialRegion();}
+        @Override public void onSurfaceChanged(SurfaceHolder h,int format,int w,int height){
+            super.onSurfaceChanged(h,format,w,height);
+            {if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Surface changed "+w+"x"+height);}
+            // Attach first. attach() posts a runnable that tears the previous scene down and rebuilds
+            // it from the renderer's current mode, so a mode sent before it is what the new surface
+            // starts in — a surface rebuilt at the lock composition has no transition left to play,
+            // which is exactly the jump this wake-up used to show. Program the AOD composition on
+            // the fresh surface instead, then let update() animate away from it.
+            renderer.attach(h.getSurface(),w,height);
+            if(!isPreview()&&panelDark)renderer.mode(0,false);
+            lastSentMode=-1;
+            update("surface");
+            readOfficialRegion();
+        }
         private void refreshVisibility(){
             android.view.Display display=engineDisplay();
             int state=display==null?android.view.Display.STATE_UNKNOWN:display.getState();
             boolean next=wallpaperVisible&&state!=android.view.Display.STATE_UNKNOWN&&state!=android.view.Display.STATE_OFF;
+            // The framework does not reliably report a freshly woken wallpaper as visible, and an
+            // engine it calls invisible pauses the renderer: the wake-up animator would then start
+            // late or be seen only at its last frame. Keep the renderer awake for the wake window.
+            if(!next&&state==android.view.Display.STATE_ON&&screenOn&&!ambient
+                    &&android.os.SystemClock.uptimeMillis()<wakeUntil)next=true;
             boolean displayChanged=state!=lastDisplayState;
             lastDisplayState=state;
             if(next!=renderVisible){renderVisible=next;renderer.visible(next);}
@@ -215,12 +278,20 @@ public final class CleanWallpaper extends WallpaperService {
             update("visible");settle("visible");refreshVisibility();
         }
         // Framework @SystemApi callback: absent from the public SDK's stubs.
-        public void onAmbientModeChanged(boolean inAmbientMode,long duration){ambient=inAmbientMode;{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Ambient="+ambient);}update("ambient="+inAmbientMode);refreshVisibility();}
+        public void onAmbientModeChanged(boolean inAmbientMode,long duration){ambient=inAmbientMode;if(inAmbientMode)panelDark=true;{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Ambient="+ambient);}update("ambient="+inAmbientMode);refreshVisibility();}
         @Override public Bundle onCommand(String action,int x,int y,int z,Bundle extras,boolean resultRequested){
             android.util.Log.i(TAG,"wallpaper command="+action+" authority="+scenesState.authoritative()+" mode="+scenesState.mode());
             if(scenesState.authoritative())return super.onCommand(action,x,y,z,extras,resultRequested);
             boolean animate=extras==null||!extras.getBoolean("action_alive_animator_end",false);
             if("action_alive_aod".equals(action)){ambient=true;send(0,animate);}
+            else if("android.wallpaper.wakingup".equals(action)){
+                // SystemUI lights the panel and starts its own lock-screen wake animation now, and the
+                // display is already on: committing the 0->1 scene here is what makes the wallpaper
+                // transition run in the same window as the lock UI, on frames the user can see.
+                ambient=false;screenOn=true;wakeCue=true;
+                update("command:"+action);refreshVisibility();
+                return super.onCommand(action,x,y,z,extras,resultRequested);
+            }
             else if("action_alive_lock".equals(action)||"android.wallpaper.keyguard_locked".equals(action)){ambient=false;update("command:"+action);}
             else if("action_alive_launcher".equals(action)||"android.wallpaper.keyguard_going_away".equals(action)){ambient=false;send(2,animate);}
             return super.onCommand(action,x,y,z,extras,resultRequested);

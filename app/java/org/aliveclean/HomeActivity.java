@@ -25,7 +25,7 @@ public class HomeActivity extends Activity {
             // Keep native constraints; GONE rows collapse using the official chain.
             String[] hidden={"appearance_manage_tips",
                 "system_more_breath_lamp","system_text_wallpaper","system_more_alive","system_more_weather",
-                "system_more_selection","system_more_historical_theme","system_title_more","system_center_more","system_center_other","system_f11_layout"};
+                "system_more_selection","system_more_historical_theme","system_title_more","system_center_more","system_center_other","system_f11_layout","system_more_light_effect"};
             for(String id:hidden)ui.find(root,id).setVisibility(View.GONE);
             View manage=ui.find(root,"system_layout_manager_appearance");
             manage.setVisibility(View.GONE); // Meizu appearance-account management is not a local destination.

@@ -57,10 +57,11 @@ final class FrameMotion {
     }
     void change(int next,SceneMotion common){
         if(next==mode)return;
-        // A paired photo has the same full-screen endpoint on lock and home.
-        // Fingerprint KEYGUARD -> UNLOCK must not restart an in-flight expansion.
-        if(paired&&mode!=0&&next!=0){mode=next;return;}
         boolean interrupted=active();int previous=mode;
+        // A paired photo has the same full-screen endpoint on lock and home.
+        // If an expansion is still running, interrupt it instead of letting it
+        // finish first: the unlock transition must start from the current frame.
+        if(paired&&mode!=0&&next!=0&&!interrupted){mode=next;return;}
         AnimatorSet a=prepare(next,common.blendDuration(SceneMotion.transition(mode,next)));
         if(previous==0&&!interrupted)a.setStartDelay(150);a.start();
     }

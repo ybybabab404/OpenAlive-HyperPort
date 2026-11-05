@@ -27,8 +27,10 @@ public final class CleanWallpaper extends WallpaperService {
         int lastDisplayState=android.view.Display.STATE_UNKNOWN;
         boolean dimObserverRegistered;
         int lastSentMode=-1;
+        boolean screenOn=true;
+        int lockGraceToken;
+        boolean lockGraceActive;
         int settleToken,settleStep;
-        KeyguardManager.KeyguardLockedStateListener keyguardListener;
         final android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
         final android.database.ContentObserver dimSetting=new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())){
             @Override public void onChange(boolean selfChange){readWallpaperDim();}
@@ -49,7 +51,13 @@ public final class CleanWallpaper extends WallpaperService {
         final BroadcastReceiver state=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent intent){
             String action=intent==null?null:intent.getAction();
             if(Intent.ACTION_CONFIGURATION_CHANGED.equals(action))readWallpaperDim();
-            if(Intent.ACTION_SCREEN_ON.equals(action)||Intent.ACTION_USER_PRESENT.equals(action))ambient=false;
+            if(Intent.ACTION_SCREEN_OFF.equals(action)){
+                screenOn=false;ambient=true;settleToken++;
+                if(renderer!=null&&lastSentMode!=0)send(0,false);
+                android.util.Log.i(TAG,"scene screen off mode=0");
+                return;
+            }
+            if(Intent.ACTION_SCREEN_ON.equals(action)){screenOn=true;ambient=false;}else if(Intent.ACTION_USER_PRESENT.equals(action)){screenOn=true;ambient=false;}
             android.util.Log.i(TAG,"scene wake action="+action+" ambient="+ambient+" locked="+keyguardLocked()
                     +" authoritative="+scenesState.authoritative()+" mode="+scenesState.mode());
             update("broadcast:"+action);refreshVisibility();
@@ -75,18 +83,6 @@ public final class CleanWallpaper extends WallpaperService {
                 getContentResolver().registerContentObserver(android.provider.Settings.System.getUriFor("alive_wallpaper_position"),false,area);
                 regionObserverRegistered=true;
             }catch(RuntimeException error){android.util.Log.w("AliveClean","AOD region observer unavailable",error);}
-            if(!isPreview()&&android.os.Build.VERSION.SDK_INT>=33)try{
-                KeyguardManager km=getSystemService(KeyguardManager.class);
-                if(km!=null){
-                    keyguardListener=locked->{
-                        ambient=false;
-                        android.util.Log.i(TAG,"scene keyguard locked="+locked);
-                        update("keyguard="+locked);refreshVisibility();
-                        if(!locked)settle("keyguard");
-                    };
-                    km.addKeyguardLockedStateListener(getMainExecutor(),keyguardListener);
-                }
-            }catch(RuntimeException error){android.util.Log.w(TAG,"keyguard listener unavailable",error);}
             setTouchEventsEnabled(true);{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Wallpaper engine created preview="+isPreview());}
         }
         @Override public void scene(int next,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask){
@@ -152,15 +148,43 @@ public final class CleanWallpaper extends WallpaperService {
         }
         private void update(String source){
             if(renderer==null)return;
+            if(!isPreview()&&!screenOn){
+                if(lastSentMode!=0)send(0,false);
+                return;
+            }
             boolean locked=keyguardLocked();
             int before=scenesState.mode();
             int mode=isPreview()?1:scenesState.fallback(ambient,locked);
+            if(!isPreview()&&mode==1&&lastSentMode==0&&!ambient){
+                if(!lockGraceActive){
+                    lockGraceActive=true;
+                    final int token=++lockGraceToken;
+                    final String cause=source;
+                    handler.postDelayed(new Runnable(){@Override public void run(){
+                        if(token!=lockGraceToken||renderer==null)return;
+                        lockGraceActive=false;
+                        boolean nowLocked=keyguardLocked();
+                        int nowMode=scenesState.fallback(ambient,nowLocked);
+                        android.util.Log.i(TAG,"scene lock grace source="+cause+" locked="+nowLocked
+                                +" mode="+lastSentMode+"->"+nowMode);
+                        if(nowMode!=lastSentMode)send(nowMode,true);
+                    }},120);
+                }
+                android.util.Log.i(TAG,"scene reconcile source="+source+" ambient="+ambient+" locked="+locked
+                        +" authoritative="+scenesState.authoritative()+" mode="+before+"->1 (deferred)");
+                return;
+            }
+            cancelLockGrace();
             android.util.Log.i(TAG,"scene reconcile source="+source+" ambient="+ambient+" locked="+locked
                     +" authoritative="+scenesState.authoritative()+" mode="+before+"->"+mode
                     +(mode!=lastSentMode?" (applied)":" (unchanged)"));
             if(mode!=lastSentMode)send(mode,true);
         }
-        private void send(int mode,boolean animate){lastSentMode=mode;renderer.mode(mode,animate);}
+        private void cancelLockGrace(){lockGraceActive=false;lockGraceToken++;}
+        private void send(int mode,boolean animate){
+            cancelLockGrace();
+            lastSentMode=mode;renderer.mode(mode,animate);
+        }
         private void readWallpaperDim(){
             boolean night=(getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
             boolean dim=false;
@@ -178,7 +202,16 @@ public final class CleanWallpaper extends WallpaperService {
             if(next!=renderVisible){renderVisible=next;renderer.visible(next);}
             else if(next&&displayChanged)renderer.resumeDisplay();
         }
-        @Override public void onVisibilityChanged(boolean visible){{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Wallpaper visible="+visible);}wallpaperVisible=visible;android.util.Log.i(TAG,"wallpaper visible="+visible+" ambient="+ambient+" locked="+keyguardLocked()+" mode="+scenesState.mode());if(visible){update("visible");settle("visible");}refreshVisibility();}
+        @Override public void onVisibilityChanged(boolean visible){
+            wallpaperVisible=visible;
+            android.util.Log.i(TAG,"wallpaper visible="+visible+" ambient="+ambient+" locked="+keyguardLocked()+" mode="+scenesState.mode());
+            if(!visible){
+                refreshVisibility();return;
+            }
+            android.view.Display d=engineDisplay();
+            if(d!=null&&d.getState()!=android.view.Display.STATE_OFF)screenOn=true;
+            update("visible");settle("visible");refreshVisibility();
+        }
         // Framework @SystemApi callback: absent from the public SDK's stubs.
         public void onAmbientModeChanged(boolean inAmbientMode,long duration){ambient=inAmbientMode;{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Ambient="+ambient);}update("ambient="+inAmbientMode);refreshVisibility();}
         @Override public Bundle onCommand(String action,int x,int y,int z,Bundle extras,boolean resultRequested){
@@ -186,7 +219,7 @@ public final class CleanWallpaper extends WallpaperService {
             if(scenesState.authoritative())return super.onCommand(action,x,y,z,extras,resultRequested);
             boolean animate=extras==null||!extras.getBoolean("action_alive_animator_end",false);
             if("action_alive_aod".equals(action)){ambient=true;send(0,animate);}
-            else if("action_alive_lock".equals(action)||"android.wallpaper.keyguard_locked".equals(action)){ambient=false;send(1,animate);}
+            else if("action_alive_lock".equals(action)||"android.wallpaper.keyguard_locked".equals(action)){ambient=false;update("command:"+action);}
             else if("action_alive_launcher".equals(action)||"android.wallpaper.keyguard_going_away".equals(action)){ambient=false;send(2,animate);}
             return super.onCommand(action,x,y,z,extras,resultRequested);
         }
@@ -201,7 +234,6 @@ public final class CleanWallpaper extends WallpaperService {
         @Override public void onSurfaceDestroyed(SurfaceHolder h){renderer.detach();super.onSurfaceDestroyed(h);}
         @Override public void onDestroy(){
             settleToken++;handler.removeCallbacksAndMessages(null);
-            if(keyguardListener!=null){KeyguardManager km=getSystemService(KeyguardManager.class);if(km!=null)km.removeKeyguardLockedStateListener(keyguardListener);keyguardListener=null;}
             SceneChannel.remove(this);displayManager.unregisterDisplayListener(displays);unregisterReceiver(state);
             if(regionObserverRegistered)getContentResolver().unregisterContentObserver(area);
             if(dimObserverRegistered)getContentResolver().unregisterContentObserver(dimSetting);

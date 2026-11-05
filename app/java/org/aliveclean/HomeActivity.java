@@ -78,13 +78,6 @@ public class HomeActivity extends Activity {
             int extensionAnchor=shortcutCount==0?vivo.getId():shortcuts.getId();
             View extensions=ui.find(root,"system_center_extension");ViewGroup.LayoutParams extensionsLp=extensions.getLayoutParams();
             replaceAnchor(extensionsLp,ui.id("id","system_center_theme"),extensionAnchor);extensions.setLayoutParams(extensionsLp);
-            View light=ui.find(root,"system_more_light_effect");
-            topGap(light,12);
-            ui.cardBackground(light);
-            ((ImageView)ui.find(light,"item_image")).setImageResource(ui.id("drawable","ic_system_setting_more_light_effect"));
-            ((TextView)ui.find(light,"item_title")).setText("通知光效");
-            ((TextView)ui.find(light,"item_des")).setText(ui.getString(ui.id("string","system_setting_more_des_1")));
-            light.setOnClickListener(v->startActivity(new Intent(this,NotificationSettingsActivity.class)));
             String[] cards={"system_layout_aod","system_layout_lock","system_layout_launcher"};
             String[] labels={"息屏","锁屏","桌面"};
             for(int i=0;i<3;i++){

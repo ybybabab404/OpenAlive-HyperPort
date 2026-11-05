@@ -1,6 +1,7 @@
 package org.aliveclean;
 
 import android.graphics.*;
+import android.os.Build;
 import android.view.*;
 import java.util.*;
 
@@ -17,7 +18,31 @@ final class CameraHoleGeometry {
                 if(!candidates.isEmpty()&&matches(candidates,cutout.getBoundingRects()))return candidates;
             }
         }
-        return FlymeNotificationLight.holes(cutout,width,height,density);
+        return holes(cutout,width,height,density);
+    }
+    static List<RectF> holes(DisplayCutout cutout,int width,int height,float density){
+        ArrayList<RectF> result=new ArrayList<>();
+        if(cutout!=null&&Build.VERSION.SDK_INT>=31&&cutout.getCutoutPath()!=null){
+            PathMeasure measure=new PathMeasure(cutout.getCutoutPath(),false);
+            do{
+                Path contour=new Path();measure.getSegment(0,measure.getLength(),contour,true);
+                RectF b=new RectF();contour.computeBounds(b,true);
+                if(validHole(b,width,height)&&Math.abs(b.width()-b.height())<=Math.max(2,Math.min(b.width(),b.height())*.15f))result.add(b);
+            }while(measure.nextContour());
+        }
+        if(result.isEmpty()&&cutout!=null)for(Rect b:cutout.getBoundingRects()){
+            RectF f=new RectF(b);
+            if(validHole(f,width,height)&&Math.abs(f.width()-f.height())<=2)result.add(f);
+        }
+        if(result.isEmpty()){
+            float size=28*density,cy=24*density;
+            result.add(new RectF(width/2f-size/2,cy-size/2,width/2f+size/2,cy+size/2));
+        }
+        return result;
+    }
+    private static boolean validHole(RectF b,int width,int height){
+        return b.width()>2&&b.height()>2&&b.left>0&&b.top>0&&b.right<width&&b.bottom<height
+                &&b.width()<Math.min(width,height)*.4f&&b.height()<Math.min(width,height)*.4f;
     }
     private static String property(String key){
         try{return (String)Class.forName("android.os.SystemProperties").getMethod("get",String.class,String.class).invoke(null,key,"");}

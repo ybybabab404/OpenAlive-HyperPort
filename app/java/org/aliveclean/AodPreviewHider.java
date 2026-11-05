@@ -7,9 +7,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-
 /**
  * com.miui.aod「息屏」页底部的「息屏预览」整块隐藏。
  *
@@ -31,21 +28,21 @@ public final class AodPreviewHider {
     private AodPreviewHider() {}
 
     public static void install(ClassLoader loader) {
-        Class<?> activity = XposedHelpers.findClassIfExists(
+        Class<?> activity = Xp.findClassIfExists(
                 "com.miui.aod.settings.AodStyleCategoriesActivity", loader);
         if (activity == null) {
             Log.w(TAG, "aod preview hide: activity missing");
             return;
         }
         try {
-            XC_MethodHook hook = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     if (!(param.thisObject instanceof Activity)) return;
                     watch((Activity) param.thisObject);
                 }
             };
-            XposedHelpers.findAndHookMethod(activity, "onCreate", Bundle.class, hook);
-            XposedHelpers.findAndHookMethod(activity, "onResume", hook);
+            Xp.findAndHookMethod(activity, "onCreate", Bundle.class, hook);
+            Xp.findAndHookMethod(activity, "onResume", hook);
             Log.i(TAG, "aod preview hide hook ok");
         } catch (Throwable error) {
             Log.w(TAG, "aod preview hide hook failed", error);

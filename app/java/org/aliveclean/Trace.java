@@ -36,7 +36,7 @@ final class Trace {
         if (current >= 0) return current == 1;
         boolean on = true;
         try {
-            Context context = android.app.AndroidAppHelper.currentApplication();
+            Context context = Xp.currentApplication();
             if (context != null) {
                 SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
                 on = prefs.getBoolean(KEY, true);

@@ -37,8 +37,8 @@ ROOT = Path(__file__).resolve().parents[1]
 WINDOWS = os.name == "nt"
 EXE = ".exe" if WINDOWS else ""
 
-XPOSED_API_URL = "https://api.xposed.info/de/robv/android/xposed/api/82/api-82.jar"
-XPOSED_API_SHA256 = "f48c635f1c7469fdec0e00ad2ea0b7a6b2f5b55065784a35b7ca3a84615e8e25"
+XPOSED_API_JAR = ROOT / "vendor/libxposed/classes.jar"
+
 XZ_SOURCES_SHA256 = "c35c682fa8b617c1f6f21270df14bad4e11df2fe46962dfe45e765b7aec0181b"
 
 CHECKS = [
@@ -182,12 +182,9 @@ def main(argv) -> None:
     version = manifest.attrib[android_ns + "versionName"]
     apk = DIST / ("HyperAlive-" + version + "-arm64-v8a.apk")
 
-    xposed = OUT / "xposed-api-82.jar"
-    if not xposed.exists() or sha256(xposed) != XPOSED_API_SHA256:
-        with urllib.request.urlopen(XPOSED_API_URL, timeout=60) as response:
-            xposed.write_bytes(response.read())
-    if sha256(xposed) != XPOSED_API_SHA256:
-        fail("Xposed API 82 checksum mismatch")
+    xposed = XPOSED_API_JAR
+    if not xposed.exists():
+        fail("Xposed API 102 jar missing: " + str(xposed))
 
     ort = ROOT / "vendor/onnxruntime"
     ort_jar = ort / "classes.jar"
@@ -267,8 +264,13 @@ def main(argv) -> None:
 
     with zipfile.ZipFile(OUT / "base.apk") as base, zipfile.ZipFile(OUT / "unsigned.apk", "w", zipfile.ZIP_DEFLATED, compresslevel=9) as package:
         for entry in sorted(base.infolist(), key=lambda e: e.filename):
-            if not entry.filename.startswith("assets/video/"):
+            if not entry.filename.startswith("assets/video/") and entry.filename != "assets/xposed_init":
                 write_entry(package, entry.filename, base.read(entry))
+        write_entry(package, "META-INF/xposed/java_init.list", b"org.aliveclean.CleanHooks\n")
+        write_entry(package, "META-INF/xposed/module.prop",
+                    b"minApiVersion=102\ntargetApiVersion=102\nstaticScope=true\n")
+        write_entry(package, "META-INF/xposed/scope.list",
+                    b"android\ncom.android.systemui\ncom.miui.aod\ncom.android.thememanager\n")
         write_entry(package, "classes.dex", (OUT / "dex/classes.dex").read_bytes())
         write_entry(package, "classes2.dex", (VENDOR / "editor-ui.dex").read_bytes())
         write_entry(package, "lib/arm64-v8a/libalive_clean.so", native.read_bytes())

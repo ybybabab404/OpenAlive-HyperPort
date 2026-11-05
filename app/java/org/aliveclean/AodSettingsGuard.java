@@ -7,9 +7,6 @@ import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.SpinnerAdapter;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-
 /**
  * com.miui.aod 的「息屏」页把「息屏样式」做成 SettingsView 里的一个 Spinner：
  *   R.id.aod_resting_screen_style      整行容器
@@ -28,7 +25,7 @@ public final class AodSettingsGuard {
     private AodSettingsGuard() {}
 
     public static void install(ClassLoader loader) {
-        Class<?> view = XposedHelpers.findClassIfExists(VIEW, loader);
+        Class<?> view = Xp.findClassIfExists(VIEW, loader);
         if (view == null) {
             Log.w(TAG, "aod SettingsView missing");
             return;
@@ -37,13 +34,13 @@ public final class AodSettingsGuard {
         hook(view, "updateState");
         hook(view, "updateSpinnerState");
 
-        Class<?> utils = XposedHelpers.findClassIfExists("com.miui.aod.Utils", loader);
+        Class<?> utils = Xp.findClassIfExists("com.miui.aod.Utils", loader);
         if (utils == null) return;
         try {
-            XposedHelpers.findAndHookMethod(utils, "setFsAodStyle", Context.class, int.class,
-                    new XC_MethodHook() {
+            Xp.findAndHookMethod(utils, "setFsAodStyle", Context.class, int.class,
+                    new Xp.MethodHook() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
+                        protected void beforeHookedMethod(Xp.MethodHookParam param) {
                             if (!AodWallpaperMode.alive((Context) param.args[0])) return;
                             param.args[1] = 1;
                         }
@@ -55,9 +52,9 @@ public final class AodSettingsGuard {
 
     private static void hook(Class<?> view, String method) {
         try {
-            XposedHelpers.findAndHookMethod(view, method, new XC_MethodHook() {
+            Xp.findAndHookMethod(view, method, new Xp.MethodHook() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                protected void afterHookedMethod(Xp.MethodHookParam param) {
                     try {
                         bind((View) param.thisObject);
                     } catch (Throwable error) {

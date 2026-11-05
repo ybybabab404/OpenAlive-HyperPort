@@ -3,14 +3,13 @@ package org.aliveclean;
 import android.app.Application;
 import android.content.*;
 import android.os.Build;
-import de.robv.android.xposed.*;
 
 /** Only loaded in the injected SystemUI process, never in the settings app. */
 final class ModuleActivationHook {
     private static boolean registered;
     static void install(){
-        XposedHelpers.findAndHookMethod(Application.class,"attach",Context.class,new XC_MethodHook(){
-            @Override protected void afterHookedMethod(MethodHookParam call){
+        Xp.findAndHookMethod(Application.class,"attach",Context.class,new Xp.MethodHook(){
+            @Override protected void afterHookedMethod(Xp.MethodHookParam call){
                 Context context=(Context)call.thisObject;
                 if(!"com.android.systemui".equals(context.getPackageName())||registered)return;
                 registered=true;

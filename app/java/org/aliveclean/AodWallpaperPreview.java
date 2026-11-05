@@ -1,6 +1,4 @@
 package org.aliveclean;
-
-import android.app.AndroidAppHelper;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -11,10 +9,6 @@ import android.util.Log;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
 
 /**
  * 系统个性化页的「桌面」预览卡在第三方活壁纸下没有可用位图：
@@ -41,15 +35,15 @@ public final class AodWallpaperPreview {
     private AodWallpaperPreview() {}
 
     public static void install(ClassLoader loader) {
-        Class<?> api = XposedHelpers.findClassIfExists(
+        Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
             Log.w(TAG, "aod wallpaper preview: TemplateApiImpl missing");
             return;
         }
         try {
-            XC_MethodHook hook = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     Bitmap original = param.getResult() instanceof Bitmap
                             ? (Bitmap) param.getResult() : null;
                     if (original == null) return;
@@ -62,7 +56,7 @@ public final class AodWallpaperPreview {
                             + "x" + preview.getHeight());
                 }
             };
-            int count = XposedBridge.hookAllMethods(api, "getPlaceholderWallpaper", hook).size();
+            int count = Xp.hookAllMethods(api, "getPlaceholderWallpaper", hook).size();
             Log.i(TAG, "aod wallpaper preview hook count=" + count);
         } catch (Throwable error) {
             Log.w(TAG, "aod wallpaper preview hook failed", error);
@@ -79,18 +73,18 @@ public final class AodWallpaperPreview {
         installUf(loader);
         installShots(loader);
 
-        Class<?> helper = XposedHelpers.findClassIfExists(
+        Class<?> helper = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.DeviceScreenshotHelper", loader);
         if (helper == null) {
             Log.w(TAG, "tm wallpaper preview: DeviceScreenshotHelper missing");
             return;
         }
         try {
-            XC_MethodHook hook = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     Bitmap original = param.getResult() instanceof Bitmap
                             ? (Bitmap) param.getResult() : null;
-                    Context context = AndroidAppHelper.currentApplication();
+                    Context context = Xp.currentApplication();
                     boolean alive = false;
                     try {
                         alive = context != null && AodWallpaperMode.alive(context);
@@ -117,9 +111,9 @@ public final class AodWallpaperPreview {
                 }
             };
             // 主题管理器里是混淆名 ni7；保留可读名做兼容，免得换版本后静默失效。
-            int count = XposedBridge.hookAllMethods(helper, "ni7", hook).size();
+            int count = Xp.hookAllMethods(helper, "ni7", hook).size();
             if (count == 0) {
-                count = XposedBridge.hookAllMethods(helper,
+                count = Xp.hookAllMethods(helper,
                         "getCurrentHomeWallpaperScreenshot", hook).size();
             }
             Log.i(TAG, "tm wallpaper preview hook count=" + count);
@@ -134,19 +128,19 @@ public final class AodWallpaperPreview {
      * 这里只替换 uf() 的返回值，其它调用路径保持系统原样。
      */
     private static void installUf(ClassLoader loader) {
-        Class<?> api = XposedHelpers.findClassIfExists(
+        Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
             Log.w(TAG, "tm uf: TemplateApiImpl missing");
             return;
         }
         try {
-            XC_MethodHook hook = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     Bitmap original = param.getResult() instanceof Bitmap
                             ? (Bitmap) param.getResult() : null;
                     if (original == null || param.args.length != 0) return;
-                    Context context = AndroidAppHelper.currentApplication();
+                    Context context = Xp.currentApplication();
                     boolean alive = false;
                     try {
                         alive = context != null && AodWallpaperMode.alive(context);
@@ -170,7 +164,7 @@ public final class AodWallpaperPreview {
                     }
                 }
             };
-            int count = XposedBridge.hookAllMethods(api, "uf", hook).size();
+            int count = Xp.hookAllMethods(api, "uf", hook).size();
             Log.i(TAG, "tm uf hook count=" + count);
         } catch (Throwable error) {
             Log.w(TAG, "tm uf hook failed", error);
@@ -184,18 +178,18 @@ public final class AodWallpaperPreview {
      * 保证 takeCaptureForMultiScreenMode 拿到的就是真实预览图。
      */
     private static void installShots(ClassLoader loader) {
-        Class<?> shots = XposedHelpers.findClassIfExists(
+        Class<?> shots = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.Screenshots", loader);
         if (shots == null) {
             Log.w(TAG, "tm shots: Screenshots missing");
             return;
         }
         try {
-            XC_MethodHook hook = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     Bitmap original = param.getResult() instanceof Bitmap
                             ? (Bitmap) param.getResult() : null;
-                    Context context = AndroidAppHelper.currentApplication();
+                    Context context = Xp.currentApplication();
                     boolean alive = false;
                     try {
                         alive = context != null && AodWallpaperMode.alive(context);
@@ -221,7 +215,7 @@ public final class AodWallpaperPreview {
                     }
                 }
             };
-            int count = XposedBridge.hookAllMethods(shots, "t8r", hook).size();
+            int count = Xp.hookAllMethods(shots, "t8r", hook).size();
             Log.i(TAG, "tm shots t8r hook count=" + count);
         } catch (Throwable error) {
             Log.w(TAG, "tm shots hook failed", error);
@@ -230,7 +224,7 @@ public final class AodWallpaperPreview {
 
     private static Context contextOf(Object api) {
         try {
-            Object value = XposedHelpers.getObjectField(api, "context");
+            Object value = Xp.getObjectField(api, "context");
             return value instanceof Context ? (Context) value : null;
         } catch (Throwable ignored) {
             return null;

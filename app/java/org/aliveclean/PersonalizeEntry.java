@@ -23,9 +23,6 @@ import android.widget.TextView;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
-
 /**
  * Adds a standalone "HyperAlive" card on top of the 系统个性化 page of 主题壁纸
  * (com.android.thememanager.settings.personalize.activity.PersonalizeActivity).
@@ -47,13 +44,13 @@ public final class PersonalizeEntry {
     private PersonalizeEntry() {}
 
     public static void install(ClassLoader cl) {
-        Class<?> activityClass = XposedHelpers.findClassIfExists(ACTIVITY, cl);
+        Class<?> activityClass = Xp.findClassIfExists(ACTIVITY, cl);
         if (activityClass == null) {
             Log.w(TAG, "personalize: " + ACTIVITY + " not found");
             return;
         }
-        XposedHelpers.findAndHookMethod(activityClass, "onResume", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) {
+        Xp.findAndHookMethod(activityClass, "onResume", new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 Activity activity = (Activity) param.thisObject;
                 View decor = activity.getWindow() == null ? null : activity.getWindow().peekDecorView();
                 if (decor == null) return;

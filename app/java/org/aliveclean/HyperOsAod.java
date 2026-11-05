@@ -9,9 +9,6 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
 
 /** HyperOS AOD host. HyperOS 4 renders the always-on display inside SystemUI
  * (com.android.keyguard.widget.AodView); older builds used a standalone app.
@@ -29,10 +26,10 @@ final class HyperOsAod {
     static void install(ClassLoader loader) {
         boolean installed = false;
         for (String name : VIEWS) {
-            Class<?> view = XposedHelpers.findClassIfExists(name, loader);
+            Class<?> view = Xp.findClassIfExists(name, loader);
             if (view == null || !ViewGroup.class.isAssignableFrom(view)) continue;
-            XposedBridge.hookAllConstructors(view, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.hookAllConstructors(view, new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     final ViewGroup root = (ViewGroup) param.thisObject;
                     root.post(new Runnable() {
                         @Override public void run() {
@@ -54,10 +51,10 @@ final class HyperOsAod {
     /** HyperOS 4 keeps the AOD inside the doze service; a window overlay is the
      * only place a third party scene can live without touching the stock clock. */
     static void installDoze(ClassLoader loader) {
-        Class<?> service = XposedHelpers.findClassIfExists("com.android.keyguard.doze.MiuiDozeService", loader);
+        Class<?> service = Xp.findClassIfExists("com.android.keyguard.doze.MiuiDozeService", loader);
         if (service == null) { Log.i(TAG, "no MiuiDozeService"); return; }
-        XposedBridge.hookAllMethods(service, "onDreamingStarted", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) {
+        Xp.hookAllMethods(service, "onDreamingStarted", new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
                 Trace.log("T07", "dreaming started");
                 AodOverlay.show(svc);
@@ -72,8 +69,8 @@ final class HyperOsAod {
                 }, 3000);
             }
         });
-        XposedBridge.hookAllMethods(service, "onDreamingStopped", new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam param) {
+        Xp.hookAllMethods(service, "onDreamingStopped", new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 Trace.log("T08", "dreaming stopped");
                 AodOverlay.hide();
             }

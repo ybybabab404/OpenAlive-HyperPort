@@ -12,9 +12,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-
 /**
  * HyperOS does not deliver wallpaper touches to a third-party WallpaperService, so the liquid scene
  * gets nothing on the home screen or the lock screen. The lock screen is the one place we can help:
@@ -66,10 +63,10 @@ final class KeyguardTouchRelay {
         hookLockDeform(loader);
         int hooked=0;
         for (String name:SHADE_VIEWS) {
-            Class<?> view=de.robv.android.xposed.XposedHelpers.findClassIfExists(name,loader);
+            Class<?> view=Xp.findClassIfExists(name,loader);
             if (view==null) continue;
-            java.util.Set<XC_MethodHook.Unhook> set=XposedBridge.hookAllMethods(view,"dispatchTouchEvent",new XC_MethodHook(){
-                @Override protected void beforeHookedMethod(MethodHookParam param) {
+            java.util.Set<Xp.Unhook> set=Xp.hookAllMethods(view,"dispatchTouchEvent",new Xp.MethodHook(){
+                @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
                     try {
                         if (param.args==null||param.args.length!=1||!(param.args[0] instanceof MotionEvent))return;
                         MotionEvent event=(MotionEvent)param.args[0];
@@ -97,8 +94,8 @@ final class KeyguardTouchRelay {
     private static void hookClockViews(ClassLoader loader) {
         try {
             Class<?> group=Class.forName("android.view.ViewGroup",false,loader);
-            XposedBridge.hookAllMethods(group,"dispatchTouchEvent",new XC_MethodHook(){
-                @Override protected void afterHookedMethod(MethodHookParam param) {
+            Xp.hookAllMethods(group,"dispatchTouchEvent",new Xp.MethodHook(){
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     try {
                         if (!liquid()||!locked())return;
                         if (!(param.args[0] instanceof MotionEvent))return;
@@ -127,8 +124,8 @@ final class KeyguardTouchRelay {
             for (String name:names) {
                 for (java.lang.reflect.Method method:view.getMethods()) {
                     if (!method.getName().equals(name)||method.getParameterTypes().length!=1) continue;
-                    XposedBridge.hookMethod(method,new XC_MethodHook(){
-                        @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    Xp.hookMethod(method,new Xp.MethodHook(){
+                        @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
                             try {
                                 if (!dragging||!liquid()||!locked())return;
                                 if (!(param.thisObject instanceof View))return;
@@ -168,11 +165,11 @@ final class KeyguardTouchRelay {
      *  applied wallpaper and the keyguard is showing. */
     private static void hookLockDeform(ClassLoader loader) {
         try {
-            Class<?> callback=de.robv.android.xposed.XposedHelpers.findClassIfExists(
+            Class<?> callback=Xp.findClassIfExists(
                     "com.android.keyguard.injector.KeyguardPanelViewInjector$bindView$2",loader);
             if (callback==null) {Log.w(TAG,"lock deform: callback class not found");return;}
-            XposedBridge.hookAllMethods(callback,"onHorizontalMove",new XC_MethodHook(){
-                @Override protected void beforeHookedMethod(MethodHookParam param) {
+            Xp.hookAllMethods(callback,"onHorizontalMove",new Xp.MethodHook(){
+                @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
                     try {
                         if (deformOff()||!liquid()||!locked())return;
                         if (param.args==null||param.args.length!=1||!(param.args[0] instanceof Float))return;
@@ -239,7 +236,7 @@ final class KeyguardTouchRelay {
      * notifications keep working; the moment the drag is recognised we cancel the gesture for the
      * subtree, which returns the panel to rest instead of dismissing the keyguard.
      */
-    private static void gate(XC_MethodHook.MethodHookParam param,MotionEvent event) {
+    private static void gate(Xp.MethodHookParam param,MotionEvent event) {
         View view=param.thisObject instanceof View?(View)param.thisObject:null;
         if (view==null)return;
         int action=event.getActionMasked();
@@ -412,7 +409,7 @@ final class KeyguardTouchRelay {
 
     private static android.app.Application application() {
         try {
-            Object value=de.robv.android.xposed.XposedHelpers.callStaticMethod(
+            Object value=Xp.callStaticMethod(
                     Class.forName("android.app.ActivityThread"),"currentApplication");
             if (value instanceof android.app.Application)return (android.app.Application)value;
         } catch (Throwable ignored) {}

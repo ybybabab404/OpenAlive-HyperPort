@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.aliveclean" android:versionCode="58" android:versionName="0.5.0-preview">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.aliveclean" android:versionCode="59" android:versionName="0.6.0-preview">
   <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="35"/>
   <uses-permission android:name="android.permission.SET_WALLPAPER"/>
   <uses-permission android:name="android.permission.AMBIENT_WALLPAPER"/>
@@ -56,7 +56,7 @@
     <activity android:screenOrientation="portrait" android:name=".FrameCropActivity" android:exported="false" android:theme="@android:style/Theme.Material.NoActionBar"/>
     <activity android:screenOrientation="portrait" android:name=".PhotoCropActivity" android:exported="false" android:theme="@android:style/Theme.Material.NoActionBar"/>
     <provider android:name=".SceneProvider" android:authorities="org.aliveclean.scene" android:exported="true" android:permission="android.permission.STATUS_BAR"/>
-    <provider android:name=".NativeClockStatusProvider" android:authorities="org.aliveclean.clock.runtime" android:exported="true" android:directBootAware="true"/>
+    <provider android:name=".ModuleActivationProvider" android:authorities="org.aliveclean.clock.runtime" android:exported="true" android:directBootAware="true"/>
     <service android:name=".CleanWallpaper" android:exported="true" android:permission="android.permission.BIND_WALLPAPER">
       <intent-filter><action android:name="android.service.wallpaper.WallpaperService"/></intent-filter>
       <meta-data android:name="android.service.wallpaper" android:resource="@xml/wallpaper"/>

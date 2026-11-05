@@ -23,6 +23,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -30,12 +31,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
-APK = DIST / "HyperAlive-0.5.0-preview-arm64-v8a.apk"
+MANIFEST = ROOT / "app" / "AndroidManifest.xml"
+
+
+def app_version() -> str:
+    match = re.search(r'android:versionName="([^"]+)"', MANIFEST.read_text(encoding="utf-8"))
+    if not match:
+        raise SystemExit(f"cannot read versionName from {MANIFEST}")
+    return match.group(1)
+
+
+APK = DIST / f"HyperAlive-{app_version()}-arm64-v8a.apk"
 STAMP = ROOT / "build" / "release" / ".deploy-stamp.json"
 ADB = Path(os.environ.get("ANDROID_HOME", r"C:\Users\ybybabab\AppData\Local\Android\Sdk")) / "platform-tools" / "adb.exe"
 REMOTE = "/data/local/tmp/ha.apk"
 
-WIRELESS = ["10.10.57.66:39795", "10.20.2.254:39795", "10.11.48.149:39795"]
+WIRELESS = ["10.10.8.91:39795", "10.10.57.66:39795", "10.20.2.254:39795", "10.11.48.149:39795"]
 
 
 def run(args, **kwargs):

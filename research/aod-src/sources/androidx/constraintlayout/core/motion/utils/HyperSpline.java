@@ -1,8 +1,0 @@
-package androidx.constraintlayout.core.motion.utils;
-
-/* JADX INFO: loaded from: classes.dex */
-public class HyperSpline {
-
-    public static class Cubic {
-    }
-}

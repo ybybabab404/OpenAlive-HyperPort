@@ -1,8 +1,0 @@
-package androidx.appsearch.app;
-
-/* JADX INFO: loaded from: classes.dex */
-public interface DocumentClassFactory<T> {
-    Object fromGenericDocument(GenericDocument genericDocument, DocumentClassMappingContext documentClassMappingContext);
-
-    String getSchemaName();
-}

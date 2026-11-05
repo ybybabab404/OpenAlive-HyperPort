@@ -1,9 +1,0 @@
-package io.reactivex.rxjava3.internal.observers;
-
-import java.util.concurrent.atomic.AtomicInteger;
-
-/* JADX INFO: compiled from: QueueDrainObserver.java */
-/* JADX INFO: loaded from: classes2.dex */
-class QueueDrainSubscriberWip extends QueueDrainSubscriberPad0 {
-    public final AtomicInteger wip = new AtomicInteger();
-}

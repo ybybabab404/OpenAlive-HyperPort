@@ -51,6 +51,7 @@ public final class SceneApply {
             System.out.println("SCENE_APPLIED");
             System.exit(0);
         } catch (Throwable error) {
+            error.printStackTrace(System.out);
             System.out.println("SCENE_FAILED " + error);
             System.exit(1);
         }

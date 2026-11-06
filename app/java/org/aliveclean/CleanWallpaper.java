@@ -31,6 +31,7 @@ public final class CleanWallpaper extends WallpaperService {
         boolean regionObserverRegistered,receivedLayout;
         boolean wallpaperVisible,renderVisible;
         int lastDisplayState=android.view.Display.STATE_UNKNOWN;
+        int lastRotation=-1;
         boolean dimObserverRegistered;
         int lastSentMode=-1;
         boolean screenOn=true;
@@ -71,7 +72,21 @@ public final class CleanWallpaper extends WallpaperService {
         // while isKeyguardLocked() still reports true), so the scene is re-derived a few times.
         final BroadcastReceiver state=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent intent){
             String action=intent==null?null:intent.getAction();
-            if(Intent.ACTION_CONFIGURATION_CHANGED.equals(action))readWallpaperDim();
+            if(Intent.ACTION_CONFIGURATION_CHANGED.equals(action)){
+                readWallpaperDim();
+                // Rotation swaps the buffers behind the wallpaper surface while the Java Surface
+                // object stays "valid", so every later swap is dropped: the window falls back to
+                // DRAW_PENDING, composes black, and the launcher's gesture transition loses its
+                // wallpaper target (the back/home swipe then only vibrates). Rebuild the EGL stack
+                // on the holder's current surface whenever the display rotation actually changed.
+                android.view.Display d=engineDisplay();
+                int rotation=d==null?-1:d.getRotation();
+                // Do not tear the EGL stack down on a delayed timer: onSurfaceChanged already
+                // rebuilds it through attachFresh. A second teardown 350 ms later left the
+                // wallpaper without a buffer exactly when the user starts the gesture.
+                if(rotation!=lastRotation)lastRotation=rotation;
+                if(renderer!=null)renderer.poke();
+            }
             if(Intent.ACTION_SCREEN_OFF.equals(action)){
                 screenOn=false;ambient=true;settleToken++;
                 panelDark=true;cancelLockGrace();
@@ -257,16 +272,33 @@ public final class CleanWallpaper extends WallpaperService {
         @Override public void onSurfaceChanged(SurfaceHolder h,int format,int w,int height){
             super.onSurfaceChanged(h,format,w,height);
             {if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Surface changed "+w+"x"+height);}
+            android.graphics.Rect frame=h.getSurfaceFrame();
+            android.util.Log.i(TAG,"surface "+w+"x"+height+" frame="+frame.width()+"x"+frame.height()
+                    +" valid="+h.getSurface().isValid()+" display="+engineDisplayId());
             // Attach first. attach() posts a runnable that tears the previous scene down and rebuilds
             // it from the renderer's current mode, so a mode sent before it is what the new surface
             // starts in — a surface rebuilt at the lock composition has no transition left to play,
             // which is exactly the jump this wake-up used to show. Program the AOD composition on
             // the fresh surface instead, then let update() animate away from it.
-            renderer.attach(h.getSurface(),w,height);
+            // attachFresh always tears down the previous EGLSurface and context. A rotation can
+            // return the same Java Surface object with the same reported size while its buffer
+            // queue is new; the old early-return then kept swapping into a dead queue, so the
+            // wallpaper window never got a frame and stayed DRAW_PENDING.
+            renderer.attachFresh(h.getSurface(),w,height);
             if(!isPreview()&&panelDark)renderer.mode(0,false);
             lastSentMode=-1;
             update("surface");
             readOfficialRegion();
+        }
+        // The framework calls this when it needs the wallpaper redrawn (e.g. after a rotation
+        // transition). The base Engine implementation is empty; without this the window can stay
+        // DRAW_PENDING forever when onSurfaceChanged's sizes happen to match stale bookkeeping.
+        @Override public void onSurfaceRedrawNeeded(SurfaceHolder h){
+            super.onSurfaceRedrawNeeded(h);
+            android.graphics.Rect frame=h.getSurfaceFrame();
+            android.util.Log.i(TAG,"redraw needed frame="+frame.width()+"x"+frame.height()
+                    +" valid="+h.getSurface().isValid()+" display="+engineDisplayId());
+            renderer.redraw(h.getSurface(),frame.width(),frame.height());
         }
         private void refreshVisibility(){
             android.view.Display display=engineDisplay();
@@ -291,6 +323,9 @@ public final class CleanWallpaper extends WallpaperService {
             android.view.Display d=engineDisplay();
             if(d!=null&&d.getState()!=android.view.Display.STATE_OFF)screenOn=true;
             update("visible");settle("visible");refreshVisibility();
+            // Becoming visible again after a rotation can arrive with a surface that never got a
+            // buffer; draw one frame immediately so the layer stops being DRAW_PENDING.
+            renderer.poke();
         }
         // Framework @SystemApi callback: absent from the public SDK's stubs.
         public void onAmbientModeChanged(boolean inAmbientMode,long duration){ambient=inAmbientMode;if(inAmbientMode)panelDark=true;{if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Ambient="+ambient);}update("ambient="+inAmbientMode);refreshVisibility();}

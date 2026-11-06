@@ -40,6 +40,9 @@ final class RenderLoop {
     private boolean framePosted;
     private long frameTime;
     private int photo,decorator,width,height,mode=1;
+    private int attachedWidth,attachedHeight;
+    private int surfaceGeneration;
+    private boolean forceFrame;
     private final int[] auxiliary=new int[6];
     private int homeWidth,homeHeight;
     private float aspect=1;
@@ -80,7 +83,70 @@ final class RenderLoop {
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener changes=(p,key)->reload();
     RenderLoop(Context context){this(context,SceneOptions.APPLIED);}
     RenderLoop(Context context,String name){Context app=context.getApplicationContext();this.context=app!=null?app:context;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
-    void attach(Surface surface,int w,int h){handler.post(()->{release();if(!surface.isValid()||w<1||h<1)return;try{init(surface,w,h);schedule();}catch(Exception e){Log.e("AliveClean","Renderer initialization failed",e);release();}});}
+    void attach(Surface surface,int w,int h){queueAttach(surface,w,h,false);}
+    // A rotation can hand back the very same Surface object with the very same reported size while
+    // the buffer queue behind it has been replaced. Reusing the old EGLSurface then swaps into a
+    // dead queue: no frame ever reaches the wallpaper window, it stays DRAW_PENDING and the
+    // launcher's gesture transition never becomes ready. attachFresh never reuses an EGLSurface.
+    void attachFresh(Surface surface,int w,int h){queueAttach(surface,w,h,true);}
+    private void queueAttach(Surface surface,int w,int h,boolean fresh){
+        int generation=++surfaceGeneration;
+        handler.post(()->attach(surface,w,h,0,fresh,generation));
+    }
+    // onSurfaceRedrawNeeded: the framework explicitly asks for a frame. Reuse the current EGL
+    // surface only when it still matches the requested size; otherwise rebuild from scratch.
+    void redraw(Surface surface,int w,int h){redraw(surface,w,h,0);}
+    private void redraw(Surface surface,int w,int h,int attempt){
+        int generation=++surfaceGeneration;
+        handler.post(()->{
+            if(generation!=surfaceGeneration){Log.w("AliveClean","redraw stale generation "+generation+" != "+surfaceGeneration);return;}
+            // A rotation briefly reports an invalid surface or 0x0 before the new buffer queue
+            // exists. Releasing a working renderer here would kill the only frame source, so
+            // wait for a usable surface instead of rebuilding into an exception.
+            if(!surface.isValid()||w<1||h<1){
+                if(attempt<20&&!closed){Log.w("AliveClean","redraw retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->redraw(surface,w,h,attempt+1),50);}
+                else Log.w("AliveClean","redraw skipped "+w+"x"+h+" valid="+surface.isValid());
+                return;
+            }
+            if(surface==attachedSurface&&w==attachedWidth&&h==attachedHeight&&(scene!=0||cosmic!=null||vivo!=null)){
+                Log.i("AliveClean","redraw poke "+w+"x"+h+" valid="+surface.isValid());
+                forceFrame=true;pacer.reset();schedule();return;
+            }
+            Log.i("AliveClean","redraw rebuild "+w+"x"+h+" attached="+attachedWidth+"x"+attachedHeight+" valid="+surface.isValid());
+            release();
+            try{init(surface,w,h);}catch(Exception e){Log.e("AliveClean","Renderer redraw failed",e);release();return;}
+            forceFrame=true;pacer.reset();schedule();
+        });
+    }
+    private void attach(Surface surface,int w,int h,int attempt,boolean fresh,int generation){handler.post(()->{
+        // Check the surface before touching the live renderer: a rotation hands over a surface
+        // that is briefly invalid, and the old order (release first, validate second) destroyed
+        // a healthy renderer and returned without ever retrying, which left the wallpaper black.
+        // A rotation's surface can stay invalid for a few frames, so retry instead of giving up:
+        // the window only becomes visible once it holds a buffer, and a surface we abandoned keeps
+        // the wallpaper layer DRAW_PENDING for good — which is what stalled the launcher's
+        // gesture transitions in landscape.
+        if(generation!=surfaceGeneration){Log.w("AliveClean","attach stale generation "+generation+" != "+surfaceGeneration);return;}
+        if(!surface.isValid()||w<1||h<1){
+            if(attempt<40&&!closed){Log.w("AliveClean","attach retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->attach(surface,w,h,attempt+1,fresh,generation),50);}
+            else Log.w("AliveClean","attach skipped "+w+"x"+h+" valid="+surface.isValid());
+            return;
+        }
+        if(!fresh&&surface==attachedSurface&&w==attachedWidth&&h==attachedHeight&&(scene!=0||cosmic!=null||vivo!=null)){pacer.reset();schedule();return;}
+        release();
+        try{init(surface,w,h);}catch(Exception e){Log.e("AliveClean","Renderer initialization failed",e);release();return;}
+        // A wallpaper window only turns visible after its surface holds a buffer, while the scene
+        // only draws when the framework reports it visible: waiting for onVisibilityChanged(true)
+        // here deadlocks, the window stays DRAW_PENDING and the wallpaper composes black. Draw one
+        // frame on every (re)attach so a fresh or rotated surface always has content.
+        forceFrame=true;pacer.reset();schedule();
+    });}
+    // Draw one frame even when the framework has not reported the engine visible yet. A rotation
+    // can leave the surface without a buffer, and an empty surface keeps the wallpaper window
+    // invisible forever, so the scene gets poked whenever the display configuration changes.
+    void poke(){handler.post(()->{forceFrame=true;pacer.reset();schedule();});}
+    // rebuild() removed: a delayed second teardown raced onSurfaceChanged's attachFresh and left
+    // the wallpaper without a buffer for 350 ms right when the rotation gesture starts.
     void touch(int action,float x,float y){handler.post(()->{if(vivo!=null)vivo.touch(action,x,y);if(cosmic!=null&&action==0){cosmic.interaction();schedule();}});}
     void vivoDarkWallpaper(boolean dark){handler.post(()->{vivoDarkWallpaper=dark;if(vivo!=null){vivo.darkWallpaper(dark,renderingVisible());schedule();}});}
     void vivoCrop(float x,float y,float zoom){
@@ -163,7 +229,7 @@ final class RenderLoop {
             if(surface!=null&&surface.isValid()){init(surface,width,height);schedule();}return;
         }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){Log.e("AliveClean","Scene reload failed",e);release();}}
     void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
-    private void schedule(){if(renderingVisible()&&(scene!=0||cosmic!=null||vivo!=null)&&choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}}
+    private void schedule(){if((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)&&choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}}
     private void onVsync(long time){framePosted=false;frameTime=time;handler.post(renderTask);}
     private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);}
     private void updateCosmicLifecycle(){
@@ -251,7 +317,7 @@ final class RenderLoop {
     private void clearAuxiliary(){GLES30.glDeleteTextures(auxiliary.length,auxiliary,0);java.util.Arrays.fill(auxiliary,0);}
     private void init(Surface surface,int w,int h)throws IOException{
         SceneOptions options=new SceneOptions(preferences);attachedSurface=surface;
-        width=w;height=h;display=EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
+        width=w;height=h;attachedWidth=w;attachedHeight=h;display=EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
         int[] version=new int[2];if(!EGL14.eglInitialize(display,version,0,version,1))throw new IllegalStateException("eglInitialize");
         EGLConfig[] configs=new EGLConfig[1];int[] count=new int[1];
         int[] attrs={EGL14.EGL_RENDERABLE_TYPE,0x40,EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,EGL14.EGL_DEPTH_SIZE,options.cosmic!=0?16:0,EGL14.EGL_NONE};
@@ -260,6 +326,10 @@ final class RenderLoop {
         egl=EGL14.eglCreateContext(display,configs[0],EGL14.EGL_NO_CONTEXT,new int[]{EGL14.EGL_CONTEXT_CLIENT_VERSION,3,EGL14.EGL_NONE},0);
         window=options.vivo!=null?VivoColorSpace.window(display,configs[0],surface):EGL14.eglCreateWindowSurface(display,configs[0],surface,new int[]{EGL14.EGL_NONE},0);
         if(!EGL14.eglMakeCurrent(display,window,window,egl))throw new IllegalStateException("eglMakeCurrent");
+        int[] eglW=new int[1],eglH=new int[1];
+        EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,eglW,0);
+        EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,eglH,0);
+        Log.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid());
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}
         catch(Exception missing){
@@ -311,8 +381,11 @@ final class RenderLoop {
         return ids[0];
     }
     private void render(long time){
-        if(!renderingVisible()||(scene==0&&cosmic==null&&vivo==null))return;
-        if(vivo!=null){try{vivo.draw();if(!EGL14.eglSwapBuffers(display,window))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive())schedule();}catch(Exception e){Log.e("AliveClean","Vivo frame failed",e);release();}return;}
+        // A forced frame is the one that gives a fresh surface its first buffer; it has to run
+        // even though the framework still reports the wallpaper invisible.
+        boolean forced=forceFrame;forceFrame=false;
+        if((!renderingVisible()&&!forced)||(scene==0&&cosmic==null&&vivo==null))return;
+        if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){Log.e("AliveClean","Vivo frame failed",e);release();}return;}
         if(cosmic!=null){
             try{
                 boolean continuous=preview||(mode==0?cosmicContinuousAod:cosmicContinuousHome);
@@ -320,9 +393,9 @@ final class RenderLoop {
                 cosmic.motion().advance(time,speed);
                 boolean ownsTiming=cosmic instanceof FlymeVideoRenderer||cosmic instanceof StereoRenderer;
                 boolean moving=cosmic.motion().active()||(!ownsTiming&&(continuous||time<cosmicUntil));
-                if(pacer.due(time)||!moving){
+                if(forced||pacer.due(time)||!moving){
                     cosmic.render();
-                    if(!EGL14.eglSwapBuffers(display,window))throw new IllegalStateException("Cosmic EGL swap failed");
+                    if(!swap("cosmic"))throw new IllegalStateException("Cosmic EGL swap failed");
                 }
                 if(moving)schedule();
             }catch(Exception e){Log.e("AliveClean","Cosmic frame failed",e);release();}
@@ -342,19 +415,24 @@ final class RenderLoop {
             }
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;Log.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
-            if(pacer.due(time)||!moving){
+            if(forced||pacer.due(time)||!moving){
                 if(!NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures))throw new IllegalStateException("Invalid texture effect packet");
                 if(!NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base))throw new IllegalStateException("Invalid native frame packet");
-                if(!EGL14.eglSwapBuffers(display,window))throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
+                if(!swap("native"))throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
                     if(Diagnostics.TRACE){long wait=SystemClock.uptimeMillis()-frameSample.capturedAt;if(wait>80)Log.i("AliveClean","Frame sample mask="+frameSample.mask+" waitMs="+wait);}
                     frameSample.clear();
                 }
             }
-            if(moving||frameSample.pending||resumedSample)schedule();
+            if(moving||frameSample.pending||resumedSample||forced)schedule();
         }catch(Exception e){Log.e("AliveClean","Frame failed",e);release();}
     }
     private void closeFrame(){if(textureMotion!=null){textureMotion.close();textureMotion=null;}if(scene!=0)reportClock(false);frameSample.clear();if(frameMotion!=null){frameMotion.close();frameMotion=null;}if(masks!=null){masks.close();masks=null;}}
-    private void release(){stopFrames();if(vivo!=null){vivo.close();vivo=null;}closeCosmic();handler.removeCallbacks(reloadTask);closeFrame();if(motion!=null){motion.close();motion=null;}if(display!=EGL14.EGL_NO_DISPLAY){if(scene!=0){NativeScene.destroy(scene);scene=0;}clearAuxiliary();GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);EGL14.eglTerminate(display);EGL14.eglReleaseThread();}display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;window=EGL14.EGL_NO_SURFACE;}
+    private boolean swap(String tag){
+        boolean ok=EGL14.eglSwapBuffers(display,window);
+        if(!ok)Log.e("AliveClean","eglSwapBuffers failed "+tag+" err="+EGL14.eglGetError()+" size="+attachedWidth+"x"+attachedHeight);
+        return ok;
+    }
+    private void release(){stopFrames();if(vivo!=null){vivo.close();vivo=null;}closeCosmic();handler.removeCallbacks(reloadTask);closeFrame();if(motion!=null){motion.close();motion=null;}if(display!=EGL14.EGL_NO_DISPLAY){if(scene!=0){NativeScene.destroy(scene);scene=0;}clearAuxiliary();GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);EGL14.eglTerminate(display);EGL14.eglReleaseThread();}display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;window=EGL14.EGL_NO_SURFACE;attachedSurface=null;attachedWidth=attachedHeight=0;}
 }

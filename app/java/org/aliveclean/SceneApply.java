@@ -27,6 +27,8 @@ public final class SceneApply {
         reader.join(1000);
         String output; synchronized (result) { output = result.toString(); }
         if (process.exitValue() != 0 || !output.contains("SCENE_APPLIED")) throw new java.io.IOException("系统未完成壁纸应用：" + output.trim());
+        // Whole-process freeze protection is intentionally disabled in this test build: as an FGS
+        // it still left oom_score_adj at 651, inside the freezer threshold, and would mask surface issues.
     }
 
     public static void main(String[] args) {

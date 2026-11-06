@@ -6,7 +6,7 @@ import java.util.LinkedHashSet;
 
 /** Authenticated scene delivery and frame completion feedback; no per-frame IPC. */
 final class SceneChannel {
-    interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}}
+    interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}default void fingerprint(long time){}}
     private static final LinkedHashSet<Listener> listeners=new LinkedHashSet<>();
     private static Messenger messenger;
     private static volatile Messenger clockFeedback;
@@ -15,6 +15,8 @@ final class SceneChannel {
     private static Bundle lastScene;
     private static AodRegion lastArea;
     private static boolean lastBackdrop;
+    /** uptimeMillis of the last successful fingerprint authentication reported by SystemUI. */
+    private static long lastFingerprint;
     private static int senderUid=-1;
     static int touchTrace=6;
     static synchronized IBinder connect(Context context,IBinder source,int api,IBinder feedback)throws Exception {
@@ -39,6 +41,12 @@ final class SceneChannel {
                     if(action<0||x<0f||y<0f)return true;
                     if(touchTrace>0){touchTrace--;android.util.Log.i("AliveClean","lock touch relayed action="+action+" x="+x+" y="+y);}
                     for(Listener l:listeners)l.touch(action,x,y);
+                }else if(message.what==5){
+                    long time=b.getLong("time",0);
+                    if(time<=0||time<lastFingerprint)return true;
+                    lastFingerprint=time;
+                    android.util.Log.i("AliveClean","fingerprint signal t="+time+" listeners="+listeners.size());
+                    for(Listener l:listeners)l.fingerprint(time);
                 }else if(message.what==3){
                     boolean covered=b.getBoolean("covered",false);
                     if(covered==lastBackdrop)return true;lastBackdrop=covered;
@@ -69,6 +77,7 @@ final class SceneChannel {
         listeners.add(listener);
         if(lastArea!=null)listener.region(lastArea);
         if(lastScene!=null)listener.scene(lastScene.getInt("mode"),false,lastScene.getLong("time"),lastScene.getInt("phase",0),lastScene.getLong("clock_wake",0),lastScene.getFloat("vivo_night_level",Float.NaN),lastScene.getFloat("vivo_aod_mask",Float.NaN));
+        if(lastFingerprint!=0)listener.fingerprint(lastFingerprint);
         listener.backdrop(lastBackdrop);
     }
     static void remove(Listener listener){listeners.remove(listener);}

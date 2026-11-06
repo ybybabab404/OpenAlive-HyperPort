@@ -30,6 +30,7 @@ final class KeyguardTouchRelay {
     private static long liquidCheckedAt;
     private static boolean liquidApplied;
     private static boolean channelFailed;
+    private static long signalRetryAt;
     private static long lastMove;
     private static int forwarded;
     private static int consumers;
@@ -53,6 +54,7 @@ final class KeyguardTouchRelay {
         hookClockViews(loader);
         hookPropertyWrites(loader);
         hookLockDeform(loader);
+        hookFingerprint(loader);
         int hooked=0;
         for (String name:SHADE_VIEWS) {
             Class<?> view=Xp.findClassIfExists(name,loader);
@@ -391,8 +393,56 @@ final class KeyguardTouchRelay {
         throw new IllegalStateException("no application in this process");
     }
 
-    private static Messenger messenger() {
-        if (channel!=null)return channel;
+    /** Successful fingerprint authentication is the only signal that tells a screen-off wake which
+     *  is heading straight to the home screen apart from one that will stay on the lock screen.
+     *  KeyguardUpdateMonitor.onFingerprintAuthenticated(int,boolean) runs on the main thread as soon
+     *  as the HAL reports the match, before the keyguard is dismissed, so it is forwarded verbatim
+     *  with an uptimeMillis stamp and the wallpaper decides how long to trust it. */
+    private static void hookFingerprint(ClassLoader loader) {
+        try {
+            Class<?> monitor=Xp.findClassIfExists("com.android.keyguard.KeyguardUpdateMonitor",loader);
+            if (monitor==null) {Log.w(TAG,"fingerprint hook: KeyguardUpdateMonitor missing");return;}
+            java.util.Set<Xp.Unhook> set=Xp.hookAllMethods(monitor,"onFingerprintAuthenticated",new Xp.MethodHook(){
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    int user=-1;
+                    boolean strong=false;
+                    try {
+                        if (param.args!=null&&param.args.length>0&&param.args[0] instanceof Integer) user=(Integer)param.args[0];
+                        if (param.args!=null&&param.args.length>1&&param.args[1] instanceof Boolean) strong=(Boolean)param.args[1];
+                    } catch (Throwable ignored) {}
+                    reportFingerprint(user,strong);
+                }
+            });
+            Log.i(TAG,"fingerprint hook installed methods="+(set==null?0:set.size()));
+        } catch (Throwable error) {Log.w(TAG,"fingerprint hook unavailable",error);}
+    }
+
+    private static void reportFingerprint(int user,boolean strong) {
+        long now=SystemClock.uptimeMillis();
+        Log.i(TAG,"fingerprint authenticated user="+user+" strong="+strong+" t="+now);
+        Messenger target=signalChannel();
+        if (target==null) return;
+        Message message=Message.obtain();
+        message.what=5;
+        Bundle data=new Bundle();
+        data.putLong("time",now);
+        message.setData(data);
+        try {target.send(message);}
+        catch (Throwable dead) {channel=null;Log.w(TAG,"fingerprint channel dropped",dead);}
+    }
+
+    /** Unlike the touch path this must survive the wallpaper process not being bound yet, so a
+     *  failed connect is retried at most every few seconds instead of being latched forever. */
+    private static Messenger signalChannel() {
+        if (channel!=null) return channel;
+        long now=SystemClock.uptimeMillis();
+        if (now<signalRetryAt) return null;
+        signalRetryAt=now+3000L;
+        channelFailed=false;
+        return messenger();
+    }
+
+    private static Messenger messenger() {        if (channel!=null)return channel;
         if (channelFailed)return null;
         try {
             ContentResolver resolver=application().getContentResolver();

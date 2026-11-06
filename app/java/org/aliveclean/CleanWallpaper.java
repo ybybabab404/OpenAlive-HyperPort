@@ -14,12 +14,23 @@ public final class CleanWallpaper extends WallpaperService {
      *  keyguard settles, then a 1s beat for at most SETTLE_LIMIT steps. */
     static final long[] SETTLE_DELAYS={0,80,160,280,450,700,1000,1400,1900,2500,3200};
     static final int SETTLE_LIMIT=40;
-    /** Wake-up hold window: the AOD composition is kept while the keyguard is sampled every
-     *  WAKE_POLL ms, so a wake that unlocks before the window closes goes straight 0->2 while a real
-     *  lock stay commits 0->1. The window sits just above the fastest measured direct-to-home unlock
-     *  (~340ms) so that path stays a single 0->2 without a 1 frame. See update(). */
-    static final long WAKE_DWELL=450L;
+    /** Wake-up hold floor. The hold used to be a fixed >=200ms guess at how long a fingerprint
+     *  unlock takes; SystemUI now reports the authentication itself, so a wake with no such report
+     *  is a genuine lock-screen stay and commits 0->1 at the first sample. See FINGERPRINT_WINDOW. */
+    static final long WAKE_DWELL=0L;
     static final long WAKE_POLL=50L;
+    /** A successful fingerprint authentication is the only case where a screen-off wake really is
+     *  heading for the home screen. SystemUI reports the authentication timestamp over the scene
+     *  channel; while the wake-up hold is younger than this window, measured from that timestamp,
+     *  the AOD composition is kept and the keyguard is sampled instead of committing 0->1, so the
+     *  unlock lands as a single 0->2 with no lock frame. A stale report (older than the window)
+     *  cannot leak into a later wake-up. */
+    static final long FINGERPRINT_WINDOW=900L;
+    /** After committing the home scene, ignore a reconcile that reads the keyguard as locked again
+     *  for this long: that is the sleep transition re-locking before SCREEN_OFF arrives, and painting
+     *  the lock composition there would flash it over the home screen. Measured re-lock samples land
+     *  32-890ms after the 0->2 commit; SCREEN_OFF commits the AOD well inside this window. */
+    static final long HOME_GRACE=1500L;
     /** True while our wallpaper service is bound, i.e. while it really is the current wallpaper. */
     static volatile boolean RUNNING;
 
@@ -48,6 +59,15 @@ public final class CleanWallpaper extends WallpaperService {
          *  framework has not reported the wallpaper as visible yet, so the animator cannot end
          *  up running on a renderer that is paused for lack of frames. */
         long wakeUntil;
+        /** uptimeMillis of the last successful fingerprint authentication reported by SystemUI, or
+         *  0 while none was ever reported. Only trusted inside FINGERPRINT_WINDOW. */
+        long fingerprintAt;
+        /** uptimeMillis of the last 0->2 / 1->2 commit, or 0 while the home scene was never shown.
+         *  While the panel is still on, a reconcile that reads the keyguard as locked again right
+         *  after that commit is the lock re-engaging during the sleep transition, not a real
+         *  2->1: painting the lock composition there flashes it over the home screen, so a short
+         *  grace keeps mode 2 until SCREEN_OFF commits the AOD. */
+        long homeAt;
         int settleToken,settleStep;
         final android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
         final android.database.ContentObserver dimSetting=new android.database.ContentObserver(new android.os.Handler(android.os.Looper.getMainLooper())){
@@ -137,6 +157,16 @@ public final class CleanWallpaper extends WallpaperService {
             if(region!=null&&region.displayId==display){receivedLayout=true;renderer.aodRegion(region,display);}
         }
         @Override public void backdrop(boolean covered){if(!isPreview()&&engineDisplayId()==android.view.Display.DEFAULT_DISPLAY)renderer.backdrop(covered);}
+        /** SystemUI reports the moment a fingerprint authentication succeeded, i.e. before the
+         *  keyguard is dismissed. Recorded so a wake-up that follows immediately can hold the AOD
+         *  composition instead of guessing with a fixed dwell; and if the panel is already on, the
+         *  same report drives a 1->2 as soon as the keyguard lets go. */
+        @Override public void fingerprint(long time){
+            fingerprintAt=time;
+            android.util.Log.i(TAG,"scene fingerprint screenOn="+screenOn+" ambient="+ambient
+                    +" mode="+lastSentMode+" locked="+keyguardLocked());
+            if(!isPreview()&&screenOn){update("fingerprint");settle("fingerprint");}
+        }
         @Override public void disconnected(){renderer.backdrop(false);scenesState.disconnect();update("disconnected");}
         private android.view.Display engineDisplay(){
             if(android.os.Build.VERSION.SDK_INT>=30)return getDisplayContext().getDisplay();
@@ -202,33 +232,41 @@ public final class CleanWallpaper extends WallpaperService {
                 // Wake-up hold. SystemUI delivers the same wake sequence whether the user will linger
                 // on the lock screen or pass straight through to the home screen — the waking-up
                 // reason, keyguard showing state and every lifecycle callback are identical, only the
-                // unlock timing differs. So instead of committing the 0->1 scene the instant the panel
-                // lights up, keep painting the AOD composition and sample the keyguard at a fine
-                // interval: an unlock inside the hold window means this was a screen-off-to-home wake,
-                // so the scene goes straight 0->2 with no lock frame; if the keyguard is still locked
-                // when the window closes the user really sat on the lock screen, so it commits 0->1 and
-                // the later unlock takes it 1->2. The window sits just above the fastest measured
-                // direct-to-home unlock (~340ms) so that path stays a single 0->2.
+                // unlock timing differs. What does tell them apart is a successful fingerprint
+                // authentication, which SystemUI reports on the scene channel before the keyguard is
+                // dismissed. With a fresh report the hold keeps painting the AOD composition and
+                // samples the keyguard until it unlocks, so the wake lands as a single 0->2 with no
+                // lock frame at all. Without one the hold is zero-length and commits 0->1 at the first
+                // sample: the lock screen appears immediately, and the later unlock takes it 1->2.
                 if(!lockGraceActive){
                     lockGraceActive=true;
                     final int token=++lockGraceToken;
                     final String cause=source;
-                    final long deadline=android.os.SystemClock.uptimeMillis()+WAKE_DWELL;
+                    final long start=android.os.SystemClock.uptimeMillis();
                     handler.postDelayed(new Runnable(){
                         private final Runnable self=this;
                         @Override public void run(){
                             if(token!=lockGraceToken||renderer==null)return;
+                            long now=android.os.SystemClock.uptimeMillis();
+                            long fp=fingerprintAt;
                             if(!keyguardLocked()){
                                 lockGraceActive=false;
                                 android.util.Log.i(TAG,"scene wake hold unlocked source="+cause
-                                        +" mode="+lastSentMode+"->2 (applied)");
+                                        +" mode="+lastSentMode+"->2 (applied) heldMs="+(now-start)
+                                        +" fpMs="+(fp==0?-1:now-fp));
                                 send(2,true);
                                 return;
                             }
-                            if(android.os.SystemClock.uptimeMillis()>=deadline){
+                            // A report that lands after the wake-up (the fingerprint HAL and the
+                            // wake-up broadcast race each other) extends the hold too, so 0->1 is
+                            // never committed once the authentication is known.
+                            long deadline=start+WAKE_DWELL;
+                            if(fp!=0&&fp>start-FINGERPRINT_WINDOW)deadline=Math.max(deadline,fp+FINGERPRINT_WINDOW);
+                            if(now>=deadline){
                                 lockGraceActive=false;
                                 android.util.Log.i(TAG,"scene wake hold dwell source="+cause
-                                        +" displayOn="+displayOn()+" mode="+lastSentMode+"->1 (applied)");
+                                        +" displayOn="+displayOn()+" mode="+lastSentMode+"->1 (applied)"
+                                        +" heldMs="+(now-start)+" fpMs="+(fp==0?-1:now-fp));
                                 send(1,true);
                                 return;
                             }
@@ -237,7 +275,18 @@ public final class CleanWallpaper extends WallpaperService {
                     },WAKE_POLL);
                 }
                 android.util.Log.i(TAG,"scene reconcile source="+source+" ambient="+ambient+" locked="+locked
-                        +" authoritative="+scenesState.authoritative()+" mode="+before+"->1 (holding)");
+                        +" authoritative="+scenesState.authoritative()+" mode="+before+"->1 (holding)"
+                        +" fpMs="+(fingerprintAt==0?-1:android.os.SystemClock.uptimeMillis()-fingerprintAt));
+                return;
+            }
+            long nowMs=android.os.SystemClock.uptimeMillis();
+            if(!isPreview()&&mode==1&&lastSentMode==2&&homeAt!=0&&nowMs-homeAt<HOME_GRACE){
+                // The sleep transition re-locks the keyguard a moment before SCREEN_OFF arrives, so a
+                // settle step taken in between reads locked=true while the panel is still showing the
+                // home screen. Painting 1 there flashes the lock composition over the home screen;
+                // the screen-off broadcast commits the AOD right after anyway, so hold mode 2.
+                android.util.Log.i(TAG,"scene reconcile source="+source+" mode=2->1 (suppressed, home for "
+                        +(nowMs-homeAt)+"ms)");
                 return;
             }
             cancelLockGrace();
@@ -252,6 +301,7 @@ public final class CleanWallpaper extends WallpaperService {
             int from=lastSentMode;
             boolean wasDark=panelDark;
             lastSentMode=mode;
+            if(mode==2)homeAt=android.os.SystemClock.uptimeMillis();
             if(mode!=0){
                 // A non-AOD composition was committed: the panel is no longer dark, and the wake
                 // window keeps the renderer awake long enough for the 0->1 animator to finish.

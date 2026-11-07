@@ -1,8 +1,5 @@
 package org.aliveclean;
 
-/** One continuous wallpaper reveal, using HyperOS's full-AOD spring timings.
- * Night dimming is part of the final target, never a second wake animation.
- */
 final class VivoWallpaperDim {
     private double value=1,target=1,velocity,omega=2*Math.PI/.5;
     private long previous;

@@ -12,7 +12,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Flyme Stereo's original four depth bands, then hole repair and scene crop. */
 final class StereoRenderer implements WallpaperRenderer {
     final StereoMotion motion;
     private AssetGl split,compose;
@@ -37,7 +36,7 @@ final class StereoRenderer implements WallpaperRenderer {
             int imageWidth=main.getWidth(),imageHeight=main.getHeight();
             upload(textures[0],main);
             Bitmap depth=bitmap(assets,"stereo/mz_stereo_depth_v"+version+".png");
-            // Original PreviewDrawer enlarges depth to the main image dimensions.
+
             if(depth.getWidth()<imageWidth){
                 Bitmap scaled=Bitmap.createScaledBitmap(depth,imageWidth,imageHeight,true);
                 if(scaled!=depth)depth.recycle();depth=scaled;
@@ -97,7 +96,7 @@ final class StereoRenderer implements WallpaperRenderer {
     }
     private static void bind(int unit,int texture){GLES30.glActiveTexture(GLES30.GL_TEXTURE0+unit);GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,texture);}
     public WallpaperMotion motion(){return motion;}
-    /** Live settings, on the render looper; defaults are sensitivity 0 and AOD on. */
+
     void configure(int sensitivity,boolean allowAod){motion.configure(sensitivity,allowAod);}
     public void render(){
         GLES30.glViewport(0,0,width,height);GLES30.glDisable(GLES30.GL_SCISSOR_TEST);

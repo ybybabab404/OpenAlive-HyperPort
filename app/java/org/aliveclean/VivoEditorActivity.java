@@ -12,7 +12,6 @@ import java.io.*;
 import java.util.*;
 import org.json.*;
 
-/** Vivo wallpaper editor; system clocks, widgets and shortcuts remain system-owned. */
 public final class VivoEditorActivity extends Activity implements TextureView.SurfaceTextureListener {
     private VivoOptions options;
     private VivoEngineRuntime runtime;
@@ -259,8 +258,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
             previousId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
             previousLockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
             if(PlatformProfile.isHyperOs(this)){
-                // HyperOS' live picker answers RESULT_CANCELED for third-party components and does not
-                // rebind an already-current one. Bind through the system-uid adapter, as MainActivity does.
+
                 awaitingApply=true;
                 android.util.Log.i("AliveClean","vivo apply via SceneApply family="+options.family);
                 new Thread(()->{

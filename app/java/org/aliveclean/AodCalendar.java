@@ -5,7 +5,6 @@ import android.icu.util.Calendar;
 import android.icu.util.TimeZone;
 import java.util.Locale;
 
-/** Calendar calculation uses the platform ICU data and the user's current time zone. */
 final class AodCalendar {
     static String lunar(long now,String zone){
         ChineseCalendar c=new ChineseCalendar(TimeZone.getTimeZone(zone),Locale.CHINA);

@@ -7,7 +7,6 @@ import android.view.*;
 import android.widget.*;
 import java.util.ArrayList;
 
-/** Bind our destinations to the original personalization home layout. */
 public class HomeActivity extends Activity {
     private SettingsUi ui;
     private HomeActivationStatus activation;
@@ -22,15 +21,14 @@ public class HomeActivity extends Activity {
             View root=ui.inflate("activity_system_customize_center",screen);
             ui.pageBackground(root);
             screen.addView(root,new LinearLayout.LayoutParams(-1,0,1));
-            // Keep native constraints; GONE rows collapse using the official chain.
+
             String[] hidden={"appearance_manage_tips",
                 "system_more_breath_lamp","system_text_wallpaper","system_more_alive","system_more_weather",
                 "system_more_selection","system_more_historical_theme","system_title_more","system_center_more","system_center_other","system_f11_layout","system_more_light_effect"};
             for(String id:hidden)ui.find(root,id).setVisibility(View.GONE);
             View manage=ui.find(root,"system_layout_manager_appearance");
-            manage.setVisibility(View.GONE); // Meizu appearance-account management is not a local destination.
-            // The native fixed-height slot reserves space for its remote preview.
-            // Our local cards already measure their own image and caption heights.
+            manage.setVisibility(View.GONE);
+
             for(String id:new String[]{"system_layout_include","system_layout_container"}){
                 View slot=ui.find(root,id);ViewGroup.LayoutParams slotLp=slot.getLayoutParams();
                 slotLp.height=ViewGroup.LayoutParams.WRAP_CONTENT;slot.setLayoutParams(slotLp);
@@ -52,9 +50,7 @@ public class HomeActivity extends Activity {
             for(java.lang.reflect.Field field:lp.getClass().getFields())if(!java.lang.reflect.Modifier.isStatic(field.getModifiers())&&field.getType().isPrimitive())field.set(vivoLp,field.get(lp));
             replaceAnchor(vivoLp,wallpaper.getId(),alive.getId());parent.addView(vivo,vivoLp);firstText(vivo).setText("Vivo Alive 壁纸");
             vivo.setOnClickListener(v->startActivity(new Intent(this,VivoLibraryActivity.class)));
-            // The original tiles are pinned to opposite screen edges, while the
-            // wallpaper bars have a centered content width. Put the original
-            // tiles in one equally divided row with that same width instead.
+
             LinearLayout shortcuts=new LinearLayout(this);shortcuts.setId(View.generateViewId());
             shortcuts.setOrientation(LinearLayout.HORIZONTAL);shortcuts.setBaselineAligned(false);
             ViewGroup.LayoutParams shortcutLp=wallpaper.getLayoutParams().getClass().getConstructor(ViewGroup.LayoutParams.class).newInstance(wallpaper.getLayoutParams());
@@ -99,8 +95,7 @@ public class HomeActivity extends Activity {
         params.topMargin=Math.round(dp*getResources().getDisplayMetrics().density);view.setLayoutParams(params);
     }
     private static void replaceAnchor(ViewGroup.LayoutParams params,int previous,int next)throws Exception{
-        // Preserve the original constraints even when the library's public fields
-        // are obfuscated. Only replace references to the known sibling view.
+
         boolean changed=false;
         for(java.lang.reflect.Field field:params.getClass().getFields())if(field.getType()==int.class&&field.getInt(params)==previous){field.setInt(params,next);changed=true;}
         if(!changed)throw new IllegalStateException("Missing original layout anchor");

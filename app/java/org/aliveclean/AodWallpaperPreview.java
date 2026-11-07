@@ -10,19 +10,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * 系统个性化页的「桌面」预览卡在第三方活壁纸下没有可用位图：
- * - com.miui.aod 的 TemplateApiImpl.getCurrentWallpaper() 会落到
- *   R.drawable.kg_wallpaper_invalid_placeholder（灰底 + 破图图标），
- *   随后被存成 templates/current/small_wallpaper_screenshot；
- * - com.android.thememanager 的 TemplateApiImpl.p() 第三方分支直接返回 uf()，
- *   同样是这张占位图，这就是卡片上看到的灰底图标块。
- *
- * 这里只替换这些兜底返回值：仅当本模块壁纸正在使用时，改用 AOD 自己已经落盘的
- * wallpaper_home（当前首页壁纸的原图）作为预览；其它任何情况都保持系统原行为。
- */
 public final class AodWallpaperPreview {
-    private static final String TAG = "HyperAliveHooks";
+    private static final String TAG = "AliveHSHooks";
     private static final String TEMPLATE_DIR =
             "/data/user_de/0/com.miui.aod/files/templates/current/";
 
@@ -63,13 +52,8 @@ public final class AodWallpaperPreview {
         }
     }
 
-    /**
-     * 主题管理器进程里，桌面预览卡不走 TemplateApiImpl.getPlaceholderWallpaper，
-     * 而是由 DeviceScreenshotHelper 截首页模板的壁纸层。主题管理器里的方法名被混淆成 ni7，
-     * 第三方活壁纸的层里没有位图，截出来就是灰底/空图。这里只替换这一个方法的返回值。
-     */
     public static void installThemeManager(ClassLoader loader) {
-        // 桌面卡走 TemplateApiImpl.uf()，与 DeviceScreenshotHelper 是否存在无关，先装。
+
         installUf(loader);
         installShots(loader);
 
@@ -110,7 +94,7 @@ public final class AodWallpaperPreview {
                             + "x" + replacement.getHeight());
                 }
             };
-            // 主题管理器里是混淆名 ni7；保留可读名做兼容，免得换版本后静默失效。
+
             int count = Xp.hookAllMethods(helper, "ni7", hook).size();
             if (count == 0) {
                 count = Xp.hookAllMethods(helper,
@@ -122,11 +106,6 @@ public final class AodWallpaperPreview {
         }
     }
 
-    /**
-     * 主题管理器「桌面」卡真正取图的是 TemplateApiImpl.p() 的第三方分支：
-     * 它不读壁纸本身，直接返回 uf()（kg_wallpaper_invalid_placeholder，灰底+图标剪影）。
-     * 这里只替换 uf() 的返回值，其它调用路径保持系统原样。
-     */
     private static void installUf(ClassLoader loader) {
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
@@ -171,12 +150,6 @@ public final class AodWallpaperPreview {
         }
     }
 
-    /**
-     * 最后一道保险：DeviceScreenshotHelper.zp() 被混淆得无法反编译，
-     * 看不清 smallWallpaper 是在哪一步塞进 Screenshots 的。直接在
-     * Screenshots.t8r()（smallWallpaper 的 getter）返回时替换，
-     * 保证 takeCaptureForMultiScreenMode 拿到的就是真实预览图。
-     */
     private static void installShots(ClassLoader loader) {
         Class<?> shots = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.Screenshots", loader);
@@ -270,5 +243,3 @@ public final class AodWallpaperPreview {
         }
     }
 }
-
-

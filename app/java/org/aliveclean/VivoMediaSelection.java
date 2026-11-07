@@ -7,7 +7,6 @@ import android.net.Uri;
 import java.io.*;
 import java.util.*;
 
-/** Imports a complete new snapshot; existing/applied media are never overwritten. */
 final class VivoMediaSelection {
     static final int WALLPAPER=10,VIDEO=11,COVER=12,ALBUM=13,COVER_VIDEO=14,ALBUM_VIDEO=15;
     static final int SLOT_IMAGE=30,SLOT_VIDEO=33;
@@ -75,7 +74,7 @@ final class VivoMediaSelection {
     private void importSlot(VivoEngineRuntime runtime,int index,boolean movie,List<Uri> uris)throws Exception{
         if(result.family!=VivoOptions.RASTER||uris.size()!=1)throw new IOException("每个位置请选择一个图片或视频");
         ensureRasterPhotos(runtime);
-        // Old two-image drafts gain a third default only when that position is edited.
+
         while(result.photos.size()<=index){
             Bitmap b=VivoImages.asset(runtime,"vivo/default/raster-"+result.photos.size()+".jpg");
             try{result.photos.add(write(b));result.rasterVideos.add("");}finally{b.recycle();}
@@ -95,7 +94,7 @@ final class VivoMediaSelection {
             try{result.photos.set(index,write(b));result.rasterVideos.set(index,"");}finally{b.recycle();}
         }
         result.slots[index]=new VivoOptions.Slot();
-        if(index>0)clearLegacyVideo(); // A content slot selects the ordered raster mode.
+        if(index>0)clearLegacyVideo();
     }
     private void ensureRasterPhotos(VivoEngineRuntime runtime)throws IOException{
         if(!result.photos.isEmpty()){while(result.rasterVideos.size()<result.photos.size())result.rasterVideos.add("");return;}

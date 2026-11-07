@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** Normalized, centre-cropped photo viewport. No edit preserves centre-cover. */
 final class PhotoViewport {
     private float imageAspect=1,viewAspect=1,zoom=1,x=.5f,y=.5f;
     private boolean measured;
@@ -26,7 +25,7 @@ final class PhotoViewport {
         if(!Float.isFinite(factor)||factor<=0||!Float.isFinite(focusX)||!Float.isFinite(focusY))return;
         float oldW=width(),oldH=height();
         zoom=Math.max(1,Math.min(8,zoom*factor));
-        // Keep the image point under the fingers fixed while changing scale.
+
         x+=(focusX-.5f)*(oldW-width());y+=(focusY-.5f)*(oldH-height());clamp();
     }
     private void clamp(){if(!measured)return;float w=width()/2,h=height()/2;x=Math.max(w,Math.min(1-w,x));y=Math.max(h,Math.min(1-h,y));}

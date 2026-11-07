@@ -8,7 +8,6 @@ import android.widget.FrameLayout;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Original HyperOS ClockBean -> ClockStyleInfo -> layout, including foreground layers. */
 final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseable {
     private final String template;
     private final int style;
@@ -33,27 +32,22 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
         scene(false,false,false);
     }
     void scene(boolean aod,boolean compact,boolean fullAod)throws Exception{
-        // Original flags: 1 AOD, 2 notification, 8 preview, 32 full AOD.
-        // Preview leaves data/settings subscription with the host.
+
         int type=8|(aod?(fullAod?32:1):0)|(compact?2:0);
         if(type==displayType)return;
         List<View> next=new ArrayList<>();
         next.add(inflate(compact?compactTemplate():template,type));
-        // Low-power AOD uses a complete SingleClock/AodClock. Only the original
-        // lock/full-AOD layouts split hours and minutes into depth layers.
+
         if((!aod||fullAod)&&!compact&&(template.equals("all_in_one")||template.equals("eastern_a")||template.equals("eastern_c")))
             next.add(inflate(template+"_minute",type));
-        // Magazine C style 5 already renders its date/week. The original
-        // editor hides the separate date layer for this style.
+
         if((!aod||fullAod)&&!compact&&template.equals("magazine_c")&&style!=5)next.add(inflate("magazine_c_date_only",type));
         removeAllViews();faces.clear();faces.addAll(next);displayType=type;
         for(View face:faces)addView(face);
         refresh(zone,format24);
     }
     private String compactTemplate(){
-        // The original factory only switches some template IDs on flag 2.
-        // Others require their explicit notification counterpart; otherwise
-        // a split hour-only view is mistaken for a complete compact clock.
+
         switch(template){
             case "all_in_one":return "all_in_one_single";
             case "classic_plus":return "classic_plus_small";
@@ -87,8 +81,7 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
         }
         beanType.getMethod("setUnablePresetData",boolean.class).invoke(bean,true);
         Object info=infoType.getMethod("convertInfoFromClockBean",Context.class,beanType,int.class).invoke(null,getContext(),bean,type);
-        // Legacy compact Info constructors accept only ClockBean and discard
-        // displayType. Both the base and classic subclass store this field.
+
         for(Class<?> owner=info.getClass();owner!=Object.class;owner=owner.getSuperclass()){
             try{java.lang.reflect.Field display=owner.getDeclaredField("displayType");display.setAccessible(true);display.setInt(info,type);}
             catch(NoSuchFieldException absent){}
@@ -98,12 +91,7 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
         int layout=(Integer)infoType.getMethod("getLayoutId").invoke(info);
         LayoutInflater inflater=LayoutInflater.from(getContext()).cloneInContext(getContext());
         {
-            // Resolve this APK's named system font from the original bundled
-            // file; the host does not register HyperOS font families.
-            // This official APK's compact XML omits the signature child while
-            // ClassicClockBaseView unconditionally dereferences it on inflation.
-            // Supply only that invisible dependency; retain its original XML,
-            // constraints, time renderer and date renderer.
+
             inflater.setFactory2(new LayoutInflater.Factory2(){
                 public View onCreateView(View parent,String name,Context context,android.util.AttributeSet attrs){
                     return onCreateView(name,context,attrs);
@@ -137,8 +125,7 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
         View face=inflater.inflate(layout,this,false);
         if(face.getClass().getName().equals("com.miui.clock.magazine.MiuiMagazineCClock")
                 ||face.getClass().getName().equals("com.miui.clock.magazine.MiuiMagazineCSingleClock")){
-            // The original binder reuses this field for weekday/style changes.
-            // Typeface.create(family) resolves only on HyperOS's system image.
+
             face.getClass().getField("mTypefaceNeueMatic").set(face,
                     ((OfficialHyperOsUi)getContext()).originalSystemFamily("miclock-neue-matic-compressed-black"));
         }
@@ -162,8 +149,7 @@ final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseabl
             for(String method:new String[]{"setPrimaryColor","setSecondaryColor","setInfoAreaColor"})
                 infoType.getMethod(method,int.class).invoke(info,value);
             face.getClass().getMethod("updateColor").invoke(face);
-            // Graffiti glyphs are tinted Drawables rebuilt by updateTime;
-            // the inherited updateColor does not rebind those images.
+
             if(template.equals("doodle"))face.getClass().getMethod("updateTime").invoke(face);
         }
         color=value;

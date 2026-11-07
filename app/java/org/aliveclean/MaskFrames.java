@@ -8,7 +8,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-/** Random-access mask data, at most four decoded frames and one active worker. */
 final class MaskFrames implements AutoCloseable {
     static final int SIZE=720,BYTES=SIZE*SIZE*3,START=61,END=62;
     private final AssetManager assets;
@@ -26,7 +25,7 @@ final class MaskFrames implements AutoCloseable {
     MaskFrames(AssetManager assets,Handler owner,Runnable ready){this(assets,owner,ready,PhotoStyle.get(1));}
     MaskFrames(AssetManager assets,Handler owner,Runnable ready,PhotoStyle style){
         this.assets=assets;this.owner=owner;this.ready=ready;size=style.size;bytes=size*size*3;start=style.frames;end=start+1;desired=start;
-        // Keep 1080px styles bounded too: two buffers, rather than four large frames.
+
         capacity=Math.max(2,Math.min(4,4*BYTES/bytes));paths=new String[end+1];
         for(int i=0;i<paths.length;i++)paths[i]="masks/"+style.folder+"/"+(i==start?"start":i==end?"end":String.format(Locale.ROOT,"%03d",i))+".rgbz";
         thread.start();worker=new Handler(thread.getLooper());
@@ -39,7 +38,7 @@ final class MaskFrames implements AutoCloseable {
         ByteBuffer value=cache.get(index);
         if(value==null&&!queued&&failures<3){queued=true;worker.post(decode);}
         if(value==null)return false;
-        // The cache lock protects a reusable buffer until GL has consumed it.
+
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,texture);value.position(0);
         int side=index==end?720:size;
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D,0,GLES30.GL_RGB,side,side,0,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,value);

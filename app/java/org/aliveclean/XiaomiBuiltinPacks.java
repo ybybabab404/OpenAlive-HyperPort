@@ -7,13 +7,10 @@ import java.security.MessageDigest;
 import org.json.*;
 import org.tukaani.xz.XZInputStream;
 
-/** Lossless, shared storage; reconstructed APKs retain their original signatures. */
 final class XiaomiBuiltinPacks {
     private static final int CHUNK_LIMIT=4*1024*1024;
     private XiaomiBuiltinPacks(){}
 
-    // Callers prepare off the UI thread. The file lock also covers other wallpaper
-    // and preview processes; a partial extraction never replaces a usable APK.
     static synchronized File prepare(Context context,XiaomiPacks.Pack pack)throws Exception {
         File directory=XiaomiPacks.directory(context),target=new File(directory,pack.digest+".apk");
         try(FileOutputStream lockStream=new FileOutputStream(new File(directory,pack.digest+".lock"),true);

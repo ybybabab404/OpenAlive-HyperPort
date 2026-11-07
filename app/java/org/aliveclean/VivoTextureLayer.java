@@ -6,7 +6,6 @@ import android.util.Size;
 import java.lang.reflect.*;
 import java.util.*;
 
-/** Implements Vivo's existing host texture protocol; the engine owns its rendering. */
 final class VivoTextureLayer implements InvocationHandler,AutoCloseable {
     final Object proxy;
     private final ArrayList<Integer> images=new ArrayList<>();
@@ -52,8 +51,7 @@ final class VivoTextureLayer implements InvocationHandler,AutoCloseable {
         }catch(Exception e){close();throw e;}
     }
     private int texture(VivoCalls api,Object render,Bitmap image)throws Exception{
-        // Vivo receives FBO textures from its photo editor (bottom-left origin),
-        // while Android bitmap uploads start at the top. Match that host contract.
+
         Matrix flip=new Matrix();flip.setScale(1,-1);
         Bitmap upload=flipY?Bitmap.createBitmap(image,0,0,image.getWidth(),image.getHeight(),flip,true):image;
         Object texture;try{texture=api.call(render,"loadTexture",new Class<?>[]{Bitmap.class},upload);}finally{if(upload!=image)upload.recycle();}
@@ -99,14 +97,12 @@ final class VivoTextureLayer implements InvocationHandler,AutoCloseable {
         return (String)videoApi.call(codec,"e",new Class<?>[]{Object.class},videoParams);
     }
     void bindLiveFlashMask(VivoCalls api,Object render,Object controller,int area)throws Exception{
-        // Live FlashCard consumes its mask as image B; the editor protocol instead
-        // stores it on image A's auxiliary texture. Keep the original live shaders.
+
         int id=area==1?doodle:subject;
         if(id==0)return;
         List<?> entries=(List<?>)api.get(api.get(controller,"b"),"c");
         Object texture=api.call(api.get(entries.get(1),"a"),"getTexture");
-        // Retain the original g texture wrapper: reLoadSource updates its auxiliary
-        // mask in place when a crop changes. Replacing it with i breaks that contract.
+
         api.set(texture,"a",id);
     }
     @Override public Object invoke(Object ignored,Method method,Object[] args)throws Throwable{

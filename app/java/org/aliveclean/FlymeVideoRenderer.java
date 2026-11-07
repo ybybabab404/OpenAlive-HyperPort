@@ -17,7 +17,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-/** Original Flyme 9 浪流/深潜/涟漪 videos, OES shaders and playback clock. */
 final class FlymeVideoRenderer implements WallpaperRenderer {
     private static final String BASE="flyme-video/";
     private final int width,height;
@@ -66,7 +65,7 @@ final class FlymeVideoRenderer implements WallpaperRenderer {
             surfaceTexture.setOnFrameAvailableListener(ignored->{if(closed)return;frameAvailable=true;requestFrame();},handler);
             surface=new Surface(surfaceTexture);
             decoder=new FlymeVideoDecoder(assets,BASE+"mz_video_wallpaper_v"+index+"_1080.mp4",surface,handler,this::requestFrame);
-            // Original top-left UV=(0,1), transformed once by SurfaceTexture.
+
             float[] quad={-1,1,0,0,1, 1,1,0,1,1, 1,-1,0,1,0,
                           -1,1,0,0,1, 1,-1,0,1,0, -1,-1,0,0,0};
             FloatBuffer vertices=ByteBuffer.allocateDirect(quad.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer();vertices.put(quad).flip();

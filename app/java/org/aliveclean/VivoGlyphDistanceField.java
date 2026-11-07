@@ -5,7 +5,6 @@ import android.util.Half;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-/** Signed distance / normal input adapter for Vivo's original glass shader. */
 final class VivoGlyphDistanceField {
     static Bitmap create(Bitmap mask) {
         return create(mask,1f);
@@ -17,9 +16,7 @@ final class VivoGlyphDistanceField {
         for(int i=0;i<n;i++){
             inside[i]=(float)Math.sqrt(inside[i])-(float)Math.sqrt(outside[i]);
         }
-        // Derive lighting from a continuous surface. Coverage is still supplied
-        // by the live glyph, so smoothing this distance field cannot fatten or
-        // soften the text silhouette. Reuse the no-longer-needed distance array.
+
         smooth(inside,outside,w,h);
         ByteBuffer data=ByteBuffer.allocateDirect(n*8).order(ByteOrder.nativeOrder());
         for(int y=0;y<h;y++)for(int x=0;x<w;x++){
@@ -34,8 +31,7 @@ final class VivoGlyphDistanceField {
         result.copyPixelsFromBuffer(data);return result;
     }
     private static void smooth(float[] distance,float[] scratch,int w,int h){
-        // Separable binomial kernel, sigma ~= 1.4 px. Unlike a box derivative,
-        // it does not produce abrupt normal changes as a diagonal crosses pixels.
+
         int[] weights={1,8,28,56,70,56,28,8,1};
         for(int y=0;y<h;y++){
             if(Thread.currentThread().isInterrupted())throw new java.util.concurrent.CancellationException();
@@ -48,9 +44,7 @@ final class VivoGlyphDistanceField {
     }
     private static float[] distance(int[] pixels,int w,int h,boolean featureInside){
         float[] image=new float[pixels.length];
-        // Preserve subpixel coverage as distance seeds. Thresholding the glyph
-        // and overriding only edge pixels afterwards creates discontinuities
-        // in the normal field, amplified by the glass rim light.
+
         for(int i=0;i<image.length;i++){
             float alpha=(pixels[i]>>>24)/255f;
             if(!featureInside)alpha=1f-alpha;

@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.view.animation.*;
 
-/** ROM photo-effect parameters; each channel retains its own timing and curve. */
 final class PhotoStyle {
     final int id,size,frames,fps,endMicros;
     final String folder;

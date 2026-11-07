@@ -13,7 +13,6 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.Locale;
 
-/** Isolated, unchanged Vivo rendering runtime. Open off the UI/GL threads. */
 final class VivoEngineRuntime extends ContextWrapper {
     private static final String PREFIX = "vivo/runtime/";
     private static ClassLoader sharedLoader;
@@ -35,7 +34,7 @@ final class VivoEngineRuntime extends ContextWrapper {
         File pag=unpack(host,"libpag.so"),avc=unpack(host,"libffavc.so");
         File nativeDir=new File(host.getCodeCacheDir(),"vivo-native-"+pag.getName()+"-"+avc.getName());
         if(!nativeDir.isDirectory()&&!nativeDir.mkdirs())throw new IOException("Cannot prepare Vivo UI libraries");
-        // Verified, immutable copies named for the original ELF DT_NEEDED entries.
+
         for(File source:new File[]{pag,avc}){
             File target=new File(nativeDir,source==pag?"libpag.so":"libffavc.so");
             try(InputStream expected=new FileInputStream(source)){
@@ -55,7 +54,7 @@ final class VivoEngineRuntime extends ContextWrapper {
         super(host);
         synchronized (VivoEngineRuntime.class) {
             if (sharedLoader == null || !code.getPath().equals(sharedCodePath)) {
-                // Keep Vivo's bundled dependencies separate from Flyme and the app's UI libraries.
+
                 sharedLoader = new DexClassLoader(code.getPath(), host.getCodeCacheDir().getPath(),
                         nativeDir.getPath(), Context.class.getClassLoader());
                 sharedCodePath = code.getPath();
@@ -96,7 +95,7 @@ final class VivoEngineRuntime extends ContextWrapper {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             try (InputStream input = host.getAssets().open(PREFIX + name);
                  FileOutputStream output = new FileOutputStream(temporary)) {
-                // Android requires dynamically loaded code to be read-only before it is populated.
+
                 if (!temporary.setReadOnly()) throw new IOException("Cannot protect Vivo renderer code");
                 byte[] buffer = new byte[65536];
                 for (int n; (n = input.read(buffer)) != -1;) {

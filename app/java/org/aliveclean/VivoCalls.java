@@ -3,7 +3,6 @@ package org.aliveclean;
 import java.lang.reflect.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Access to the version-pinned, isolated Vivo engine. Never searches system classes. */
 final class VivoCalls {
     private final ClassLoader loader;
     private final ConcurrentHashMap<String,Method> methods=new ConcurrentHashMap<>();

@@ -1,4 +1,4 @@
-"""Build HyperAlive (Xposed module for HyperOS / Android 14-17) from this tree.
+"""Build AliveHS (Xposed module for HyperOS / Android 14-17) from this tree.
 
 The script is intentionally a single, auditable pipeline: every input is either
 checked into this repository, pinned by SHA-256, or produced by this file. It
@@ -11,10 +11,10 @@ Usage:
 Environment:
   ANDROID_HOME / ANDROID_SDK_ROOT   Android SDK root (platform-tools not needed)
   JAVA_HOME                         JDK 17 or newer (javac, keytool)
-  HYPERALIVE_NATIVE_SO              prebuilt libalive_clean.so (arm64) to embed
+  ALIVEHS_NATIVE_SO                 prebuilt libalive_clean.so (arm64) to embed
                                     instead of running cargo; used by the Windows
                                     host build, which has no Android NDK.
-  HYPERALIVE_KEYSTORE / ...         signing key, see BUILD.md
+  ALIVEHS_KEYSTORE / ...            signing key, see BUILD.md
 """
 from __future__ import annotations
 
@@ -60,6 +60,14 @@ def fail(message: str) -> None:
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def md5(path: Path) -> str:
+    digest = hashlib.md5()
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
@@ -180,7 +188,7 @@ def main(argv) -> None:
     manifest = ET.parse(ROOT / "app/AndroidManifest.xml").getroot()
     android_ns = "{http://schemas.android.com/apk/res/android}"
     version = manifest.attrib[android_ns + "versionName"]
-    apk = DIST / ("HyperAlive-" + version + "-arm64-v8a.apk")
+    apk = DIST / ("AliveHS-" + version + "-arm64-v8a.apk")
 
     xposed = XPOSED_API_JAR
     if not xposed.exists():
@@ -211,11 +219,11 @@ def main(argv) -> None:
             run([sys.executable, ROOT / "tools" / script])
 
     native = ROOT / "target/aarch64-linux-android/release/libalive_clean.so"
-    prebuilt = os.environ.get("HYPERALIVE_NATIVE_SO")
+    prebuilt = os.environ.get("ALIVEHS_NATIVE_SO")
     if prebuilt:
         native = Path(prebuilt)
         if not native.is_file():
-            fail("HYPERALIVE_NATIVE_SO points to a missing file: " + str(native))
+            fail("ALIVEHS_NATIVE_SO points to a missing file: " + str(native))
     else:
         ndk = Path(os.environ.get("ANDROID_NDK_HOME", sdk / "ndk/29.0.14206865"))
         linker = ndk / "toolchains/llvm/prebuilt" / ("windows-x86_64" if WINDOWS else "linux-x86_64") / "bin/aarch64-linux-android28-clang.cmd"
@@ -280,19 +288,19 @@ def main(argv) -> None:
             write_entry(package, "assets/licenses/onnxruntime/" + name, (ort / name).read_bytes())
     native_tool(BT / ("zipalign" + EXE), "-f", "-p", RESOURCE_ALIGNMENT, OUT / "unsigned.apk", OUT / "aligned.apk")
 
-    key = Path(os.environ.get("HYPERALIVE_KEYSTORE", ROOT / "local/development.jks"))
-    alias = os.environ.get("HYPERALIVE_KEY_ALIAS", "development")
-    env = {**os.environ, "HYPERALIVE_STORE_PASSWORD": os.environ.get("HYPERALIVE_STORE_PASSWORD", "hyperalive-dev")}
+    key = Path(os.environ.get("ALIVEHS_KEYSTORE", ROOT / "local/development.jks"))
+    alias = os.environ.get("ALIVEHS_KEY_ALIAS", "development")
+    env = {**os.environ, "ALIVEHS_STORE_PASSWORD": os.environ.get("ALIVEHS_STORE_PASSWORD", "alivehs-dev")}
     if not skip_sign:
         if not key.exists():
-            if "HYPERALIVE_KEYSTORE" in os.environ:
+            if "ALIVEHS_KEYSTORE" in os.environ:
                 fail("configured signing key is missing: " + str(key))
             key.parent.mkdir(parents=True, exist_ok=True)
-            run([JDK / ("keytool" + EXE), "-genkeypair", "-keystore", key, "-storepass:env", "HYPERALIVE_STORE_PASSWORD",
-                 "-keypass:env", "HYPERALIVE_STORE_PASSWORD", "-alias", alias, "-keyalg", "RSA", "-keysize", "3072",
-                 "-validity", "10000", "-dname", "CN=HyperAlive Development", "-noprompt"], env=env)
+            run([JDK / ("keytool" + EXE), "-genkeypair", "-keystore", key, "-storepass:env", "ALIVEHS_STORE_PASSWORD",
+                 "-keypass:env", "ALIVEHS_STORE_PASSWORD", "-alias", alias, "-keyalg", "RSA", "-keysize", "3072",
+                 "-validity", "10000", "-dname", "CN=AliveHS Development", "-noprompt"], env=env)
         run([JDK / ("java" + EXE), "-jar", BT / "lib/apksigner.jar", "sign", "--alignment-preserved", "true",
-             "--ks", key, "--ks-pass", "env:HYPERALIVE_STORE_PASSWORD", "--ks-key-alias", alias,
+             "--ks", key, "--ks-pass", "env:ALIVEHS_STORE_PASSWORD", "--ks-key-alias", alias,
              "--out", apk, OUT / "aligned.apk"], env=env)
         run([JDK / ("java" + EXE), "-jar", BT / "lib/apksigner.jar", "verify", "--verbose", "--print-certs", apk])
     else:
@@ -300,7 +308,7 @@ def main(argv) -> None:
     native_tool(BT / ("zipalign" + EXE), "-c", "-p", RESOURCE_ALIGNMENT, apk)
 
     report = {
-        "product": "HyperAlive",
+        "product": "AliveHS",
         "version": version,
         "apk": apk.name,
         "sha256": sha256(apk),
@@ -320,6 +328,7 @@ def main(argv) -> None:
     report["executables"].update({p.name: sha256(p) for p in ort_native})
     (DIST / "build-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf8", newline="\n")
     (DIST / "SHA256SUMS").write_text(report["sha256"] + "  " + apk.name + "\n", encoding="ascii", newline="\n")
+    (DIST / "MD5SUMS").write_text(md5(apk) + "  " + apk.name + "\n", encoding="ascii", newline="\n")
     print(json.dumps(report, indent=2))
 
 

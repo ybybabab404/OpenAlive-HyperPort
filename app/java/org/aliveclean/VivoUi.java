@@ -8,7 +8,6 @@ import android.util.AttributeSet;
 import android.view.*;
 import android.widget.*;
 
-/** Original Vivo panel XML/drawables with a portable replacement for its hidden progress view. */
 final class VivoUi extends ContextWrapper {
     final VivoEngineRuntime runtime;
     private final Resources.Theme theme;

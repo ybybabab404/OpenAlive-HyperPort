@@ -7,7 +7,7 @@
 ```
 
 - 开关：`SharedPreferences("trace").getBoolean("enabled", true)`，默认开；关掉后所有调用空转，**代码不用改**。
-- 查看：`adb logcat -s HyperAliveAod | grep "\[HA\]"`（或 `grep -E "\[HA\]\[T0"`）。
+- 查看：`adb logcat -s AliveHSAod | grep "\[HA\]"`（或 `grep -E "\[HA\]\[T0"`）。
 - 拔除：删掉对应行的 `Trace.log(...)` 即可，不会影响逻辑——每一行都只读状态，不参与判断。
 
 | 编号 | 位置 | 这条能证明什么 |

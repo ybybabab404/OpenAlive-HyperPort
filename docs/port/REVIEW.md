@@ -1,4 +1,4 @@
-# HyperAlive 只读代码审查
+# AliveHS 只读代码审查
 
 审查时间：2026-11-02 20:48
 审查范围：`app/java/org/aliveclean/`（重点 `HyperOsAod` / `AodOverlay` / `CleanHooks` / `RenderLoop`）、`native/renderer.rs`、`app/assets/shader/photo/aod/lensPhoto/`、`tools/build_release.py`、`tools/deploy.py`、`app/AndroidManifest.xml`。
@@ -99,7 +99,7 @@
 - 位置：`app/java/org/aliveclean/AodOverlay.java:20`、`:51-59`；对照 `HyperOsAod.java:370-382`。
 - 症状：`AodOverlay.show()` 要求 `WallpaperManager.getWallpaperInfo()` 或 `FLAG_LOCK` 的包名是 `org.aliveclean` 才继续；而 `HyperOsAod.attach()` 只要求 `aod != -1`。两条路径的开关语义不同：
   - 用户用系统壁纸/第三方壁纸时，注入路径仍然工作（读 `AodWallpaperProvider`，provider 读的是 `SceneOptions.APPLIED.photo`），但 overlay 路径永远跳过；
-  - 用户把 HyperAlive 壁纸取消后，`aod` 仍可能不是 -1，注入路径继续用旧图，overlay 路径不再兜底。
+  - 用户把 AliveHS 壁纸取消后，`aod` 仍可能不是 -1，注入路径继续用旧图，overlay 路径不再兜底。
 - 根因：把「壁纸组件归属」当成「AOD 场景开关」。需求 A1 明确说输入是「用户设置的壁纸本体」，并不要求当前 live wallpaper 必须是 `org.aliveclean`；A2 也只要求压暗。
 - 置信度：高。
 - 建议改法：删掉 `AodOverlay.ownsWallpaper()` 这道门，统一用 `SceneOptions.APPLIED.aod != -1` + `AodWallpaperProvider` 可读性来判断；`HyperOsAod.ownsWallpaper()` 同理（当前也是死代码，没有调用者）。
@@ -272,7 +272,7 @@
 ### 6.1 构建失败不会静默继续，但「旧包」会被当成新包部署（高）
 
 - 位置：`tools/build_release.py:121-122`（`run` 使用 `check=True`）、`:151-154`（`javac`）、`:256-259`（主 javac）、`:261-266`（d8）、`:300-321`（报告只在最后写）；`tools/deploy.py:91-105`。
-- 症状：`javac`/`d8` 失败时 `subprocess.run(check=True)` 会抛异常，脚本退出，不会继续打包——这一点当前版本是对的。但 `dist/HyperAlive-<version>-arm64-v8a.apk` 是固定文件名，失败后旧文件仍然存在；`deploy.py` 只判断「APK 存在且 stamp 匹配」就跳过构建/安装（`deploy.py:91-100`），于是「build 失败 → deploy 说 same APK already deployed / pm install Success」——装的是旧包。`PROGRESS.md` 记录的「构建失败时 install 仍会 Success」正是这个链路。
+- 症状：`javac`/`d8` 失败时 `subprocess.run(check=True)` 会抛异常，脚本退出，不会继续打包——这一点当前版本是对的。但 `dist/AliveHS-<version>-arm64-v8a.apk` 是固定文件名，失败后旧文件仍然存在；`deploy.py` 只判断「APK 存在且 stamp 匹配」就跳过构建/安装（`deploy.py:91-100`），于是「build 失败 → deploy 说 same APK already deployed / pm install Success」——装的是旧包。`PROGRESS.md` 记录的「构建失败时 install 仍会 Success」正是这个链路。
 - 根因：构建产物没有「本次构建成功」的原子标记；deploy 用文件存在/哈希代替「构建成功」。
 - 置信度：高。
 - 建议改法：
@@ -329,9 +329,9 @@
 - 验证方法（adb/logcat）：
   1. 在 `attach()` 开头临时加日志：`Log.i(TAG, "attach root=" + System.identityHashCode(root) + " live=" + (liveSurface==null?0:System.identityHashCode(liveSurface.get())) + " attached=" + root.isAttachedToWindow());`
   2. 在 `AodSurface.onSurfaceTextureAvailable` 加 `Log.i(TAG, "texture available #" + (++textureSeq) + " " + System.identityHashCode(this));`
-  3. 复现：`adb logcat -c; adb shell input keyevent 26; sleep 12; adb logcat -d -v time -s HyperAliveAod:V`。
+  3. 复现：`adb logcat -c; adb shell input keyevent 26; sleep 12; adb logcat -d -v time -s AliveHSAod:V`。
   4. 判据：日志中出现两次 `attach root=` 且 identityHashCode 不同，并且中间出现 `dropped a second AOD host before attaching`，紧接着 `texture available #2`——即可确认候选 1。
-  5. 辅助：`adb shell dumpsys window windows | grep -iE "AodView|HyperAlive"` 看是否有两个 AOD 窗口；`adb shell dumpsys SurfaceFlinger --list | grep -i aod`。
+  5. 辅助：`adb shell dumpsys window windows | grep -iE "AodView|AliveHS"` 看是否有两个 AOD 窗口；`adb shell dumpsys SurfaceFlinger --list | grep -i aod`。
 
 ### 候选 2：`AodOverlay.show()` 在 `injectIntoAod()` 返回 false 时加了全屏 overlay，随后注入又成功 → 两层画面交替（可能性第二）
 
@@ -339,9 +339,9 @@
 - 机制：`onDreamingStarted` 时 `aodRoot` 可能为 null（AodView 还没构造），或内层 `com.miui.aod.AODView` 还没 inflate（`attach` 只 post 200ms 重试）。`injectIntoAod()` 立即返回 false → `AodOverlay.show()` 创建一个全屏 `SurfaceView` overlay；200ms 后重试成功，又在 `AODView` 里建一个 `TextureView`。全屏 overlay 不透明、盖住时钟；随后 overlay 的 surface 生命周期/注入 view 的 attach 交替，产生闪烁。
 - 为什么从锁屏进入更明显：锁屏路径的 `AodView` 可能已经存在，`injectIntoAod()` 直接 true，不会走 overlay；桌面路径反而可能先 overlay 后注入——但用户观察到的是「锁屏进入闪」，也可能是因为锁屏路径的 `AodView` 正在重建，`aodRoot` 指向的旧实例已 detach，`findViewWithTag` 找不到，返回 false。
 - 验证方法：
-  1. `adb logcat -v time -s HyperAliveAod:V | grep -E "overlay added|injected into the AOD view|ambient surface attached|inner AODView not up yet"`。
+  1. `adb logcat -v time -s AliveHSAod:V | grep -E "overlay added|injected into the AOD view|ambient surface attached|inner AODView not up yet"`。
   2. 判据：同一轮 doze 里同时出现 `overlay added` 和 `ambient surface attached` → 候选 2 成立。
-  3. 截屏/录屏：`adb shell screenrecord --time-limit 10 /sdcard/aod.mp4`，看时钟是否被整块黑盖住；`adb shell dumpsys window windows | grep -i HyperAliveAod` 看是否存在 `TYPE_APPLICATION_OVERLAY` 窗口。
+  3. 截屏/录屏：`adb shell screenrecord --time-limit 10 /sdcard/aod.mp4`，看时钟是否被整块黑盖住；`adb shell dumpsys window windows | grep -i AliveHSAod` 看是否存在 `TYPE_APPLICATION_OVERLAY` 窗口。
   4. 临时把 `AodOverlay.show(svc)` 注释掉（只改一行）复测；如果闪烁消失，确认候选 2。
 
 ### 候选 3：`supervise()` 的 8 次 miss 窗口 + 重挂重建（可能性第三，但最容易被日志直接证实）
@@ -350,9 +350,9 @@
 - 机制：MIUI 清空 `AODView` 子视图后，surface 在 2.4 秒内没有 parent（球消失），第 8 次 miss 后 `addView` 回去；`TextureView` 重新走 `onSurfaceTextureAvailable`，`new RenderLoop`，动画重置。这个「消失 2.4s → 出现并从头播」在视觉上就是一次闪。
 - 为什么从锁屏进入更明显：锁屏→AOD 的窗口重建更频繁，`AODView` 被清空的概率更高；桌面→AOD 可能只清一次或不清。
 - 验证方法：
-  1. `adb logcat -v time -s HyperAliveAod:V | grep -E "scene re-attached after misses|texture available|scene moved into inner AODView"`。
+  1. `adb logcat -v time -s AliveHSAod:V | grep -E "scene re-attached after misses|texture available|scene moved into inner AODView"`。
   2. 判据：`scene re-attached after misses` 与下一次 `texture available` 的时间差 < 100ms，且两次 `texture available` 之间动画进度归零（可在 `RenderLoop` 里临时打印 `frameTime` 或 `motion` 的进度值）。
-  3. 统计：`adb logcat -d -s HyperAliveAod:V | grep -c "texture available"`；一次息屏应只有 1 次，>1 即重建。
+  3. 统计：`adb logcat -d -s AliveHSAod:V | grep -c "texture available"`；一次息屏应只有 1 次，>1 即重建。
   4. 辅助：`adb shell dumpsys gfxinfo com.android.systemui framestats` 看 doze 期间是否有掉帧；`adb shell screenrecord` 逐帧看球是否「消失再出现」。
 
 ### 区分三者的最小实验矩阵

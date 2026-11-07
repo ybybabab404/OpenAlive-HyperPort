@@ -9,7 +9,6 @@ import android.view.LayoutInflater;
 import dalvik.system.DexClassLoader;
 import java.io.File;
 
-/** Private original HyperOS runtime; only Android framework classes are shared. */
 final class OfficialHyperOsUi extends ContextWrapper {
     private static ClassLoader sharedLoader;
     private static String sharedPath;
@@ -30,16 +29,14 @@ final class OfficialHyperOsUi extends ContextWrapper {
         ApplicationInfo info=new ApplicationInfo();info.packageName="com.miui.aod";info.uid=android.os.Process.myUid();
         info.sourceDir=protectedApk.getPath();info.publicSourceDir=protectedApk.getPath();info.targetSdkVersion=35;
         Resources source=host.getPackageManager().getResourcesForApplication(info);
-        // The real Xiaomi AOD plugin applies MIUIX auto-density before it
-        // inflates clocks. Keep that adjustment private to this AOD context.
+
         if(superWallpaper){
             android.util.DisplayMetrics metrics=new android.util.DisplayMetrics();metrics.setTo(source.getDisplayMetrics());
             android.content.res.Configuration configuration=new android.content.res.Configuration(source.getConfiguration());
             int dpi=XiaomiAodDensity.resolve(host,loader);
             metrics.densityDpi=dpi;metrics.density=dpi/160f;metrics.scaledDensity=metrics.density*configuration.fontScale;
             configuration.densityDpi=dpi;
-            // MIUIX keeps the window's dp qualifiers when changing density.
-            // Recomputing sw/w/h here would choose a different clock layout.
+
             resources=new Resources(source.getAssets(),metrics,configuration);
         }else resources=source;
         theme=resources.newTheme();theme.applyStyle(android.R.style.Theme_Material_NoActionBar,true);
@@ -47,9 +44,7 @@ final class OfficialHyperOsUi extends ContextWrapper {
     }
     private static synchronized Class<?> fontBridge(Context host)throws Exception{
         if(fontBridge==null){
-            // In SystemUI the host belongs to SystemUI, while these adapters
-            // belong to the module. Keep the existing module-loader path on
-            // the host; never try to find our font bridge in the host APK.
+
             ClassLoader module=OfficialHyperOsUi.class.getClassLoader();
             try{
                 Class<?> candidate=module.loadClass("miui.util.font.MultiLangHelper");
@@ -59,9 +54,7 @@ final class OfficialHyperOsUi extends ContextWrapper {
                 platformBridge=module;
                 return fontBridge;
             }catch(ClassNotFoundException|NoSuchMethodException nativeMiuiClass){}
-            // A HyperOS boot class of the same name may exist but return null
-            // until MIUI's own application initialization. Resolve only this
-            // small adapter from our APK, leaving all other types with Android.
+
             String moduleApk=host.getPackageManager().getApplicationInfo("org.aliveclean",0).sourceDir;
             ClassLoader bridge=new DexClassLoader(moduleApk,host.getCodeCacheDir().getPath(),null,Context.class.getClassLoader()){
                 @Override protected Class<?> loadClass(String name,boolean resolve)throws ClassNotFoundException{
@@ -76,8 +69,7 @@ final class OfficialHyperOsUi extends ContextWrapper {
     private static synchronized ClassLoader loader(Context host,File apk)throws Exception{
         String path=apk.getAbsolutePath();
         if(sharedLoader==null||!path.equals(sharedPath)){
-            // Share only the missing font-file service with this isolated APK.
-            // All other dependencies still resolve against the Android framework.
+
             ClassLoader dependencies=new ClassLoader(Context.class.getClassLoader()){
                 @Override protected Class<?> loadClass(String name,boolean resolve)throws ClassNotFoundException{
                     if(name.equals("miui.util.font.MultiLangHelper"))return fontBridge;
@@ -110,8 +102,7 @@ final class OfficialHyperOsUi extends ContextWrapper {
         java.util.Map<String,String> names=(java.util.Map<String,String>)fonts.getField("ALLINONE_FONT_FILE_MAP").get(null);
         for(java.util.Map.Entry<String,String> entry:names.entrySet()){
             if(cache.containsKey(entry.getKey()))continue;
-            // These three-axis clock fonts live in HyperOS /product/fonts,
-            // not in MIUIAod.apk. Populate only this isolated loader's cache.
+
             android.graphics.Typeface face=new android.graphics.Typeface.Builder(moduleAssets,
                     "native-clock/runtime/hyperos/fonts/"+entry.getValue()).build();
             if(face==null)throw new IllegalStateException("Original HyperOS clock font missing: "+entry.getValue());
@@ -119,8 +110,7 @@ final class OfficialHyperOsUi extends ContextWrapper {
         }
         java.util.Map<String,android.graphics.Typeface> other=(java.util.Map<String,android.graphics.Typeface>)
                 fonts.getField("mOtherFontTypefaceMap").get(null);
-        // The original getter now has a real DE font path and keeps ownership
-        // of its final ConcurrentHashMap, including locale/weight cache entries.
+
         if(fonts.getMethod("getMiSansGlobal").invoke(null)==null)
             throw new IllegalStateException("Original MiSans global font missing");
         for(String locale:new String[]{"SC","TC"}){

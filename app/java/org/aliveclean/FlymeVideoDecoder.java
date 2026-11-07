@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 
-/** Timestamp-selected all-intra video decode; every method/callback uses AliveGL. */
 final class FlymeVideoDecoder implements AutoCloseable {
     private final Surface surface;
     private final Handler handler;
@@ -63,8 +62,7 @@ final class FlymeVideoDecoder implements AutoCloseable {
                     if(owner!=codec||!visible||closed)return;
                     try{
                         outstanding=Math.max(0,outstanding-1);
-                        // A Surface decoder can report size=0 for a valid
-                        // image. Like the original, present every image buffer.
+
                         owner.releaseOutputBuffer(index,(info.flags&(MediaCodec.BUFFER_FLAG_CODEC_CONFIG|MediaCodec.BUFFER_FLAG_END_OF_STREAM))==0);
                         feed();
                     }catch(RuntimeException error){fail("Flyme video output failed",error);}
@@ -72,8 +70,7 @@ final class FlymeVideoDecoder implements AutoCloseable {
                 public void onOutputFormatChanged(MediaCodec owner,MediaFormat output){}
                 public void onError(MediaCodec owner,MediaCodec.CodecException error){
                     if(owner!=codec||closed)return;
-                    // Like the original, recreate the codec after a codec
-                    // failure while retaining the source clock and extractor.
+
                     stop();
                     if(visible&&recoveries++<2){
                         try{pending=true;start();return;}catch(IOException|RuntimeException retry){fail("Flyme video decoder recovery failed",retry);}
@@ -88,8 +85,7 @@ final class FlymeVideoDecoder implements AutoCloseable {
     }
     private void fail(String message,Exception error){
         failure=new IllegalStateException(message,error);stop();
-        // Let RenderLoop observe/check the failure and perform normal cleanup,
-        // including when the original finite animation window has just ended.
+
         if(invalidate!=null)invalidate.run();
     }
     private void feed(){
@@ -107,8 +103,7 @@ final class FlymeVideoDecoder implements AutoCloseable {
         codec.queueInputBuffer(index,0,size,sampleUs,0);lastQueuedUs=sampleUs;outstanding++;
     }
     private void select(long timeUs){
-        // These original MP4s contain only sync frames. Preserve g.smali's
-        // nearest-frame selection, including half-frame rounding and rewind.
+
         long current=extractor.getSampleTime(),delta=timeUs-current;
         if(current<0||delta<0||delta>frameIntervalUs*2.5){extractor.seekTo(timeUs,MediaExtractor.SEEK_TO_CLOSEST_SYNC);return;}
         if(delta>frameIntervalUs*.5&&!extractor.advance())extractor.seekTo(timeUs,MediaExtractor.SEEK_TO_CLOSEST_SYNC);

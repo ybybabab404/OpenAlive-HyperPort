@@ -7,23 +7,15 @@ import android.content.Context;
 import android.provider.Settings;
 import android.util.Log;
 
-/**
- * 「息屏样式」在模块壁纸期间的接管状态。
- *
- * 写入方和读取方是两个 uid：org.aliveclean 的 system-uid 适配进程负责写，
- * com.miui.aod 负责读和兜底恢复。SharedPreferences 是各自私有的，跨进程读不到，
- * 所以原值和接管标记放在 Settings.Secure（全系统可读，写入需要 WRITE_SECURE_SETTINGS）。
- */
 final class AodWallpaperMode {
     static final String KEY_MODE = "full_screen_aod_on";
     static final String KEY_RESTORE = "alive_aod_restore_value";
     static final String KEY_HAS_RESTORE = "alive_aod_restore_set";
-    private static final String TAG = "HyperAliveHooks";
+    private static final String TAG = "AliveHSHooks";
     private static final int UNSET = -1;
 
     private AodWallpaperMode() {}
 
-    /** 当前桌面/锁屏壁纸是不是本模块的 Live Wallpaper。 */
     static boolean alive(Context context) {
         try {
             WallpaperManager manager = WallpaperManager.getInstance(context);
@@ -39,7 +31,6 @@ final class AodWallpaperMode {
         }
     }
 
-    /** 壁纸应用成功后调用（UID 1000）。读不到原值就不写，只记日志。 */
     static void enter(Context context) {
         ContentResolver resolver = context.getContentResolver();
         int original;
@@ -65,7 +56,6 @@ final class AodWallpaperMode {
         }
     }
 
-    /** 切回系统壁纸后恢复原值；没有接管记录时是空操作。 */
     static void restore(Context context) {
         ContentResolver resolver = context.getContentResolver();
         try {

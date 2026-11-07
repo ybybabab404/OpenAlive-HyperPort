@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** Natural cubic spline (zero second derivative at both ends), in normalized UV units. */
 final class GradientSpline {
     final float[] knots,coefficients;
     private final double[] span,upper,rhs,curvature;
@@ -16,7 +15,7 @@ final class GradientSpline {
     void interpolate(float[] y){
         int n=knots.length-1;
         if(y.length!=knots.length)throw new IllegalArgumentException("Spline dimensions");
-        // Thomas solve for half the second derivative, with natural endpoints.
+
         for(int i=1;i<n;i++){
             double diagonal=2*(span[i-1]+span[i])-span[i-1]*upper[i-1];
             upper[i]=span[i]/diagonal;

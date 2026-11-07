@@ -1,23 +1,23 @@
-# HyperAlive 进度快照 · 2026-11-02 13:52
+# AliveHS 进度快照 · 2026-11-02 13:52
 
 > 本文件是「做到哪 / 下一步 / 卡在哪」的落盘记录。上下文被压缩后先读这一页。
 
 ## 做到哪（已验证可用）
 
-- 移植目标机：`10.11.48.92:39795`（无线）/ USB 序列 `9eb96e8a`；Redmi `25102RKBEC`（myron / canoe），
+- 移植目标机：`<device>:<port>`（无线）/ USB 序列 `<usb-serial>`；Redmi `25102RKBEC`（myron / canoe），
   HyperOS 4.0 `OS4.0.0.33.XPMCNXM`，Android 17 / SDK 37，1200x2608 @480dpi，KernelSU + LSPosed。
 - 构建链：`tools/build_release.py`（aapt2 → javac → D8 → zip → zipalign → apksigner），无 Gradle。
-  产物 `dist/HyperAlive-0.5.0-preview-arm64-v8a.apk`，versionCode 58。
-- 模块在 SystemUI 进程里已能加载并打日志（tag `HyperAliveHooks` / `HyperAliveAod`）。
+  产物 `dist/AliveHS-0.5.0-preview-arm64-v8a.apk`，versionCode 58。
+- 模块在 SystemUI 进程里已能加载并打日志（tag `AliveHSHooks` / `AliveHSAod`）。
   历史上「完全无日志」的根因已修：`ModuleActivationHook.install()` 在 HyperOS 上抛异常掐断了
   `handleLoadPackage`，现每个 install 都包在 `step(name, body)` 里 fail-soft。
 - AOD 宿主已确认是 `com.android.systemui`（**不是** `com.miui.aod`）：
   `mWakefulness=Dozing`、`mAodShowing=true`、doze 期间只有 SystemUI 在跑。
 - AOD 注入链已打通到「surface 建立」这一步，13:46 那次 doze 日志：
   ```
-  HyperAliveAod: ambient surface attached
-  HyperAliveAod: injected into the AOD view
-  HyperAliveAod: surface created 1200x2608
+  AliveHSAod: ambient surface attached
+  AliveHSAod: injected into the AOD view
+  AliveHSAod: surface created 1200x2608
   ```
 - 壁纸应用绕开了 HyperOS 上必返 `RESULT_CANCELED` 的 live picker，改走 `SceneApply`
   （`su 1000 app_process` 调 `setWallpaperComponentWithFlags(CleanWallpaper, FLAG_SYSTEM|FLAG_LOCK)`）。
@@ -59,11 +59,11 @@
 ## 环境备忘
 
 - 构建：`C:\Python314\python.exe tools\build_release.py --no-checks`
-  `ANDROID_HOME=C:\Users\ybybabab\AppData\Local\Android\Sdk`
-  `JAVA_HOME=C:\Users\ybybabab\app\pcl\JAVA21\graalvm`
+  `ANDROID_HOME=$ANDROID_HOME`
+  `JAVA_HOME=$JAVA_HOME`
   `HYPERALIVE_NATIVE_SO=.tmp\libalive_clean.so`　`PYTHONIOENCODING=utf-8`
   单次约 45–60s。
-- 装包走 USB `9eb96e8a`（无线装大包会 Broken pipe）；adb server 常在两次调用之间掉，先 `adb start-server`。
+- 装包走 USB `<usb-serial>`（无线装大包会 Broken pipe）；adb server 常在两次调用之间掉，先 `adb start-server`。
 - 原生 `.so` 是从官方 APK 里取的，sha256 `43ff8838…eaf027`；本机无 Rust/NDK，无法重编，
   所以 JNI 符号把包名钉死在 `org.aliveclean`。
 
@@ -95,7 +95,7 @@ NotificationShadeWindowView (root, 1200x2608)
 3. 景深壁纸「上层」若仍可见，说明它不在 `AODView` 背景里，而是 miwallpaper 独立图层；
    届时按类名（`Pictorial` / `depth` / `Wallpaper`）在树里定位后 `setVisibility(GONE)`。
 
-已验证的调试手段：`adb logcat -s HyperAliveAod:V` 读树；重启 SystemUI 用
+已验证的调试手段：`adb logcat -s AliveHSAod:V` 读树；重启 SystemUI 用
 `su -c 'killall com.android.systemui'`；触发息屏用 `input keyevent 26`。
 
 
@@ -115,7 +115,7 @@ NotificationShadeWindowView (root, 1200x2608)
 
 ### 卡在哪
 - 换气熔断：连续 6 轮思考无正文就被强制停，导致每轮实际只能推进一步。压缩插件疑似有 bug，压缩不出新窗口。
-- 硬件侧：无线 10.11.48.92:39795 常 10060 超时，改用 USB `9eb96e8a`；大 APK 只能走 USB 装。
+- 硬件侧：无线 <device>:<port> 常 10060 超时，改用 USB `<usb-serial>`；大 APK 只能走 USB 装。
 
 ## 2026-11-02 14:24 · AOD 卡点已解决（真因不是 z 序）
 
@@ -144,8 +144,8 @@ APK 从 654 MB 降到 321 MB。
 
 ## 设备状态
 
-2026-11-02 14:34 USB 与无线（10.11.48.149:39795）同时失联，裝机验证暂停在「320MB 包待安装」。
-恢复连接后先跑：`adb -s <sn> install -r dist/HyperAlive-0.5.0-preview-arm64-v8a.apk`，
+2026-11-02 14:34 USB 与无线（<device>:<port>）同时失联，裝机验证暂停在「320MB 包待安装」。
+恢复连接后先跑：`adb -s <sn> install -r dist/AliveHS-0.5.0-preview-arm64-v8a.apk`，
 再按第 5 节的回路复验 AOD。
 
 ## 2026-11-02 20:00 实测小结
@@ -164,7 +164,7 @@ APK 从 654 MB 降到 321 MB。
 - 行复用 `R.layout.miuix_preference_main_layout` 并由 activity context 直接 inflate（不要用 ThemePreferenceViewStyle 包一层，否则字号/内边距不一致），padding 抄 `aod_item`。
 - 卡片用反射 `com.miui.support.cardview.CardView`，`setCardBackgroundColor` → `setRadius`（顺序不能反，setRadius 会重包 SmoothContainerDrawable）→ `setCardElevation(0)`。
 - `app/res/values/strings.xml` 的 `xposed_scope` 增加 `com.android.thememanager`。
-- 真机 10.11.48.149:39795 验证：HyperAlive 独立卡片位于「正在使用」下方，息屏等 8 项完整保留，点击进入 org.aliveclean.HomeActivity；重复 onResume 不重复注入（tag 去重）。
+- 真机 <device>:<port> 验证：AliveHS 独立卡片位于「正在使用」下方，息屏等 8 项完整保留，点击进入 org.aliveclean.HomeActivity；重复 onResume 不重复注入（tag 去重）。
 
 ## 2026-11-03 22:17 息屏页闪退：定位 + 兜底（已并入主线）
 
@@ -179,7 +179,7 @@ APK 从 654 MB 降到 321 MB。
 
 - 现象对照：主题壁纸里 息屏/壁纸/主题/图标/字体/息屏通知/指纹样式 都是同应用推页；锁屏样式本身就是跳转。用户还发现从息屏入口进入时第三方能识别到「两个应用同时在前台」。
 - 结论：息屏页是 com.miui.aod 的**透明窗口 Activity**——底层主题壁纸没有销毁，新页只是盖上去滑入，所以既是跨应用又像同应用推页。
-- 做法（`HomeEntryActivity` + `Theme.HyperAlive.Entry`）：windowIsTranslucent=true、windowBackground 透明、backgroundDimEnabled=false，并用 `android:windowAnimationStyle` 套 MIUI 自己的 activity_open_enter/exit（原样复制到 `res/anim/hla_*.xml`，没有手写插值动画）。`HomeActivity` 去掉 final 供继承。
+- 做法（`HomeEntryActivity` + `Theme.AliveHS.Entry`）：windowIsTranslucent=true、windowBackground 透明、backgroundDimEnabled=false，并用 `android:windowAnimationStyle` 套 MIUI 自己的 activity_open_enter/exit（原样复制到 `res/anim/hla_*.xml`，没有手写插值动画）。`HomeActivity` 去掉 final 供继承。
 - 实测：`dumpsys activity activities` 里 org.aliveclean 任务 `translucent=true` 且与 com.android.thememanager 任务同时 `visible=true`——与原生息屏入口一致；页面内容本身不透明，无透底。
 - 注意：不要用 `ActivityOptions.makeCustomAnimation`（跨任务会被忽略），也不要给 Activity 设别的 taskAffinity（Android 不允许跨包共享 task，实测仍落在自己的任务里）。
 

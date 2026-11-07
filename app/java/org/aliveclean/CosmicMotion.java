@@ -7,7 +7,6 @@ import android.view.animation.PathInterpolator;
 import org.json.*;
 import java.io.*;
 
-/** Cosmic's three official parameter sets and per-property transition curves. */
 final class CosmicMotion implements WallpaperMotion {
     static final int SIZE=95;
     final float[] values=new float[SIZE];

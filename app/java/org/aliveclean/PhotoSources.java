@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 
-/** Three distinct user-selected image providers; returned URIs are copied privately. */
 final class PhotoSources {
     static final int MIUI=0,GALLERY=1,FILES=2;
     static final String[] LABELS={"小米相册","通用相册","Android 文件"};
@@ -12,16 +11,14 @@ final class PhotoSources {
     static Intent intent(Context context,int source){
         if(source==MIUI){
             Intent pick=new Intent(Intent.ACTION_PICK).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
-            // HyperOS gallery. PICK is the entry it exposes for external callers; GET_CONTENT would
-            // be taken over by the platform photo picker instead of opening the gallery itself.
+
             Intent miui=installed(context,pick,new String[]{"com.miui.gallery"});
             if(miui!=null)return miui;
             return installed(context,pick,new String[]{"com.coloros.gallery3d","com.oplus.gallery3d"});
         }
         if(source==GALLERY){
             Intent pick=new Intent(Intent.ACTION_PICK).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
-            // GET_CONTENT can be intercepted by the platform Photo Picker. PICK
-            // exposes the installed gallery providers as an explicit chooser.
+
             if(context.getPackageManager().queryIntentActivities(pick,PackageManager.MATCH_DEFAULT_ONLY).isEmpty())return null;
             return Intent.createChooser(pick,"选择相册");
         }

@@ -15,11 +15,6 @@ import io.github.libxposed.api.XposedInterface.HookHandle;
 import io.github.libxposed.api.XposedInterface.Hooker;
 import io.github.libxposed.api.XposedInterface.Chain;
 
-/**
- * Small compatibility layer on top of the LSPosed API 102 hook API.
- * It keeps the call sites of the former de.robv.android.xposed helpers readable
- * without depending on the legacy API at runtime.
- */
 public final class Xp {
     private static volatile XposedInterface api;
 

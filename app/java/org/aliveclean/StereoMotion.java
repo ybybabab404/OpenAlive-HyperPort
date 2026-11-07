@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** Original gyro-vector displacement and .87/1 scene crop, on the render thread. */
 final class StereoMotion implements WallpaperMotion {
     private int scene;
     private float scale,fromScale,targetScale,elapsed,duration;
@@ -16,7 +15,7 @@ final class StereoMotion implements WallpaperMotion {
     float scale(){return scale;}
     float shiftX(){return Math.max(-1,Math.min(1,-2*x))*.04f;}
     float shiftY(){return Math.max(-1,Math.min(1,-y))*.04f;}
-    /** Apply on the GL thread; retain the current tilt and scene animation. */
+
     void configure(int sensitivity,boolean allowAod){
         sensitivityGain=multiplier(sensitivity);
         if(this.allowAod!=allowAod&&scene==0){
@@ -27,8 +26,7 @@ final class StereoMotion implements WallpaperMotion {
     }
     static float multiplier(int relative){
         int value=Math.max(-50,Math.min(50,relative));
-        // Same incoming-velocity curve as VivoSensorGain, kept Android-free for
-        // motion tests. 0 preserves original motion, -50=.1x and +50=2x.
+
         return (float)Math.pow(value<0?10:2,value/50.0);
     }
     public void change(int next,boolean animate){
@@ -37,7 +35,7 @@ final class StereoMotion implements WallpaperMotion {
         if(duration==0)scale=targetScale;
         if(next==0&&!allowAod){rx=ry=rz=0;moving=false;quiet=1;}
     }
-    /** Android gyroscope values in rad/s; sensor timestamp only defines epochs. */
+
     void gyroscope(float vx,float vy,float vz,long timestamp){
         if((scene==0&&!allowAod)||!Float.isFinite(vx)||!Float.isFinite(vy)||!Float.isFinite(vz))return;
         if(sensorStamp<0||timestamp<=sensorStamp||timestamp-sensorStamp>500_000_000L){
@@ -59,14 +57,12 @@ final class StereoMotion implements WallpaperMotion {
         float length=(float)Math.sqrt(vx*vx+vy*vy+vz*vz);
         if(length<.02f)quiet+=dt;else quiet=0;
         if((scene==0&&!allowAod)||quiet>=.75f){
-            // Meizu's private motion sensor selects this return-to-neutral path.
-            // Standard gyro quiet detection provides that signal on other devices.
+
             x=returnAxis(x,dt);y=returnAxis(y,dt);
             z=(z<0?-1:1)*(float)Math.sqrt(Math.max(0,1-x*x-y*y));
             moving=x!=0||y!=0;
         }else if(length>0&&dt>0){
-            // Original SensorManager matrix is consumed column-major, i.e. its
-            // transpose. Below .1 rad/s the source keeps the unnormalized axis.
+
             float gain=length>.1f?1:length;
             float angle=-length*dt*gain;
             float ax=vx/length,ay=vy/length,az=vz/length;
@@ -90,7 +86,7 @@ final class StereoMotion implements WallpaperMotion {
         }
         float a=1-u;return 3*a*a*u*.65f+3*a*u*u+u*u*u;
     }
-    public void follow(float x,float y){} // Stereo does not follow the clock's AOD region.
+    public void follow(float x,float y){}
     public void pause(){last=-1;sensorStamp=-1;sensorAge=1;rx=ry=rz=0;quiet=1;}
     public boolean active(){return elapsed<duration||moving||x!=0||y!=0;}
 }

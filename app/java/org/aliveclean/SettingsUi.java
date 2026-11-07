@@ -10,7 +10,6 @@ import dalvik.system.DexClassLoader;
 import java.io.*;
 import java.security.MessageDigest;
 
-/** The settings APK has different resource IDs and library versions from the editor. */
 final class SettingsUi extends ContextWrapper {
     private static final String PACKAGE="com.meizu.wallpapersetting";
     private final Resources resources;
@@ -41,8 +40,7 @@ final class SettingsUi extends ContextWrapper {
     }
     SettingsUi(Context base)throws Exception{
         super(base);File file=bundle(base);
-        // Parent is the platform loader: the two official AndroidX/Flyme libraries
-        // must not share classes with mismatched resource IDs.
+
         loader=new DexClassLoader(file.getPath(),base.getCodeCacheDir().getPath(),null,ClassLoader.getSystemClassLoader().getParent());
         ApplicationInfo info=new ApplicationInfo();info.packageName=PACKAGE;info.uid=android.os.Process.myUid();
         info.sourceDir=info.publicSourceDir=file.getPath();info.targetSdkVersion=base.getApplicationInfo().targetSdkVersion;
@@ -57,12 +55,11 @@ final class SettingsUi extends ContextWrapper {
     int pageColor(){return light()?android.graphics.Color.WHITE:color("colorSurface");}
     void pageBackground(View view){view.setBackgroundColor(pageColor());}
     void cardBackground(View view){
-        // Keep the original rounded drawable distinct from the white page.
+
         if(!light()||view.getBackground()==null)return;
         android.graphics.drawable.Drawable background=view.getBackground().mutate();
         if(background instanceof android.graphics.drawable.GradientDrawable){
-            // The wallpaper bar's native fill has 10% alpha. Tinting preserves
-            // that alpha and washes the bar out against our white page.
+
             view.setBackgroundTintList(null);
             ((android.graphics.drawable.GradientDrawable)background).setColor(color("colorSurface"));
         }else view.setBackgroundTintList(ColorStateList.valueOf(color("colorSurface")));
@@ -79,8 +76,7 @@ final class SettingsUi extends ContextWrapper {
             inflater.setFactory2(new LayoutInflater.Factory2(){
                 public View onCreateView(String name,Context context,AttributeSet attrs){return onCreateView(null,name,context,attrs);}
                 public View onCreateView(View parent,String name,Context context,AttributeSet attrs){
-                    // Its original onAttachedToWindow binds a Meizu-only service.
-                    // The same slot is populated by our preview bindings instead.
+
                     if(name.equals("com.flyme.textureview.RemoteTextureView")||name.equals("org.libpag.PAGView"))return new FrameLayout(context,attrs);
                     if(!name.contains(".")||name.startsWith("android."))return null;
                     try{return (View)loader.loadClass(name).getConstructor(Context.class,AttributeSet.class).newInstance(context,attrs);}

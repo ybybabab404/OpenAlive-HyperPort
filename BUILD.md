@@ -1,47 +1,71 @@
-# 编译
+# 构建
 
-HyperAlive 不依赖 Gradle：`tools/build_release.py` 直接调用 aapt2 / javac / D8 /
-zipalign / apksigner，Rust 只编译 `native/` 下的渲染库。
+不依赖 Gradle。`tools/build_release.py` 直接调 Android SDK 的命令行工具，从源码树一路打到签名 APK。
 
-## 环境
+## 需要什么
 
-- JDK 17+（脚本按 `JAVA_HOME`、常见安装路径顺序查找）
-- Android SDK：build-tools 35.0.0（或更新）与任意一个 platform 的 `android.jar`
-- Rust 1.96.0（`rust-toolchain.toml` 固定）+ `aarch64-linux-android` 目标 + NDK r29：
-  只有需要重新编译 `libalive_clean.so` 时才需要
-- Python 3.10+
+| 组件 | 版本 | 什么时候需要 |
+| --- | --- | --- |
+| JDK | 17 或更新的 LTS | 总是 |
+| Android SDK build-tools | 35.0.0 | 总是 |
+| Android platform（`android.jar`） | 任意一版，脚本自动挑最新的 | 总是 |
+| Python | 3.10+ | 总是 |
+| Rust + `aarch64-linux-android` target | `rust-toolchain.toml` 指定的版本 | 重编 `libalive_clean.so` 时 |
+| Android NDK | r29 | 重编 `libalive_clean.so` 时 |
 
-设置 `ANDROID_HOME`、`JAVA_HOME` 后：
-
-```sh
-python tools/build_release.py
-```
-
-产物在 `dist/`：`HyperAlive-<versionName>-arm64-v8a.apk`、`build-report.json`、
-`SHA256SUMS`。
-
-### 只改 Java 时
-
-若本机没有 Rust / NDK，可以把已有的 `libalive_clean.so` 交给构建脚本复用：
+## 怎么编
 
 ```sh
-HYPERALIVE_NATIVE_SO=path/to/libalive_clean.so python tools/build_release.py
+export ANDROID_HOME=/path/to/Android/Sdk
+export JAVA_HOME=/path/to/jdk
+python3 tools/build_release.py
 ```
 
-报告里的 `native.origin` 会写成 `prebuilt`，并记录 so 的 SHA-256，方便审计对比。
+Windows 上两个路径都要用正斜杠或者转义过的反斜杠；aapt2 和 zipalign 处理不了非 ASCII 的绝对路径，脚本会把相关参数改写成相对路径再调用。
 
-### 选项
+产物落在 `dist/`：
 
-- `--no-checks`：跳过 `tools/check_*.py` 静态检查（只在本地快速迭代时使用）
-- `--skip-sign`：只对齐不签名
+- `AliveHS-<versionName>-arm64-v8a.apk`
+- `build-report.json`：版本、大小、SHA-256、资源表数量、SDK 版本、原生库来源
+- `SHA256SUMS`、`MD5SUMS`
 
-### 签名
+## 只改了 Java
 
-未配置时脚本会在 `local/development.jks` 生成开发密钥（该目录已被 git 忽略）。
-正式构建通过 `HYPERALIVE_KEYSTORE`、`HYPERALIVE_STORE_PASSWORD`、
-`HYPERALIVE_KEY_ALIAS` 注入，密钥不进仓库。
+原生渲染库没动的时候不必装 Rust 和 NDK，把现成的 so 指过去就行：
 
-### Windows 说明
+```sh
+ALIVEHS_NATIVE_SO=path/to/libalive_clean.so python3 tools/build_release.py
+```
 
-Windows 的 aapt2 / zipalign 无法处理非 ASCII 绝对路径，脚本会把树内路径转为相对路径；
-Java 的参数文件同样只写 ASCII 路径。仓库路径含中文时也不需要额外处理。
+`tools/deploy.py` 会自动挑 `build/release/libalive_clean.so`，编完顺手推到设备上装好。
+
+## 选项
+
+- `--no-checks`：跳过 `tools/check_*.py` 那组资源与清单校验
+- `--skip-sign`：只产出未签名 APK，方便看结构
+
+## 签名
+
+默认用 `local/development.jks` 里的开发密钥，口令在 `tools/build_release.py` 里写死，仅供本机调试。要打正式包就设环境变量：
+
+```sh
+export ALIVEHS_KEYSTORE=/path/to/release.jks
+export ALIVEHS_STORE_PASSWORD=...
+export ALIVEHS_KEY_ALIAS=...
+export ALIVEHS_KEY_PASSWORD=...
+python3 tools/build_release.py
+```
+
+密钥文件不要提交。`.gitignore` 已经挡掉 `*.jks`、`*.keystore`、`signing.json`。
+
+## 部署到设备
+
+```sh
+python3 tools/deploy.py                      # 没有变化就不重装
+python3 tools/deploy.py --build              # 强制重编再装
+python3 tools/deploy.py --device 1.2.3.4:5555
+```
+
+设备靠 `ALIVEHS_DEVICE`（序列号或 `host:port`，逗号分隔按顺序匹配）来挑，没设备时用 `ALIVEHS_CONNECT`（逗号分隔的 `host:port` 列表）自动 `adb connect`。都没配的话，有 USB 就挑 USB。
+
+安装走 `adb push` 到 `/data/local/tmp` 再 `su -c pm install -r -d`，比流式安装抗断线。

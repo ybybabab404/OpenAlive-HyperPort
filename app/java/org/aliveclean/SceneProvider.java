@@ -5,7 +5,6 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.*;
 
-/** Authenticated Binder bootstrap. No image files or unrestricted operations are exposed. */
 public final class SceneProvider extends ContentProvider {
     static final Uri CONFIGURATION=Uri.parse("content://org.aliveclean.scene/configuration");
     static void changed(Context context){context.getContentResolver().notifyChange(CONFIGURATION,null);}
@@ -20,8 +19,7 @@ public final class SceneProvider extends ContentProvider {
             SceneOptions options=new SceneOptions(c.getSharedPreferences(SceneOptions.APPLIED,0));
             result.putInt("aod",options.aod);
             result.putBoolean("vivo_wallpaper",options.vivo!=null);
-            // The provider lives in our process, so this is the only place where the live wallpaper
-            // service's own flag is observable; other processes see their own copy of the static.
+
             result.putBoolean("wallpaper_running",CleanWallpaper.RUNNING);
             result.putBoolean("vivo_liquid",options.vivo!=null&&options.vivo.family==VivoOptions.LIQUID);
             result.putBoolean("continuous_aod",options.vivo!=null?options.vivo.animateInAod():options.cosmic!=0?options.cosmicContinuousAod:options.aod==0&&options.sailContinuousAod);

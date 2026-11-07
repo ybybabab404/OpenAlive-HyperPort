@@ -5,7 +5,6 @@ import android.app.WallpaperManager;
 import android.content.ComponentName;
 import android.os.Build;
 
-/** Resolve the actual lock wallpaper, including a lock screen that follows home. */
 final class AppliedWallpaper {
     static WallpaperInfo lock(WallpaperManager manager){
         WallpaperInfo info=Build.VERSION.SDK_INT>=34

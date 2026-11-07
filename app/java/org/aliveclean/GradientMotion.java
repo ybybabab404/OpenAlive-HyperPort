@@ -4,7 +4,6 @@ import android.content.res.AssetManager;
 import org.json.*;
 import java.io.IOException;
 
-/** Original six linked wave tracks; elapsed time counts visible frames only. */
 final class GradientMotion implements WallpaperMotion {
     static final String[] COLORS={"a_inner","b_inner","a_cp1","b_cp1","a_cp2","b_cp2",
         "a_cp3","b_cp3","a_cp4","b_cp4","a_cp5","b_cp5","a_cp6","b_cp6","a_outer","b_outer"};
@@ -37,15 +36,15 @@ final class GradientMotion implements WallpaperMotion {
     }
     float[] colors(){return palette;}
     float time(){return (float)seconds;}
-    public void change(int scene,boolean animate){} // Original palettes and shapes are shared by all scenes.
+    public void change(int scene,boolean animate){}
     public void follow(float x,float y){}
     public void pause(){last=-1;}
-    public boolean active(){return false;} // RenderLoop owns continuous/finite scheduling.
+    public boolean active(){return false;}
     public void advance(long now,float speed){
         if(last>=0){
             double delta=Math.max(0,(now-last)/1_000_000_000d);
             seconds+=delta;
-            // Original color time is elapsed time; only shape motion slows down.
+
             shapeSeconds+=Math.min(.05,delta)*Math.max(0,Math.min(1,speed));
         }
         last=now;update((float)shapeSeconds);
@@ -62,7 +61,7 @@ final class GradientMotion implements WallpaperMotion {
         if(phase<5)blend=blend*blend*(3-2*blend);
         for(int p=0;p<5;p++){
             float x=splines[0].knots[p]*1080;
-            // Dependency order is b,f,g,d,c,e, as in the original renderer.
+
             waves[0][p]=wave(x,(float)((Math.sin(t*.5)*.20000000298023224+.8)*-100),
                 (float)((Math.sin(t*.3)*.4000000059604645+.6)*.005817764438688755),t+1.5707964f,300);
             waves[4][p]=wave(x,(float)((Math.sin(t*.2)*.20000000298023224+.8)*-525),

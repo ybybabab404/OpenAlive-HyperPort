@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** A square in oriented source-image pixels, independent of preview resolution. */
 final class FrameCrop {
     final float x,y,size,angle;
     FrameCrop(float x,float y,float size,float angle){this.x=x;this.y=y;this.size=size;this.angle=angle;}

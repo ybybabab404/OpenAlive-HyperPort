@@ -9,7 +9,6 @@ import dalvik.system.DexClassLoader;
 import java.io.*;
 import java.lang.reflect.*;
 
-/** Unmodified Xiaomi layouts, styles, drawables and controls, isolated from Flyme. */
 final class XiaomiUi extends ContextWrapper {
     final ClassLoader loader; final Resources resources; final Resources.Theme theme;
     private LayoutInflater inflater;
@@ -36,7 +35,7 @@ final class XiaomiUi extends ContextWrapper {
         loader=new DexClassLoader(apk.getPath()+File.pathSeparator+host.getApplicationInfo().sourceDir,host.getCodeCacheDir().getPath(),null,platform);
         ApplicationInfo info=new ApplicationInfo();info.packageName="com.android.thememanager";info.uid=android.os.Process.myUid();info.sourceDir=info.publicSourceDir=apk.getPath();
         Resources original=host.getPackageManager().getResourcesForApplication(info);
-        // Own Resources instance: never alter a cached PackageManager resource's loader.
+
         resources=new Resources(original.getAssets(),original.getDisplayMetrics(),original.getConfiguration());
         Field field=Resources.class.getDeclaredField("mClassLoader");field.setAccessible(true);field.set(resources,loader);
         theme=resources.newTheme();theme.setTo(host.getTheme());theme.applyStyle(id("style","AppTheme.NoTitle.Translucent.SuperWallpaperPreview"),true);

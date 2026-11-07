@@ -8,7 +8,6 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-/** System-UID adapter restricted to this app's six wallpaper components. */
 public final class XiaomiApply {
     static void apply(Context c,XiaomiPacks.Pack p)throws Exception {
         if(android.os.Process.myUid()/100000!=0)throw new IOException("目前仅支持主用户");
@@ -27,8 +26,7 @@ public final class XiaomiApply {
         WallpaperManager wm=WallpaperManager.getInstance(c);String family=args[0];ComponentName component=new ComponentName("org.aliveclean","org.aliveclean.XiaomiWallpaper$"+Character.toUpperCase(family.charAt(0))+family.substring(1));
         try{WallpaperManager.class.getMethod("setWallpaperComponentWithFlags",ComponentName.class,int.class).invoke(wm,component,WallpaperManager.FLAG_SYSTEM|WallpaperManager.FLAG_LOCK);}
         catch(InvocationTargetException e){
-            // HyperOS may throw after the binder transaction, in its optional
-            // ThemeManager notification. Accept only a verified successful apply.
+
             WallpaperInfo actual=wm.getWallpaperInfo();if(!(e.getCause() instanceof SecurityException)||actual==null||!component.equals(actual.getComponent()))throw e;
         }
         WallpaperInfo actual=wm.getWallpaperInfo();if(actual==null||!component.equals(actual.getComponent()))throw new IllegalStateException("Wallpaper verification failed");

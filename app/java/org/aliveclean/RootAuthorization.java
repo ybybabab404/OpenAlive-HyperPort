@@ -8,14 +8,13 @@ import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-/** One bounded process-wide request; permission dialogs can pause any activity. */
 final class RootAuthorization {
     enum Status {
         GRANTED("Root 已授权"),DENIED("Root 未授权"),UNAVAILABLE("Root 不可用"),TIMEOUT("Root 授权超时");
         final String text;Status(String text){this.text=text;}
     }
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
-    // Access on the main thread only. The probe itself owns no UI/context.
+
     private static final ArrayList<Registration> listeners=new ArrayList<>();
     private static boolean checking;
     private static Status latest;
@@ -35,8 +34,7 @@ final class RootAuthorization {
     static Registration watch(boolean force,Consumer<Status> callback){
         Registration registration=new Registration(callback);listeners.add(registration);
         if(checking)return registration;
-        // Reuse a just-finished request across permission-dialog dismissal or
-        // recreation, so denial cannot immediately trigger another prompt.
+
         if(!force&&latest!=null&&SystemClock.elapsedRealtime()-completedAt<REUSE_MILLIS){
             Status result=latest;MAIN.post(()->registration.deliver(result));return registration;
         }

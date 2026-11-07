@@ -5,7 +5,6 @@ import android.database.ContentObserver;
 import android.os.*;
 import android.provider.Settings;
 
-/** Clock events are independent of wallpaper frames. Runtime hosts supply AOD ticks. */
 final class ClockUpdates {
     interface Listener {void refresh(long time);}
     private final Context context;
@@ -30,8 +29,7 @@ final class ClockUpdates {
     void refresh(long time){
         if(!active)return;
         listener.refresh(time);main.removeCallbacks(minute);
-        // Only the visible editor needs a fallback callback. Actual AOD refresh
-        // is driven by the host's existing wake/display window, not a second alarm.
+
         if(preview)main.postDelayed(minute,60000-Math.floorMod(System.currentTimeMillis(),60000L));
     }
     void stop(){if(!active)return;active=false;main.removeCallbacks(minute);context.unregisterReceiver(receiver);context.getContentResolver().unregisterContentObserver(format);}

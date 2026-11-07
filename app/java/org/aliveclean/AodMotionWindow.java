@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** Photo AOD's official three-second render window and linear speed countdown. */
 final class AodMotionWindow {
     static final int DURATION_MS=3000;
     private long start=-1;

@@ -9,9 +9,8 @@ import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 
-/** Full-screen attention window owned by SystemUI, shown only while dozing. */
 final class AodOverlay {
-    private static final String TAG = "HyperAliveAod";
+    private static final String TAG = "AliveHSAod";
     private static SurfaceView view;
     private static RenderLoop loop;
 
@@ -24,13 +23,13 @@ final class AodOverlay {
             view = new AodView(service);
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-                    (2038 /* TYPE_APPLICATION_OVERLAY */),
+                    (2038  ),
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                             | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                             | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                     PixelFormat.TRANSLUCENT);
-            params.setTitle("HyperAliveAod");
+            params.setTitle("AliveHSAod");
             service.getSystemService(WindowManager.class).addView(view, params);
             Log.i(TAG, "overlay added");
         } catch (Throwable error) {
@@ -39,7 +38,6 @@ final class AodOverlay {
         }
     }
 
-    /** AOD fades out during the wake animation; keep the scene until the screen is on. */
     static void hide() {
         Trace.log("T11", "overlay#hide");
         if (view == null) {

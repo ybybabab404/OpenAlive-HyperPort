@@ -11,15 +11,6 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
-/**
- * HyperOS does not deliver wallpaper touches to a third-party WallpaperService, so the liquid scene
- * gets nothing on the home screen or the lock screen. The lock screen is the one place we can help:
- * the keyguard window belongs to SystemUI, which we already hook, and its touches can be mirrored to
- * the wallpaper process without consuming them.
- *
- * Only the keyguard window is mirrored, so launcher gestures stay untouched, and every forwarded
- * motion is a copy: the original event keeps flowing to SystemUI unchanged.
- */
 final class KeyguardTouchRelay {
     private static final String TAG="AliveClean";
     private static final Uri SCENE=Uri.parse("content://org.aliveclean.scene/configuration");
@@ -39,7 +30,7 @@ final class KeyguardTouchRelay {
     private static java.lang.ref.WeakReference<View> clockRef=new java.lang.ref.WeakReference<>(null);
     private static boolean dumped;
     private static boolean clockProbed;
-    /** 0 = 完全关闭锁屏形变，1 = 原生幅度。 */
+
     private static final float DEFORM_GAIN=0f;
     private static boolean deformLogged;
     private static volatile boolean dragging;
@@ -84,8 +75,6 @@ final class KeyguardTouchRelay {
         Log.i(TAG,"lock touch relay installed methods="+hooked);
     }
 
-    /** Reports which keyguard views actually consume a finger down, so the clock that deforms under
-     *  touch can be identified on this ROM instead of guessed by class name. */
     private static void hookClockViews(ClassLoader loader) {
         try {
             Class<?> group=Class.forName("android.view.ViewGroup",false,loader);
@@ -109,9 +98,6 @@ final class KeyguardTouchRelay {
         }
     }
 
-    /** The warp is a native property animation: the keyguard content is scaled, faded and shifted
-     *  while a finger drags it. Resetting those values after the fact loses the race with the
-     *  animator, so the setters themselves are refused for shade views during an active drag. */
     private static void hookPropertyWrites(ClassLoader loader) {
         try {
             Class<?> view=Class.forName("android.view.View",false,loader);
@@ -153,11 +139,6 @@ final class KeyguardTouchRelay {
         return false;
     }
 
-    /** Native keyguard horizontal-move handler: progress = |distance| / 270px drives
-     *  alpha = 1 - progress and scale = 1 - 0.1 * progress for the clock and notification
-     *  containers. Scaling the incoming distance to zero keeps every view at full opacity and
-     *  size, which is the effect the user wants gone. Only active while the liquid scene is the
-     *  applied wallpaper and the keyguard is showing. */
     private static void hookLockDeform(ClassLoader loader) {
         try {
             Class<?> callback=Xp.findClassIfExists(
@@ -186,7 +167,6 @@ final class KeyguardTouchRelay {
         }
     }
 
-    /** adb shell settings put system alive_lock_deform_off 1 立即停用，无需重启。 */
     private static boolean deformOff() {
         try {
             return android.provider.Settings.System.getInt(
@@ -225,12 +205,6 @@ final class KeyguardTouchRelay {
         }
     }
 
-    /**
-     * With a liquid scene applied, an upward drag that does not start in the bottom band must not
-     * unlock the phone: it belongs to the water. The shade still gets the DOWN, so taps on
-     * notifications keep working; the moment the drag is recognised we cancel the gesture for the
-     * subtree, which returns the panel to rest instead of dismissing the keyguard.
-     */
     private static void gate(Xp.MethodHookParam param,MotionEvent event) {
         View view=param.thisObject instanceof View?(View)param.thisObject:null;
         if (view==null)return;
@@ -245,7 +219,7 @@ final class KeyguardTouchRelay {
                 float rise=startRawY-event.getRawY(),travel=Math.abs(event.getX()-startX);
                 float slop=dp(view,24);
                 if (rise>slop&&rise>travel) {
-                    // Upward drag: the water owns everything above the unlock strip.
+
                     decided=true;hijacked=startRawY<unlockBandTop(view);
                     if (hijacked) note("vertical",startRawY);
                 }
@@ -261,8 +235,6 @@ final class KeyguardTouchRelay {
         }
     }
 
-    /** One shot: names of every view under the keyguard window, so the clock that deforms under a
-     *  finger can be identified by class instead of guessed from a screen region. */
     private static void dumpOnce(View root) {
         if (dumped) return;
         dumped=true;
@@ -300,8 +272,6 @@ final class KeyguardTouchRelay {
         return null;
     }
 
-    /** The clock header feeds the digits' translation and alpha from the drag; zeroing those values
-     *  on every keyguard touch keeps the clock still without depending on where the touch started. */
     private static void pinClock(Object source) {
         View root=source instanceof View?(View)source:null;
         if (root==null) return;
@@ -342,15 +312,10 @@ final class KeyguardTouchRelay {
         return copy;
     }
 
-    /** Bottom band that still unlocks. Derived from the live view height so every screen size,
-     *  aspect ratio and navigation mode gets the same 10% strip instead of a baked pixel value. */
     private static int screenHeight(View view) {
         return view.getResources().getDisplayMetrics().heightPixels;
     }
 
-    /** Bottom strip that still unlocks, expressed as 10% of the real display height so every screen
-     *  size and aspect ratio gets the same physical share of the screen. Raw screen coordinates are
-     *  used on purpose: the keyguard view can be inset, and a view-relative y made the band drift. */
     private static float unlockBandTop(View view) {
         return screenHeight(view)*0.88f;
     }
@@ -365,8 +330,7 @@ final class KeyguardTouchRelay {
         liquidCheckedAt=now;
         try {
             Bundle result=application().getContentResolver().call(SCENE,"configuration",null,null);
-            // A switched-away wallpaper leaves a stale configuration behind, so the scene provider is
-            // asked whether our wallpaper service is still alive in its own process.
+
             liquidApplied=result!=null&&result.getBoolean("wallpaper_running",false)
                     &&result.getBoolean("vivo_liquid",false);
         } catch (Throwable unavailable) {
@@ -394,11 +358,6 @@ final class KeyguardTouchRelay {
         throw new IllegalStateException("no application in this process");
     }
 
-    /** Successful fingerprint authentication is the only signal that tells a screen-off wake which
-     *  is heading straight to the home screen apart from one that will stay on the lock screen.
-     *  KeyguardUpdateMonitor.onFingerprintAuthenticated(int,boolean) runs on the main thread as soon
-     *  as the HAL reports the match, before the keyguard is dismissed, so it is forwarded verbatim
-     *  with an uptimeMillis stamp and the wallpaper decides how long to trust it. */
     private static void hookFingerprint(ClassLoader loader) {
         try {
             Class<?> monitor=Xp.findClassIfExists("com.android.keyguard.KeyguardUpdateMonitor",loader);
@@ -418,11 +377,6 @@ final class KeyguardTouchRelay {
         } catch (Throwable error) {Log.w(TAG,"fingerprint hook unavailable",error);}
     }
 
-    /** The keyguard starts its exit animation in KeyguardViewMediator.handleHide(): that is the
-     *  instant SurfaceFlinger begins the wallpaper reveal. Sending scene 2 there keeps the
-     *  wallpaper's own 0->2 timeline aligned with the system one. Waiting for
-     *  isKeyguardLocked()==false fires roughly 0.3-0.5 s into that animation, so the first frame
-     *  the user sees is already part-way through and the unlock looks like a jump. */
     private static void hookKeyguardHide(ClassLoader loader) {
         try {
             Class<?> mediator=Xp.findClassIfExists("com.android.systemui.keyguard.KeyguardViewMediator",loader);
@@ -464,8 +418,6 @@ final class KeyguardTouchRelay {
         catch (Throwable dead) {channel=null;Log.w(TAG,"fingerprint channel dropped",dead);}
     }
 
-    /** Unlike the touch path this must survive the wallpaper process not being bound yet, so a
-     *  failed connect is retried at most every few seconds instead of being latched forever. */
     private static Messenger signalChannel() {
         if (channel!=null) return channel;
         long now=SystemClock.uptimeMillis();

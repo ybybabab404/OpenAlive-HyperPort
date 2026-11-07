@@ -10,7 +10,6 @@ import java.io.InputStream;
 import java.lang.reflect.*;
 import java.util.*;
 
-/** Host bindings for the original editor layouts and controls in the pinned ROM. */
 final class OfficialEditor implements AutoCloseable {
     interface Actions {
         void scene(int scene);
@@ -55,8 +54,7 @@ final class OfficialEditor implements AutoCloseable {
         this.activity=activity;this.actions=actions;ui=new OfficialUi(activity);dialogs=new OfficialDialogs(ui);
         root=(ViewGroup)ui.inflate("activity_editor",null);
         root.setBackgroundColor(0xff000000);
-        // The original service draws into this placeholder. Our TextureView owns
-        // the existing preview renderer, so no second Surface/BufferQueue is needed.
+
         for(int i=root.getChildCount()-1;i>=0;i--)if(root.getChildAt(i) instanceof SurfaceView)root.removeViewAt(i);
         FrameLayout wallpaper=(FrameLayout)find("fl_wallpaper_preview_container");
         preview=new TextureView(activity);preview.setSurfaceTextureListener(listener);
@@ -84,8 +82,7 @@ final class OfficialEditor implements AutoCloseable {
         bars[1]=add("fl_lockscreen_button_container","editor_lockscreen_button_photo_wp_legacy_sysui");
         bars[2]=add("fl_launcher_button_container","editor_launcher_button_photo_wp_legacy_sysui");
         aodPanel=new Panel(true);effectPanel=new Panel(false);
-        // Alive always includes AOD. Remove the original system-wide switch and
-        // its divider; this editor never changes the user's global AOD switch.
+
         View switchView=ui.find(bars[0],"aod_switch");
         ViewGroup switchRow=(ViewGroup)switchView.getParent();
         switchRow.removeViewAt(1);switchRow.removeView(switchView);
@@ -132,8 +129,7 @@ final class OfficialEditor implements AutoCloseable {
         cosmicAodSwitch.setOnCheckedChangeListener((button,checked)->{if(!bindingKeepLock&&!busy&&options!=null&&options.cosmic!=0)actions.continuous("cosmic_continuous_aod",checked);});
         cosmicHomeSwitch.setOnCheckedChangeListener((button,checked)->{if(!bindingKeepLock&&!busy&&options!=null&&options.cosmic!=0)actions.continuous("cosmic_continuous_home",checked);});
         click(bars[0],"aod_style",()->open(aodPanel));
-        // Notification routing remains a native system setting; this button
-        // has no portable notification-style backend yet.
+
         ui.find(bars[0],"aod_notification_switch").setVisibility(View.GONE);
         click(bars[1],"btn_wallpaper_picker",actions::photo);
         click(bars[1],"btn_alive_texture",()->open(effectPanel));
@@ -208,7 +204,7 @@ final class OfficialEditor implements AutoCloseable {
         ui.find(bars[1],"btn_alive_texture").setVisibility(chosen.cosmic==0?View.VISIBLE:View.GONE);
         ui.find(bars[2],"btn_alive_effect").setVisibility(chosen.cosmic==0?View.VISIBLE:View.GONE);
         ui.find(bars[2],"split_line").setVisibility(chosen.cosmic==0?View.VISIBLE:View.GONE);
-        // Keep the official photo button but make the shared-photo destination explicit.
+
         ((TextView)ui.find(bars[1],"tv_wallpaper_picker")).setText(chosen.pairedFrame()?"锁屏与桌面照片":"壁纸");
         if(visiblePanel!=null)visiblePanel.refresh();
         fit();
@@ -223,8 +219,7 @@ final class OfficialEditor implements AutoCloseable {
         if(visiblePanel!=null&&visiblePanel.sheet.getTop()>0)bottom=Math.max(bottom,height-visiblePanel.sheet.getTop()+dp(12));
         float scale=Math.max(.2f,(height-top-bottom)/height);
         card.setPivotX(root.getWidth()/2f);card.setPivotY(0);card.setScaleX(scale);card.setScaleY(scale);card.setTranslationY(top);
-        // The tab is hosted inside the original preview container. Counter-scale
-        // its controls so their physical text and touch target sizes stay native.
+
         tabView.setPivotX(tabView.getWidth()/2f);tabView.setPivotY(tabView.getHeight());
         tabView.setScaleX(1f/scale);tabView.setScaleY(1f/scale);
     }
@@ -332,7 +327,7 @@ final class OfficialEditor implements AutoCloseable {
         @Override public int getItemCount(){return panel.choices.size();}
         @Override public Cell onCreateViewHolder(ViewGroup parent,int type){
             View view=ui.inflate(panel.aod?"item_aod_main_panel_image_with_label":"item_launcher_main_panel_effect",parent);
-            // Original 106 dp cells in the original three-column list.
+
             if(view instanceof LinearLayout)((LinearLayout)view).setGravity(Gravity.CENTER_HORIZONTAL);
             view.setPadding(0,0,0,dp(16));return new Cell(view);
         }

@@ -9,7 +9,6 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 
-/** Original editor UI with portable photo/apply transactions. */
 public final class MainActivity extends Activity implements TextureView.SurfaceTextureListener {
     private RenderLoop renderer;
     private SharedPreferences draft;
@@ -19,7 +18,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     private boolean awaitingApply;
     private int previousWallpaperId,previousLockId;
     private boolean pickerResultReliable;
-    private int importTarget; // 0 shared/lock photo, 1 independent home, 2 frame photo.
+    private int importTarget;
     private Surface previewSurface;
 
     @Override public void onCreate(Bundle state) {
@@ -27,8 +26,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         draft=getSharedPreferences(SceneOptions.DRAFT,0);
         if(!draft.contains("aod"))new SceneOptions(getSharedPreferences(SceneOptions.APPLIED,0)).save(draft);
         if(draft.getInt("aod",0)<0)draft.edit().putInt("aod",0).apply();
-        // One-time repair: the vivo editor used to stamp aod=101 into the shared draft on every open,
-        // which then got committed by any later apply and turned Flyme scenes into full-screen AOD.
+
         if(!draft.getBoolean("aod_migrated",false)){
             int appliedAod=new SceneOptions(getSharedPreferences(SceneOptions.APPLIED,0)).aod;
             android.content.SharedPreferences.Editor fix=draft.edit().putBoolean("aod_migrated",true);
@@ -48,9 +46,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
             editor=new OfficialEditor(this,new OfficialEditor.Actions(){
                 @Override public void scene(int value){mode=value;showScene();}
                 @Override public void choose(String key,int value){SharedPreferences.Editor edit=draft.edit().putInt(key,value);
-                    // Only drop the cosmic scene when the user actually changes the AOD
-                    // style. The editor also reports the unchanged value while syncing its
-                    // controls, and that used to wipe the scene picked a moment earlier.
+
                     if(key.equals("aod")&&value!=draft.getInt("aod",0))edit.putInt("cosmic",0);edit.apply();showScene();}
                 @Override public void photo(){choosePhoto();}
                 @Override public void crop(){openFrameCrop(new SceneOptions(draft).framePhoto,false);}
@@ -94,14 +90,13 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
 
     private void applyDraft() {
         if(importing||awaitingApply)return;
-        // Even an already-bound home service may not be applied to the lock screen.
+
         try{
             WallpaperManager manager=WallpaperManager.getInstance(this);
             previousWallpaperId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
             previousLockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
             if(PlatformProfile.isHyperOs(this)){
-                // The HyperOS live picker answers RESULT_CANCELED for third-party
-                // components, so bind the wallpaper through the system adapter.
+
                 awaitingApply=true;
                 new Thread(()->{
                     String failure=null;
@@ -121,9 +116,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
 
     private void commitDraft(){
         SceneOptions chosen=new SceneOptions(draft);
-        // The SystemUI bridge may become ready a little after the editor. Do not
-        // make applying a wallpaper depend on that race: the bridge observes the
-        // committed configuration and attaches the AOD clock when it is ready.
+
         if(chosen.save(getSharedPreferences(SceneOptions.APPLIED,0))){
             SceneProvider.changed(this);
             toast("壁纸已应用");
@@ -184,7 +177,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
                 File completed=image;
                 runOnUiThread(()->{
                     if(isFinishing()||isDestroyed()){completed.delete();return;}
-                    // Immutable image + one preference transaction keeps the active wallpaper intact.
+
                     if(target==2){importBusy(false);openFrameCrop(completed.getName(),true);return;}
                     if(cropPhoto){importBusy(false);startActivityForResult(new Intent(this,PhotoCropActivity.class).putExtra("photo",completed.getName()),31);return;}
                     SharedPreferences.Editor edit=draft.edit().putInt("cosmic",0).putString(target==1?"home_photo":"photo",completed.getName());

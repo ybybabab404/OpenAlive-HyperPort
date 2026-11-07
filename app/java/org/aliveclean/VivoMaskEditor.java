@@ -11,7 +11,6 @@ import java.io.FileOutputStream;
 import java.util.ArrayDeque;
 import java.util.UUID;
 
-/** A photo-space mask editor. White enables the original effect; black excludes it. */
 final class VivoMaskEditor {
     interface Saved {void save(String file);}
     private final Activity host;
@@ -92,7 +91,7 @@ final class VivoMaskEditor {
             photo=Bitmap.createScaledBitmap(source,w,h,true);if(photo!=source)source.recycle();
             mask=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);mask.eraseColor(Color.BLACK);
             if(initial!=null){new Canvas(mask).drawBitmap(initial,null,new Rect(0,0,w,h),paint);initial.recycle();}
-            // Convert white mask coverage to a translucent cyan overlay; black stays transparent.
+
             overlay.setColorFilter(new ColorMatrixColorFilter(new ColorMatrix(new float[]{0,0,0,0,40,0,0,0,0,180,0,0,0,0,255,.42f,0,0,0,0})));
         }
         @Override protected void onDraw(Canvas c){

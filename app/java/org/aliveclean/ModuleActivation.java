@@ -4,7 +4,6 @@ import android.content.*;
 import android.net.Uri;
 import android.os.*;
 
-/** A live SystemUI module receipt, separate from optional clock capabilities. */
 final class ModuleActivation {
     static final String QUERY="org.aliveclean.QUERY_MODULE_ACTIVATION";
     private static final Uri STATUS=Uri.parse("content://org.aliveclean.clock.runtime");
@@ -17,8 +16,7 @@ final class ModuleActivation {
                 Bundle data=new Bundle();data.putBinder("owner",OWNER);
                 context.getContentResolver().call(STATUS,"hookAnnounce",null,data);
             }catch(RuntimeException unavailable){
-                // The app may not be allowed to start during boot. The visible
-                // home page requests a fresh receipt; no persisted ready flag.
+
             }finally{announcing.set(false);}
         },"OpenAliveModuleReceipt").start();
     }

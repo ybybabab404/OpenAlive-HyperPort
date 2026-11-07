@@ -1,6 +1,5 @@
 package miui.util;
 
-/** Defaults for Xiaomi hardware features that do not exist on other ROMs. */
 public final class FeatureParser {
     public static boolean getBoolean(String name,boolean fallback){return fallback;}
     public static int getInteger(String name,int fallback){return fallback;}

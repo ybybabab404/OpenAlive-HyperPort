@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.opengl.GLES30;
 
-/** Final wallpaper-only RGB multiplication. Restores the original Vivo renderer's GL state. */
 final class VivoDimPass implements AutoCloseable {
     private int program,vao,level;
     private final int[] state=new int[13],viewport=new int[4];

@@ -7,7 +7,6 @@ import android.view.ViewGroup;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.function.BiConsumer;
 
-/** Loaded with Xiaomi's RecyclerView, not the Flyme editor's library version. */
 public final class XiaomiListAdapter extends RecyclerView.Adapter<XiaomiListAdapter.Holder> {
     private final Context context;
     private final int layout,count;

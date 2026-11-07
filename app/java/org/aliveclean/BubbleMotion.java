@@ -6,7 +6,6 @@ import android.view.animation.PathInterpolator;
 import java.io.IOException;
 import org.json.*;
 
-/** Three independent bubble tracks plus the original flowing background palette. */
 final class BubbleMotion implements WallpaperMotion {
     static final int STRIDE=36,SIZE=STRIDE*3+52;
     final float[] values=new float[SIZE],from=new float[SIZE];
@@ -33,7 +32,7 @@ final class BubbleMotion implements WallpaperMotion {
         }catch(JSONException e){throw new IOException("Invalid Bubble configuration",e);}
         mode=keepLock&&scene==2?1:scene;System.arraycopy(states[mode],0,values,0,SIZE);
     }
-    public void follow(float x,float y){} // This family has a full composition, not a clock-centered orb.
+    public void follow(float x,float y){}
     public void pause(){last=0;transitionTime.pause();}
     public boolean active(){return moving;}
     private void track(int b,int component,int ms,int wait,Interpolator curve){duration[b][component]=ms;delay[b][component]=wait;curves[b][component]=curve;}
@@ -59,7 +58,7 @@ final class BubbleMotion implements WallpaperMotion {
             track(2,0,1883,0,expand);track(2,1,1883,0,new PathInterpolator(.4f,.21f,.24f,.97f));bgDuration=1200;
         }
         total=bgDelay+bgDuration;
-        // AnimatorSet promotes default 300 ms tracks to the longest property duration.
+
         for(int b=0;b<3;b++){
             int longest=Math.max(duration[b][0],Math.max(duration[b][1],duration[b][2]));
             int start=previous==0&&b==2?260:previous==1&&mode==2&&b==0?300:0;

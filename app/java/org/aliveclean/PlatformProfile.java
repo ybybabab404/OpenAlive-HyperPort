@@ -3,13 +3,6 @@ package org.aliveclean;
 import android.content.Context;
 import android.content.pm.PackageManager;
 
-/** Which OEM personalization framework this process is talking to.
- *
- * HyperOS renders AOD through com.miui.miwallpaper and keeps the wallpaper picker
- * in the live-picker / theme apps. Everything platform specific is routed through
- * here so a missing package degrades into "feature unavailable" instead of a hook
- * that never fires.
- */
 final class PlatformProfile {
     static final int UNKNOWN=0;
     static final int HYPEROS=2;

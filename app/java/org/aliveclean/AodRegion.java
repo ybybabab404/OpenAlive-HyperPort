@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** One absolute display-space rectangle. Burn-in movement is already included. */
 final class AodRegion {
     final int displayId,screenWidth,screenHeight,left,top,right,bottom;
     private AodRegion(int displayId,int width,int height,int left,int top,int right,int bottom){
@@ -17,12 +16,12 @@ final class AodRegion {
         try{return create(displayId,width,height,Integer.parseInt(parts[0]),Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]));}
         catch(NumberFormatException error){return null;}
     }
-    // Preserve the official Rect.centerX()/centerY() integer rounding and GL Y sign.
+
     float sceneX(){return ((left+right)/2-screenWidth/2f)/screenWidth;}
     float sceneY(){return (screenHeight/2f-(top+bottom)/2)/screenHeight;}
     boolean fits(int display,int width,int height){
         if(display!=displayId||width<=0||height<=0)return false;
-        // Allow proportionally scaled surfaces, but reject stale rotation/display snapshots.
+
         return Math.abs((double)width*screenHeight/((double)height*screenWidth)-1)<.01;
     }
 }

@@ -10,7 +10,6 @@ import android.view.Choreographer;
 import java.io.*;
 import java.nio.ByteBuffer;
 
-/** All EGL, native handles and textures belong to this single worker. */
 final class RenderLoop {
     private final Context context;
     private final android.content.SharedPreferences preferences;
@@ -47,10 +46,9 @@ final class RenderLoop {
     private int homeWidth,homeHeight;
     private float aspect=1;
     private boolean visible=true;
-    // Wallpaper palette handed over by the AOD host; null means "derive locally".
+
     private int[] aodPalette;
-    /** Reads the palette of the wallpaper the user applied. Works for live wallpapers
-     * too, which is why the sphere cannot simply sample a wallpaper bitmap here. */
+
     private void readWallpaperPalette(){
         if(aodPalette!=null)return;
         try{android.app.WallpaperManager manager=android.app.WallpaperManager.getInstance(context);
@@ -73,7 +71,7 @@ final class RenderLoop {
     private int displayId;
     private volatile boolean closed;
     private final Runnable renderTask=()->render(frameTime);
-    // Queue GL work after all animation callbacks for this vsync have run.
+
     private final Choreographer.FrameCallback frame=this::onVsync;
     private final Runnable reloadTask=()->reloadScene();
     private final Runnable cropTask=()->applyPendingCrop();
@@ -84,25 +82,19 @@ final class RenderLoop {
     RenderLoop(Context context){this(context,SceneOptions.APPLIED);}
     RenderLoop(Context context,String name){Context app=context.getApplicationContext();this.context=app!=null?app:context;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
     void attach(Surface surface,int w,int h){queueAttach(surface,w,h,false);}
-    // A rotation can hand back the very same Surface object with the very same reported size while
-    // the buffer queue behind it has been replaced. Reusing the old EGLSurface then swaps into a
-    // dead queue: no frame ever reaches the wallpaper window, it stays DRAW_PENDING and the
-    // launcher's gesture transition never becomes ready. attachFresh never reuses an EGLSurface.
+
     void attachFresh(Surface surface,int w,int h){queueAttach(surface,w,h,true);}
     private void queueAttach(Surface surface,int w,int h,boolean fresh){
         int generation=++surfaceGeneration;
         handler.post(()->attach(surface,w,h,0,fresh,generation));
     }
-    // onSurfaceRedrawNeeded: the framework explicitly asks for a frame. Reuse the current EGL
-    // surface only when it still matches the requested size; otherwise rebuild from scratch.
+
     void redraw(Surface surface,int w,int h){redraw(surface,w,h,0);}
     private void redraw(Surface surface,int w,int h,int attempt){
         int generation=++surfaceGeneration;
         handler.post(()->{
             if(generation!=surfaceGeneration){Log.w("AliveClean","redraw stale generation "+generation+" != "+surfaceGeneration);return;}
-            // A rotation briefly reports an invalid surface or 0x0 before the new buffer queue
-            // exists. Releasing a working renderer here would kill the only frame source, so
-            // wait for a usable surface instead of rebuilding into an exception.
+
             if(!surface.isValid()||w<1||h<1){
                 if(attempt<20&&!closed){Log.w("AliveClean","redraw retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->redraw(surface,w,h,attempt+1),50);}
                 else Log.w("AliveClean","redraw skipped "+w+"x"+h+" valid="+surface.isValid());
@@ -119,13 +111,7 @@ final class RenderLoop {
         });
     }
     private void attach(Surface surface,int w,int h,int attempt,boolean fresh,int generation){handler.post(()->{
-        // Check the surface before touching the live renderer: a rotation hands over a surface
-        // that is briefly invalid, and the old order (release first, validate second) destroyed
-        // a healthy renderer and returned without ever retrying, which left the wallpaper black.
-        // A rotation's surface can stay invalid for a few frames, so retry instead of giving up:
-        // the window only becomes visible once it holds a buffer, and a surface we abandoned keeps
-        // the wallpaper layer DRAW_PENDING for good — which is what stalled the launcher's
-        // gesture transitions in landscape.
+
         if(generation!=surfaceGeneration){Log.w("AliveClean","attach stale generation "+generation+" != "+surfaceGeneration);return;}
         if(!surface.isValid()||w<1||h<1){
             if(attempt<40&&!closed){Log.w("AliveClean","attach retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->attach(surface,w,h,attempt+1,fresh,generation),50);}
@@ -135,18 +121,12 @@ final class RenderLoop {
         if(!fresh&&surface==attachedSurface&&w==attachedWidth&&h==attachedHeight&&(scene!=0||cosmic!=null||vivo!=null)){pacer.reset();schedule();return;}
         release();
         try{init(surface,w,h);}catch(Exception e){Log.e("AliveClean","Renderer initialization failed",e);release();return;}
-        // A wallpaper window only turns visible after its surface holds a buffer, while the scene
-        // only draws when the framework reports it visible: waiting for onVisibilityChanged(true)
-        // here deadlocks, the window stays DRAW_PENDING and the wallpaper composes black. Draw one
-        // frame on every (re)attach so a fresh or rotated surface always has content.
+
         forceFrame=true;pacer.reset();schedule();
     });}
-    // Draw one frame even when the framework has not reported the engine visible yet. A rotation
-    // can leave the surface without a buffer, and an empty surface keeps the wallpaper window
-    // invisible forever, so the scene gets poked whenever the display configuration changes.
+
     void poke(){handler.post(()->{forceFrame=true;pacer.reset();schedule();});}
-    // rebuild() removed: a delayed second teardown raced onSurfaceChanged's attachFresh and left
-    // the wallpaper without a buffer for 350 ms right when the rotation gesture starts.
+
     void touch(int action,float x,float y){handler.post(()->{if(vivo!=null)vivo.touch(action,x,y);if(cosmic!=null&&action==0){cosmic.interaction();schedule();}});}
     void vivoDarkWallpaper(boolean dark){handler.post(()->{vivoDarkWallpaper=dark;if(vivo!=null){vivo.darkWallpaper(dark,renderingVisible());schedule();}});}
     void vivoCrop(float x,float y,float zoom){
@@ -174,7 +154,7 @@ final class RenderLoop {
     void clockTransition(long token){handler.post(()->{if(preview||token==seenClockToken)return;seenClockToken=token;clockToken=token;if(token!=0){if(renderingVisible())schedule();else reportClock(false);}});}
     private void reportClock(boolean submitted){
         long token=clockToken;clockToken=0;
-        if(token!=0&&!preview){{if(Diagnostics.TRACE)Log.i("AliveClean","Frame clock token="+token+" submitted="+submitted);}SceneChannel.frameReady(token,submitted);}
+        if(token!=0&&!preview){if(Diagnostics.TRACE)Log.i("AliveClean","Frame clock token="+token+" submitted="+submitted);SceneChannel.frameReady(token,submitted);}
     }
     void aodRegion(AodRegion region,int display){
         if(region==null||region.displayId!=display)return;
@@ -193,7 +173,7 @@ final class RenderLoop {
         if(lightSnapshot){vivoDarkWallpaper=nightLevel<1;vivoAodMask=aodMask;}
         if(mode!=next){stateReported=false;frameSample.clear();if(next==0)aodMotion.enter(System.nanoTime());else aodMotion.leave();}
         if(cosmic!=null&&mode!=next){cosmic.motion().change(next,animate);cosmicUntil=System.nanoTime()+5_000_000_000L;}
-        // Apply the wake target and scene together, before any frame can be submitted.
+
         if(vivo!=null&&(mode!=next||lightSnapshot)){vivo.transition(next,animate,vivoDarkWallpaper?.76f:1f,vivoAodMask);vivo.visible(renderingVisible());}
         int previous=mode;boolean visible=renderingVisible();
         mode=next;updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)Log.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
@@ -212,8 +192,7 @@ final class RenderLoop {
         if(!renderingVisible())return;
         if(vivo!=null)vivo.visible(true);
         if(cosmic!=null)cosmic.interaction();
-        // A pending vsync may belong to the previous display power state.
-        // Re-arm once per display-state change, not on every sensor sample.
+
         stopFrames();pacer.reset();schedule();
     });}
     void reload(){if(!closed){handler.removeCallbacks(reloadTask);handler.post(reloadTask);}}
@@ -262,10 +241,7 @@ final class RenderLoop {
         sailContinuousAod=options.cosmic==0&&options.aod==0&&options.sailContinuousAod;
         if(options.cosmic!=0){
             boolean dark=(context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
-            // The cosmic scene ships three palettes (aod/keyguard/unlock). The AOD palette is
-            // deliberately amber, which made the always-on screen look like a different
-            // wallpaper than the one previewed in the editor. Use the keyguard palette
-            // in AOD too so what you pick is what you get.
+
             int palette=mode==0?1:mode;
             cosmic=WallpaperRenderer.create(context.getAssets(),options.cosmic,dark,width,height,palette,options.cosmicKeepLock,this::schedule);
             if(cosmic instanceof StereoRenderer)((StereoRenderer)cosmic).configure(options.stereoSensitivity,options.stereoAodAnimation);
@@ -295,9 +271,7 @@ final class RenderLoop {
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_WRAP_S,GLES30.GL_CLAMP_TO_EDGE);GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_WRAP_T,GLES30.GL_CLAMP_TO_EDGE);
             GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D,0,GLES30.GL_RGB,1,1,0,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,ByteBuffer.allocateDirect(3));
             NativeScene.texture(scene,0,id[0],style.size,style.size);
-            // A decoded mask belongs to the current animation sample. Deferring
-            // its upload to the next vsync would advance the timeline first and
-            // repeatedly miss that mask, leaving the old shape until the end.
+
             masks=new MaskFrames(context.getAssets(),handler,()->{if(visible&&scene!=0)render(frameTime);},style);
         }
         applyAodRegion();
@@ -334,18 +308,15 @@ final class RenderLoop {
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}
         catch(Exception missing){
-            // A stale package handle (app updated while the wallpaper service kept running) can make
-            // this asset unreadable. It is decorative only: fall back to a blank texture instead of
-            // failing the whole renderer, which would drop the wallpaper back to the static image.
+
             Log.w("AliveClean","lens decorator unavailable, using blank texture",missing);
             Bitmap blank=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);decorator=upload(blank);blank.recycle();
         }
-        createScene(options);{if(Diagnostics.TRACE)Log.i("AliveClean","GLES3 scene ready "+w+"x"+h);}
+        createScene(options);if(Diagnostics.TRACE)Log.i("AliveClean","GLES3 scene ready "+w+"x"+h);
     }
     private int loadPhoto(String name,boolean primary){
         File file=new File(context.getFilesDir(),name);
-        // The AOD sphere is the wallpaper the user applied, so prefer the copy captured
-        // at apply time over whatever scene photo the options point at.
+
         if(primary){
             try(android.content.res.AssetFileDescriptor descriptor=context.getContentResolver()
                     .openAssetFileDescriptor(AodWallpaperProvider.PHOTO,"r")){
@@ -373,7 +344,7 @@ final class RenderLoop {
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_MIN_FILTER,GLES30.GL_LINEAR);GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_MAG_FILTER,GLES30.GL_LINEAR);
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_WRAP_S,GLES30.GL_CLAMP_TO_EDGE);GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_WRAP_T,GLES30.GL_CLAMP_TO_EDGE);
         if(bitmap.hasAlpha()&&bitmap.isPremultiplied()){
-            // getPixels returns straight ARGB; the effect shader performs alpha composition.
+
             int w=bitmap.getWidth(),h=bitmap.getHeight();int[] pixels=new int[w*h];bitmap.getPixels(pixels,0,w,0,0,w,h);
             ByteBuffer rgba=ByteBuffer.allocateDirect(pixels.length*4);
             for(int p:pixels)rgba.put((byte)(p>>16)).put((byte)(p>>8)).put((byte)p).put((byte)(p>>24));
@@ -382,8 +353,7 @@ final class RenderLoop {
         return ids[0];
     }
     private void render(long time){
-        // A forced frame is the one that gives a fresh surface its first buffer; it has to run
-        // even though the framework still reports the wallpaper invisible.
+
         boolean forced=forceFrame;forceFrame=false;
         if((!renderingVisible()&&!forced)||(scene==0&&cosmic==null&&vivo==null))return;
         if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){Log.e("AliveClean","Vivo frame failed",e);release();}return;}
@@ -406,9 +376,7 @@ final class RenderLoop {
             boolean resumedSample=frameMotion!=null&&frameSample.pending;
             motion.advance(time,preview||mode!=0||sailContinuousAod?1f:aodMotion.speed(time));
             if(frameMotion!=null){
-                // Do not chase a newer animator sample while waiting for its mask:
-                // a busy app can otherwise starve every intermediate mask until
-                // the final one. Geometry, photo blend and paper share one sample.
+
                 if(!frameSample.pending)frameSample.captureTextures(textureMotion);
                 frameSample.capture(frameMotion,motion,SystemClock.uptimeMillis());
                 if(!masks.upload(frameSample.mask,auxiliary[0])){if(!masks.failed())schedule();else reportClock(false);return;}

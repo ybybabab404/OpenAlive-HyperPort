@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
 
-/** Retain only the last failed operation, including reflective/native causes. */
 final class XiaomiFailure {
     static String describe(Context context, String operation, Throwable error) {
         try (PrintWriter out = new PrintWriter(new FileOutputStream(

@@ -5,7 +5,6 @@ import android.util.AttributeSet;
 import android.view.*;
 import android.widget.FrameLayout;
 
-/** AOD-only preview. The lockscreen continues to use the platform clock. */
 public final class EditorClockView extends FrameLayout {
     private final AodClockView face;
     public EditorClockView(Context context,AttributeSet attrs){

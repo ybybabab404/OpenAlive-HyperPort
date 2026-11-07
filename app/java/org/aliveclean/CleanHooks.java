@@ -11,9 +11,8 @@ import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam;
 
-/** Package-scoped wallpaper capability bridge. No checks run inside the render loop. */
 public final class CleanHooks extends XposedModule {
-    private static final String TAG = "HyperAliveHooks";
+    private static final String TAG = "AliveHSHooks";
     private final Set<String> handled = new HashSet<>();
     private boolean ambientHooked;
     private boolean systemHandled;
@@ -76,14 +75,6 @@ public final class CleanHooks extends XposedModule {
         }
     }
 
-    /**
-     * WallpaperManagerService checks AMBIENT_WALLPAPER through
-     * IPackageManager.checkPermission(String, String, int). That interface call is dispatched to
-     * PackageManagerService$IPackageManagerImpl, which inherits the final forwarder declared in
-     * IPackageManagerBase; the forwarder is seven code units long, so ART is free to inline it and
-     * a hook installed only there can miss the call. Both layers are hooked for that reason, and
-     * the result is forced exclusively for our own package, so no other permission check changes.
-     */
     private static void hookCheckPermission(String className, ClassLoader loader, String label) {
         Class<?> type = findServerClass(className, loader, label);
         if (type == null) {

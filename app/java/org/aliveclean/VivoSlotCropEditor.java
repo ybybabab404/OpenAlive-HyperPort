@@ -5,7 +5,6 @@ import android.graphics.*;
 import android.view.*;
 import android.widget.*;
 
-/** Non-destructive, per-slot edit. The same transform is used for stills and all video frames. */
 final class VivoSlotCropEditor implements AutoCloseable {
     interface Saved {void save(VivoOptions.Slot slot);}
     private final Dialog dialog;

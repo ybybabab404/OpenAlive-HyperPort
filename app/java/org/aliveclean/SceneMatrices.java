@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.opengl.Matrix;
 
-/** Same inverse projection/view/model chain as the official lens effect; reusable storage. */
 final class SceneMatrices {
     private final float width,height;
     private final float[] projection=new float[16],view=new float[16],translation=new float[16],

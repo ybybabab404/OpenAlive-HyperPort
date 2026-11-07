@@ -8,7 +8,6 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 
-/** Official layout and PhotoView, with a local square/angle configuration adapter. */
 public final class FrameCropActivity extends Activity {
     private OfficialUi ui;
     private ImageView photo;
@@ -46,8 +45,7 @@ public final class FrameCropActivity extends Activity {
             view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
             return insets;
         });root.requestApplyInsets();
-        // This host supplies data and placement only; XML widgets, styles and
-        // PhotoView gestures execute unchanged official code in isolated resources.
+
         for(int i=0;i<((ViewGroup)root).getChildCount();i++)if(((ViewGroup)root).getChildAt(i) instanceof SurfaceView)((ViewGroup)root).getChildAt(i).setVisibility(View.GONE);
         View cancel=ui.find(root,"btn_cancel");cancel.setOnClickListener(v->finish());cancel.bringToFront();
         TextView done=(TextView)ui.find(root,"btn_apply");done.setText("完成");done.setOnClickListener(v->save());done.bringToFront();

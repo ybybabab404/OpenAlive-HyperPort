@@ -9,7 +9,6 @@ import android.view.*;
 import java.io.*;
 import java.util.*;
 
-/** Original per-stage thumbnails; miniature cards never start extra native players. */
 final class XiaomiHomePreview {
     static final class Card {
         final XiaomiPacks.Pack pack;Bitmap image;
@@ -25,7 +24,7 @@ final class XiaomiHomePreview {
         String name=mode==0?"aod_small_preview":mode==1?"lockscreen_small_preview":"home_small_preview_"+land;
         int normal=metadata.getInt(name);int night=metadata.getInt(name+"_dark");return dark&&night!=0?night:normal;
     }
-    // Called off the main thread. Verify each shared lock/home pack only once.
+
     static Card[] load(Context c)throws Exception {
         Card[] cards=new Card[3];Map<String,File> files=new HashMap<>();Map<String,Resources> resources=new HashMap<>();Map<String,Bundle> manifests=new HashMap<>();
         XiaomiPacks.Pack lock=XiaomiState.selected(c,1),home=XiaomiState.selected(c,2);

@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
-import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
@@ -10,7 +9,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Process;
 
-/** In-memory receipt that the SystemUI hook is alive. No clock capability. */
 public final class ModuleActivationProvider extends ContentProvider {
     private IBinder module;
     @Override public boolean onCreate(){return true;}

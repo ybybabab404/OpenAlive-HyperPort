@@ -6,13 +6,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
-/**
- * system_server 侧：每次壁纸组件重新绑定后，确认模块壁纸是否还是当前壁纸；
- * 不是就恢复 full_screen_aod_on 的原值。静态壁纸和另一张 Live Wallpaper 都会走
- * WallpaperManagerService.bindWallpaperComponentLocked。
- */
 final class AodWallpaperModeHook {
-    private static final String TAG = "HyperAliveHooks";
+    private static final String TAG = "AliveHSHooks";
 
     private AodWallpaperModeHook() {}
 
@@ -34,8 +29,7 @@ final class AodWallpaperModeHook {
                             Object raw = Xp.getObjectField(param.thisObject, "mContext");
                             if (!(raw instanceof Context)) return;
                             final Context context = (Context) raw;
-                            // 绑定动作可能成对出现（桌面 + 锁屏），等它落定后再判断；
-                            // 也不能在服务持锁时回调 WallpaperManager，否则会和 binder 线程互锁。
+
                             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                                 @Override
                                 public void run() {

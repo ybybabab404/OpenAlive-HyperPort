@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.widget.LinearLayout;
 
-/** Calls the pinned ROM Flyme dialog builder, including its list/controller code. */
 final class OfficialDialogs {
     private final OfficialUi ui;
     private final java.util.ArrayList<Dialog> opened=new java.util.ArrayList<>();

@@ -2,10 +2,9 @@ package org.aliveclean;
 
 import android.content.SharedPreferences;
 
-/** A complete snapshot; preview edits never change the applied snapshot. */
 final class SceneOptions {
     static final String APPLIED="scene", DRAFT="scene.preview";
-    /** Copy of the wallpaper captured when a scene is applied; the AOD sphere reads it. */
+
     static final String WALLPAPER="wallpaper.png";
     final int aod,lock,home,color,cosmic;
     final VivoOptions vivo;

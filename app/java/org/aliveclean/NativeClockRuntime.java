@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 
-/** Immutable, digest-addressed original runtimes in the current host's private code cache. */
 final class NativeClockRuntime {
     static synchronized File unpack(Context host,String name)throws Exception{
         if(!"hyperos".equals(name))throw new IllegalArgumentException("Unknown original clock runtime");
@@ -39,8 +38,7 @@ final class NativeClockRuntime {
         try{
             MessageDigest hash=MessageDigest.getInstance("SHA-256");
             try(InputStream in=host.getAssets().open(asset);FileOutputStream out=new FileOutputStream(temporary)){
-                // Android 14+ requires code to be read-only before writing
-                // through this already-open descriptor.
+
                 if(!temporary.setReadOnly())throw new IOException("Cannot protect original clock code");
                 byte[] chunk=new byte[65536];
                 for(int n;(n=in.read(chunk))!=-1;){out.write(chunk,0,n);hash.update(chunk,0,n);}

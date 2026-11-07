@@ -3,7 +3,6 @@ package org.aliveclean;
 import org.json.*;
 import java.util.ArrayList;
 
-/** A self-contained snapshot, shared by the editor and the wallpaper engine. */
 final class VivoOptions {
     static final int LIQUID=1,RASTER=2,FLASH=3;
     int family,style=1,area=4,refraction=1,sensitivity;
@@ -12,8 +11,7 @@ final class VivoOptions {
     long videoDuration;
     int videoFrames,videoRate=30;
     final ArrayList<String> photos=new ArrayList<>();
-    // Parallel to photos: an empty entry denotes a still image. The still remains
-    // a decoded poster so paused/initial frames always have a valid texture.
+
     final ArrayList<String> rasterVideos=new ArrayList<>();
     final Slot[] slots={new Slot(),new Slot(),new Slot()};
     static final class Slot {

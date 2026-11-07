@@ -7,7 +7,6 @@ import java.nio.*;
 import java.util.*;
 import java.util.regex.*;
 
-/** Asset shader loader. Locations are cached; no lookups or allocation per frame. */
 final class AssetGl implements AutoCloseable {
     final int id;
     private final HashMap<String,Integer> uniforms=new HashMap<>();

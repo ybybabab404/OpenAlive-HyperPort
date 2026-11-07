@@ -8,7 +8,6 @@ import android.os.Looper;
 import android.os.Process;
 import org.json.JSONObject;
 
-/** Short-lived root-launched platform adapter, inside the same APK. No resident daemon. */
 public final class PlatformApply {
     private static final String PROVIDER="com.oplus.aod.AodMachineHelperProvider";
     public static void main(String[] args) {
@@ -31,8 +30,7 @@ public final class PlatformApply {
             int before=settings.secureInt("Setting_AodState",-1);
             int local=settings.secureInt("Setting_AodState_Local",0);
             int target="panoramic-aod".equals(args[0])?2:before==0||before==1?before:local==1?1:0;
-            // This provider executes the official Settings + selected clock + theme transaction.
-            // In particular, classic mode needs more than writing Setting_AodState=0.
+
             stage="mode";
             try(PlatformProvider aod=new PlatformProvider(PROVIDER,0)){
             Bundle result=aod.call(target==2?"set_aod_display_panoramic_mode":target==1?"set_aod_display_inspiration_mode":"set_aod_display_classic_mode",null,null);
@@ -47,7 +45,7 @@ public final class PlatformApply {
             if(after!=target||on!=1)throw new IllegalStateException("AOD verification failed: expected="+target+", actual="+after+", enabled="+on);
             report=new JSONObject().put("ok",true).put("before",before).put("mode",after);
             }
-            // Release both leases before exiting: System.exit does not run finally blocks.
+
             System.out.println("ALIVE_RESULT "+report);System.exit(0);
         }catch(Throwable error){
             try{System.out.println("ALIVE_RESULT "+new JSONObject().put("ok",false).put("stage",stage).put("error",error.toString()));}catch(Exception ignored){}

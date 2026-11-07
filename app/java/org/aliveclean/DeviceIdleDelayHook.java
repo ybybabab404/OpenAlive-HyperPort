@@ -5,14 +5,8 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
-/**
- * Delays the first "no activity" transition after screen-off by a short window.
- * The AOD entrance animation is only a few hundred milliseconds; allowing the
- * device-idle controller to enter quick doze in that window drops CPU frequency
- * while the wallpaper is still producing its first AOD frames.
- */
 public final class DeviceIdleDelayHook {
-    private static final String TAG = "HyperAliveHooks";
+    private static final String TAG = "AliveHSHooks";
     private static final long DEFER_MS = 1200L;
 
     private static long deferUntil;

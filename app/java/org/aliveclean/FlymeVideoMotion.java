@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** Flyme 9 video clock. Source time survives visibility and scene changes. */
 final class FlymeVideoMotion implements WallpaperMotion {
     private static final long NORMAL=7_000_000_000L,END=8_000_000_000L;
     private static final float SLOW=.3333f;
@@ -28,7 +27,7 @@ final class FlymeVideoMotion implements WallpaperMotion {
     float playbackSpeed(){return speed;}
     int frameRate(){return (int)(speed*30+30);}
     public void change(int scene,boolean animate){interaction();}
-    public void follow(float x,float y){} // The original video has no parallax or AOD clock tracking.
+    public void follow(float x,float y){}
     public void pause(){last=-1;nextTick=-1;tick=false;}
     public boolean active(){return visible&&(continuous||running);}
     public void advance(long now,float ignored){
@@ -42,8 +41,7 @@ final class FlymeVideoMotion implements WallpaperMotion {
         if(!running&&!continuous)return;
         speed=continuous||age<=NORMAL?1:1+(SLOW-1)*(age-NORMAL)/(float)(END-NORMAL);
         int fps=frameRate();
-        // The original advances by speed/fps for each scheduled update rather
-        // than catching up missed wall time. Avoid a jump after a stalled frame.
+
         if(nextTick<0||now>=nextTick){
             sourceUs=(sourceUs+1_000_000d*speed/fps)%loopEndUs;
             long interval=1_000_000_000L/fps;

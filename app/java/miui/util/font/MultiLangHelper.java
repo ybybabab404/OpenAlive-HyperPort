@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-/** Font-file service for the isolated original clock runtime on other vendors. */
 public final class MultiLangHelper {
     private static volatile String fontPath;
     public static void configure(String path){

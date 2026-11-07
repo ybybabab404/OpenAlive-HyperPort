@@ -17,12 +17,11 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Random;
 
-/** Android animator and matrix port of the official photo scenes. Owned by the EGL looper. */
 final class SceneMotion {
-    // Packet layout shared with native/renderer.rs. Matrices retain official coordinates here.
+
     static final int COUNT=60, LENS=3, GLASS=13, GROUND=19, FULL=21, MASK=23,
             PHOTO_MATRIX=25, DECOR_MATRIX=41;
-    // Lens: blur, scale, distortion, decorator alpha/angle, x/y, speed, ripple, photo angle.
+
     final float[] values=new float[COUNT];
     private final ByteBuffer packet=ByteBuffer.allocateDirect(COUNT*4).order(ByteOrder.nativeOrder());
     private final FloatBuffer floats=packet.asFloatBuffer();
@@ -61,13 +60,13 @@ final class SceneMotion {
         System.arraycopy(glassState(mode),0,values,GLASS,6);
         values[GROUND]=values[GROUND+1]=mode==1?0:1;
         values[FULL]=values[FULL+1]=mode==0?1:0;
-        values[58]=1; // Lock/launcher composition enabled for the current independent selections.
-        values[59]=1; // Packet ABI version.
+        values[58]=1;
+        values[59]=1;
     }
 
     private static Interpolator path(float a,float b,float c,float d) {return new PathInterpolator(a,b,c,d);}
     @SuppressWarnings("unchecked") private static FloatProperty<SceneMotion>[] properties() {
-        FloatProperty<SceneMotion>[] result=new FloatProperty[COUNT];
+        FloatProperty<SceneMotion>[] result=(FloatProperty<SceneMotion>[])new FloatProperty<?>[COUNT];
         for(int i=0;i<COUNT;i++) {
             final int slot=i;
             result[i]=new FloatProperty<SceneMotion>("sceneValue"+i) {
@@ -128,7 +127,7 @@ final class SceneMotion {
             ms[0]=0;curves[0]=EASE;curves[8]=EASE;
             ms[9]=24;curves[9]=ROTATE;ms[7]=0;
         }
-        // Match the official builder's order, including its idle angle animator for AOD.
+
         for(int i:new int[]{0,1,2,8,3,4,5,6,7,9}) {
             if(Float.isNaN(target[i])) {tracks.add(ValueAnimator.ofFloat(0,1));continue;}
             ObjectAnimator animator;
@@ -163,7 +162,7 @@ final class SceneMotion {
         tracks.add(animator);
     }
     private void full(ArrayList<Animator> tracks,int tr,int next) {
-        if(tr>3)return; // Official full-AOD controller has no lock/home animator.
+        if(tr>3)return;
         for(int i=0;i<2;i++) {
             long ms;Interpolator curve;
             if(tr==0){ms=250;curve=i==0?path(.4f,0,.2f,1):path(.78f,.01f,.89f,.57f);}
@@ -182,7 +181,7 @@ final class SceneMotion {
         long[] h={250,250,250,250,500,500};
         return tr<2?Math.max(a[tr],l[tr]):tr<4?Math.max(a[tr],h[tr]):Math.max(l[tr],h[tr]);
     }
-    // Also used by the on-device differential test to seek the real Android animators.
+
     AnimatorSet prepare(int next) {
         if(next<0||next>2)throw new IllegalArgumentException("scene "+next);
         boolean interrupted=animation!=null&&animation.isStarted();
@@ -202,12 +201,7 @@ final class SceneMotion {
         mode=next;return animation;
     }
     void change(int next){change(next,true);}
-    /**
-     * Starts the transition only when the scene is actually on screen. Starting it while the
-     * wallpaper is hidden (keyguard dismissal, app-open transition) used to rely on pause(),
-     * which an AnimatorSet that has not reached its first frame ignores: the play head then ran
-     * on with the wall clock and the first visible frame already showed 0.x s of the animation.
-     */
+
     void change(int next,boolean start){
         if(mode==next)return;
         prepare(next);
@@ -219,12 +213,11 @@ final class SceneMotion {
         if(animation!=null&&!animation.isStarted())animation.start();
     }
     boolean pending(){return pending;}
-    /** Switch composition owner without creating a second texture timeline. */
+
     void preserveMode(int next){mode=next;}
     void finish(){
         if(animation!=null){
-            // A deferred transition never started: starting it first lets end() apply the
-            // final values instead of leaving the old frame on screen.
+
             if(!animation.isStarted())animation.start();
             animation.end();
         }
@@ -251,7 +244,7 @@ final class SceneMotion {
     void followClock(float x,float y){
         aodPosition(x,y);
         if(mode==0&&animation!=null&&animation.isStarted()){
-            // Keep the original play time/curve, retarget only the moving host anchor.
+
             if(positionX!=null){positionX.setFloatValues(positionStartX,x);if(animation.getCurrentPlayTime()>=positionX.getTotalDuration())values[LENS+5]=x;}
             if(positionY!=null){positionY.setFloatValues(positionStartY,y);if(animation.getCurrentPlayTime()>=positionY.getTotalDuration())values[LENS+6]=y;}
         }

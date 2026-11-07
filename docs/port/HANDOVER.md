@@ -1,4 +1,4 @@
-# HyperAlive 交接文档
+# AliveHS 交接文档
 
 > 写于 2026-11-02 14:02（周一）。上一个会话因上下文熔断无法继续，这份文档是唯一入口：
 > 新会话读完这一页就应该能直接动手，不需要读旧对话。
@@ -16,8 +16,8 @@
 ## 1. 目标与用户约束
 
 - 源项目：<https://github.com/Maga-King/OpenAlive>（LSPosed 模块，复刻 Flyme「Alive」动态 AOD / 锁屏壁纸，
-  原本跑在 ColorOS 17）。移植目标产物叫 **HyperAlive**。
-- 目标环境：设备 `10.11.48.92:39795`（无线调试，root）。原话要求「确保功能完整且完全可用」。
+  原本跑在 ColorOS 17）。移植目标产物叫 **AliveHS**。
+- 目标环境：设备 `<device>:<port>`（无线调试，root）。原话要求「确保功能完整且完全可用」。
 - 用户后来放宽的权限（已明确同意，不必再问）：
   - 可以重启 SystemUI、改壁纸、重建 AOD 会话、重启手机。
   - 「要的就是完全原生适配 hyperos」——原生实现优先，不要糊一个悬浮窗了事。
@@ -40,16 +40,16 @@
 | 屏幕 | 1200 x 2608 @ 480dpi |
 | Root | KernelSU |
 | Xposed | LSPosed（`zygisk_lsposed`，legacy 入口） |
-| USB 序列号 | `9eb96e8a`（**首选**） |
-| 无线 | `10.11.48.92:39795`（经常 10060 超时，别依赖） |
+| USB 序列号 | `<usb-serial>`（**首选**） |
+| 无线 | `<device>:<port>`（经常 10060 超时，别依赖） |
 
-adb 路径：`C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe`
+adb 路径：`$ANDROID_HOME/platform-tools/adb.exe`
 
 ---
 
 ## 3. 代码地图（只列这次改动相关的）
 
-仓库根：`C:\Users\ybybabab\app\项目开发\HyperAlive`
+仓库根：`<repo>`
 
 ```
 app/AndroidManifest.xml          package=org.aliveclean  versionCode=58  0.5.0-preview
@@ -77,16 +77,16 @@ dist/                            构建输出
 ## 4. 构建（无 Gradle，约 60 秒）
 
 ```bash
-cd "C:/Users/ybybabab/app/项目开发/HyperAlive" && \
-ANDROID_HOME="C:/Users/ybybabab/AppData/Local/Android/Sdk" \
-JAVA_HOME="C:/Users/ybybabab/app/pcl/JAVA21/graalvm" \
+cd "<repo>" && \
+ANDROID_HOME="$ANDROID_HOME" \
+JAVA_HOME="$JAVA_HOME" \
 HYPERALIVE_NATIVE_SO=".tmp/libalive_clean.so" \
-USERPROFILE="C:/Users/ybybabab" \
+USERPROFILE="$HOME" \
 PYTHONIOENCODING=utf-8 \
 C:/Python314/python.exe tools/build_release.py --no-checks
 ```
 
-产物：`dist/HyperAlive-0.5.0-preview-arm64-v8a.apk`（约 640 MB，体积大是因为内置素材 + onnxruntime）。
+产物：`dist/AliveHS-0.5.0-preview-arm64-v8a.apk`（约 640 MB，体积大是因为内置素材 + onnxruntime）。
 `dist/build-report.json` 里有所有哈希，改完代码对一下 dex 哈希就知道有没有真打进去。
 
 ---
@@ -94,13 +94,13 @@ C:/Python314/python.exe tools/build_release.py --no-checks
 ## 5. 安装与调试回路（照抄即可）
 
 ```bash
-ADB="C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+ADB="$ANDROID_HOME/platform-tools/adb.exe"
 
 # 0) adb server 经常自己死，先拉起来
-"$ADB" start-server; "$ADB" devices        # 期望看到 9eb96e8a  device
+"$ADB" start-server; "$ADB" devices        # 期望看到 <usb-serial>  device
 
 # 1) 装机（必须走 USB；无线传 640MB 会 Broken pipe）
-"$ADB" -s 9eb96e8a install -r "dist/HyperAlive-0.5.0-preview-arm64-v8a.apk"
+"$ADB" -s <usb-serial> install -r "dist/AliveHS-0.5.0-preview-arm64-v8a.apk"
 
 # 2) 重启 SystemUI 让模块重新加载
 "$ADB" shell "su -c 'killall com.android.systemui'"; sleep 12
@@ -108,7 +108,7 @@ ADB="C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe"
 # 3) 清日志 → 按电源键进 AOD → 等 → 抓日志
 "$ADB" logcat -c
 "$ADB" shell input keyevent 26; sleep 12
-"$ADB" logcat -d -s HyperAliveAod:V HyperAliveHooks:V | tail -150
+"$ADB" logcat -d -s AliveHSAod:V AliveHSHooks:V | tail -150
 ```
 
 看 AOD 状态：`adb shell dumpsys power | grep -E "mWakefulness|mAodShowing"`，稳定 AOD 应为
@@ -208,12 +208,12 @@ SurfaceView 有两条路：
 
 | 坑 | 现象 | 已采取的做法 |
 |---|---|---|
-| hook 全挂 | 模块一条日志都没有 | `handleLoadPackage` 里每个 hook 用 `step(name, body)` 单独 try/catch（tag `HyperAliveHooks`） |
+| hook 全挂 | 模块一条日志都没有 | `handleLoadPackage` 里每个 hook 用 `step(name, body)` 单独 try/catch（tag `AliveHSHooks`） |
 | 悬浮窗 | `BadTokenException: token null is not valid` | 放弃 window overlay，改视图注入 |
 | 锁屏壁纸判断 | `overlay skipped: wallpaper is not ours` | `ownsWallpaper()` 加查 `FLAG_LOCK` |
 | 非 ASCII 路径 | aapt2 / zipalign 直接失败 | 所有路径传相对 ROOT 的 ASCII 路径 |
 | 中文/GBK | javac / d8 的 argfile 被编码搞坏 | argfile 用 ASCII 相对路径 + `@argfile` |
-| 无线装大包 | `Broken pipe` | 一律 USB `9eb96e8a` + `install -r` |
+| 无线装大包 | `Broken pipe` | 一律 USB `<usb-serial>` + `install -r` |
 | 工具漂移 | `run_code` / `read_file` 不存在了 | 改用 `ops_bash`、`ops_read_files` |
 
 ---
@@ -248,7 +248,7 @@ a250a48 feat(hyperos): hook the SystemUI AOD view instead of a standalone AOD ap
 68c4982 feat(hyperos): render scenes inside com.miui.aod via a surface host
 1d921fb feat(hyperos): skip ColorOS-only AOD handoff after applying a wallpaper
 6e205ed feat(hyperos): add platform profile and vendor-safe hook routing
-782cbe9 chore: import OpenAlive 0.4.41-preview as HyperAlive baseline
+782cbe9 chore: import OpenAlive 0.4.41-preview as AliveHS baseline
 ```
 
 **未提交**：`app/java/org/aliveclean/HyperOsAod.java`（带 dumpTree 诊断的修改）、
@@ -263,5 +263,5 @@ a250a48 feat(hyperos): hook the SystemUI AOD view instead of a standalone AOD ap
 
 - 这个会话反复被「换气熔断」打断：连续 6 轮 thinking 没产出正文就强制停，压缩插件疑似有 bug 压不出新窗口。
   **对策：thinking 短一点，每一轮都落一次正文 + 落一次盘**，别攒到最后一起写。
-- 进度写 `docs/port/PROGRESS.md`，索引写 `C:/Users/ybybabab/.dsh/hub/ledger.jsonl`（append-only，一行一条 JSON）。
+- 进度写 `docs/port/PROGRESS.md`，索引写 `<hub>/ledger.jsonl`（append-only，一行一条 JSON）。
 - 拿不到精确 seq 就别猜：写 `[seq 未知] 检索词: ...` 加 `ref:file:...`。

@@ -1,8 +1,5 @@
 package org.aliveclean;
 
-/** Full-screen AOD geometry from HyperOS KeyguardPanelViewController.
- * The wallpaper alone scales about (0.5, 0.4); clocks and widgets stay system-owned.
- */
 final class VivoWallpaperZoom {
     private double value=1.05,velocity,target=1.05,omega=2*Math.PI/.5;
     private long previous;

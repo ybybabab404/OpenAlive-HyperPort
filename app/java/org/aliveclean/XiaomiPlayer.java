@@ -17,7 +17,6 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.zip.*;
 
-/** Adapter to the unmodified Xiaomi players. Each family runs in its own process. */
 public final class XiaomiPlayer implements AutoCloseable {
     private static final Map<String,Runtime> runtimes=new HashMap<>();
     public static final class Runtime {
@@ -50,9 +49,7 @@ public final class XiaomiPlayer implements AutoCloseable {
                     }finally{if(part.exists())part.delete();}
                 }
             }
-            // The Snow lease must run inside the vendor linker namespace. Add
-            // our tiny bridge class after the original dex, and its JNI library
-            // search path; all other families keep their existing class loader.
+
             String dex=path,nativePath=libs.getPath();
             if("snowmountain".equals(family)){
                 ApplicationInfo app=host.getApplicationInfo();dex+=File.pathSeparator+app.sourceDir;
@@ -64,8 +61,7 @@ public final class XiaomiPlayer implements AutoCloseable {
             Resources source=host.getPackageManager().getResourcesForApplication(archive);
             Resources resources=new Resources(source.getAssets(),source.getDisplayMetrics(),source.getConfiguration()){
                 @Override public int getIdentifier(String name,String type,String pkg){
-                    // Unity looks up its SurfaceView label using the hosting package.
-                    // Keep the real host identity for permissions and redirect only resources.
+
                     return super.getIdentifier(name,type,host.getPackageName().equals(pkg)?archive.packageName:pkg);
                 }
             };
@@ -82,13 +78,12 @@ public final class XiaomiPlayer implements AutoCloseable {
             };
         }
     }
-    /** APK validation belongs to the pack store. Prepare off the UI thread. */
+
     public static synchronized Runtime prepare(Context host,String family,File apk,String digest)throws Exception {
         if(!Arrays.asList("earth","moon","mars","saturn","snowmountain","geometry").contains(family)||!digest.matches("[a-f0-9]{64}"))throw new IllegalArgumentException("Unknown Xiaomi runtime");
         Runtime cached=runtimes.get(digest);
         if(cached!=null)return cached;
-        // Several versions export identical JNI class/library names. Never load a
-        // different variant into a process that already owns one of those libraries.
+
         if(!runtimes.isEmpty())throw new IllegalStateException("A Xiaomi runtime change requires a new renderer process");
         Runtime runtime=new Runtime(host.getApplicationContext(),family,apk,digest);runtimes.put(digest,runtime);return runtime;
     }
@@ -128,15 +123,12 @@ public final class XiaomiPlayer implements AutoCloseable {
         else player=runtime.loader.loadClass(snow?"n2.a":"com.miui.mrengine."+("moon".equals(runtime.family)?"Moon":"Earth")+"MrePlayer")
             .getConstructor(Context.class,SurfaceHolder.class,Context.class).newInstance(runtime.context,holder,displayContext);
         if(snow)surfaceLease=runtime.loader.loadClass("org.aliveclean.XiaomiSurfaceLease").getConstructor(String.class).newInstance(runtime.frameworkPath);
-        // Filament subscribes to the Surface before constructing its Engine. A
-        // holder already valid on a restored/async preview must be deferred.
+
         holder.activate();
         if(!unity)ready=true;else mainHandler.post(startUnity);
         }catch(Exception|LinkageError e){holder.close();throw e;}
     }
-    // Unity starts its render thread asynchronously. resume() marks its state
-    // resumed even if that thread has no Handler yet, silently dropping the
-    // resume/surface messages. Wait for the actual queue before using either API.
+
     private final Runnable startUnity=new Runnable(){public void run(){
         if(closed||unityThreadReady)return;
         try{
@@ -147,7 +139,7 @@ public final class XiaomiPlayer implements AutoCloseable {
                 mainHandler.postDelayed(this,16);return;
             }
             unityThreadReady=true;
-            if(attached)call(player,"displayChanged",new Class[]{int.class,Surface.class},0,holder.getSurface());
+            if(attached)call(player,"displayChanged",new Class<?>[]{int.class,Surface.class},0,holder.getSurface());
             for(String event:new ArrayList<>(startupMessages))send(event);
             startupMessages.clear();running(requestedRunning);
         }catch(Exception e){initError=e.toString();if(whenFailed!=null)whenFailed.accept(e);}
@@ -157,7 +149,7 @@ public final class XiaomiPlayer implements AutoCloseable {
     public void surfaceChanged(int width,int height,float refresh)throws Exception {
         main();if(closed)return;
         this.width=width;this.height=height;this.refresh=refresh;
-        if(unity&&unityThreadReady)call(player,"displayChanged",new Class[]{int.class,Surface.class},0,holder.getSurface());
+        if(unity&&unityThreadReady)call(player,"displayChanged",new Class<?>[]{int.class,Surface.class},0,holder.getSurface());
         send("SysRes_"+width+"_"+height);send("Refresh_"+Math.round(refresh));attached=true;
     }
     public void initialize(int land,boolean preview)throws Exception{
@@ -167,9 +159,8 @@ public final class XiaomiPlayer implements AutoCloseable {
     }
     public void calendarChanged()throws Exception {
         main();if(closed||!initialized||preview||!"moon".equals(runtime.family))return;
-        // The real Moon service (not its preview) supplies this lunar input.
-        // Invoke the original pure calculation, avoiding its MIUI Settings writes.
-        int value=(Integer)call(runtime.loader.loadClass("com.miui.miwallpaper.moon.superwallpaper.MoonPhaseUpdateHelper"),"getCurrentMoonPhase",new Class[0]);
+
+        int value=(Integer)call(runtime.loader.loadClass("com.miui.miwallpaper.moon.superwallpaper.MoonPhaseUpdateHelper"),"getCurrentMoonPhase",new Class<?>[0]);
         if(value!=moonPhase){send("Phrase_"+value);moonPhase=value;}
     }
     private final Runnable readReady=new Runnable(){public void run(){
@@ -188,29 +179,26 @@ public final class XiaomiPlayer implements AutoCloseable {
     }
     public void send(String event)throws Exception {
         main();if(closed)return;
-        // These two Filament revisions do not handle the Unity ForceAOD
-        // command. Their static middle AOD pose is named ForceStaticAOD_1.
-        // Leaving ForceAOD untranslated retains the previous close-up camera.
+
         if(!unity&&!snow&&"ForceAOD".equals(event))event="ForceStaticAOD_1";
         if(unity&&!unityThreadReady){startupMessages.add(event);return;}
-        if(unity)call(player.getClass(),"UnitySendMessage",new Class[]{String.class,String.class,String.class},"Main Camera","Message",event);
+        if(unity)call(player.getClass(),"UnitySendMessage",new Class<?>[]{String.class,String.class,String.class},"Main Camera","Message",event);
         else if(snow&&event.startsWith("SysRes_")){
-            // SysRes calls nSetSurface. Hold the old native window until
-            // Filament has actually finished destroying its old EGL surface.
-            call(surfaceLease,"retain",new Class[]{Surface.class},holder.getSurface());
-            call(player,"b",new Class[]{String.class},event);
-            call(surfaceLease,"replaced",new Class[0]);
-        }else call(player,snow?"b":"sendMessage",new Class[]{String.class},event);
+
+            call(surfaceLease,"retain",new Class<?>[]{Surface.class},holder.getSurface());
+            call(player,"b",new Class<?>[]{String.class},event);
+            call(surfaceLease,"replaced",new Class<?>[0]);
+        }else call(player,snow?"b":"sendMessage",new Class<?>[]{String.class},event);
     }
     public void running(boolean value)throws Exception {
         main();value=value&&attached&&!closed;requestedRunning=value;if(unity&&!unityThreadReady)return;if(value==running)return;
         if(snow){
             Choreographer choreographer=(Choreographer)field(player,"e");Choreographer.FrameCallback frame=(Choreographer.FrameCallback)field(player,"f");
-            if(value){call(runtime.loader.loadClass("com.xiaomi.utils.JNIUtils"),"nResume",new Class[0]);choreographer.postFrameCallback(frame);}
-            else{choreographer.removeFrameCallback(frame);call(runtime.loader.loadClass("com.xiaomi.utils.JNIUtils"),"nPause",new Class[0]);}
+            if(value){call(runtime.loader.loadClass("com.xiaomi.utils.JNIUtils"),"nResume",new Class<?>[0]);choreographer.postFrameCallback(frame);}
+            else{choreographer.removeFrameCallback(frame);call(runtime.loader.loadClass("com.xiaomi.utils.JNIUtils"),"nPause",new Class<?>[0]);}
         }else{
-            if(unity)call(player,"windowFocusChanged",new Class[]{boolean.class},value);
-            call(player,value?"resume":"pause",new Class[0]);
+            if(unity)call(player,"windowFocusChanged",new Class<?>[]{boolean.class},value);
+            call(player,value?"resume":"pause",new Class<?>[0]);
         }
         running=value;
         if(value)calendarChanged();
@@ -222,7 +210,7 @@ public final class XiaomiPlayer implements AutoCloseable {
         String nativeState="";
         if("earth".equals(runtime.family)&&player!=null)try{
             Object helper=field(player,"uiHelper");Object frame=field(player,"frameScheduler");
-            nativeState=" surfaceValid="+holder.getSurface().isValid()+" nativeReady="+call(helper,"isReadyToRender",new Class[0])+" swapChain="+(field(player,"swapChain")!=null)
+            nativeState=" surfaceValid="+holder.getSurface().isValid()+" nativeReady="+call(helper,"isReadyToRender",new Class<?>[0])+" swapChain="+(field(player,"swapChain")!=null)
                 +" frames="+field(frame,"doFrameCount")+" state="+field(player,"curState")+" previous="+field(player,"preState")+" fraction="+field(player,"homeFraction")
                 +" aspect="+field(player,"curAspect")+" camera="+field(player,"realTimeCameraPos")+" rotation="+field(player,"realTimeCameraRot");
         }catch(Exception e){nativeState=" diagnostic="+e;}
@@ -230,15 +218,14 @@ public final class XiaomiPlayer implements AutoCloseable {
     public void surface(SurfaceHolder source)throws Exception{main();if(holder.source==source)return;surfaceDestroyed();holder.rebind(source);}
     public void surfaceDestroyed()throws Exception {
         main();running(false);attached=false;mainHandler.removeCallbacks(retry);mainHandler.removeCallbacks(readReady);
-        if(unity&&unityThreadReady&&!closed)call(player,"displayChanged",new Class[]{int.class,Surface.class},0,null);
+        if(unity&&unityThreadReady&&!closed)call(player,"displayChanged",new Class<?>[]{int.class,Surface.class},0,null);
     }
     @Override public void close()throws Exception {
         main();if(closed)return;running(false);closed=true;mainHandler.removeCallbacks(startUnity);startupMessages.clear();mainHandler.removeCallbacks(retry);mainHandler.removeCallbacks(readReady);
         holder.close();Object old=player;player=null;
-        // Unity's original destroy() can terminate the process. Call only in a
-        // dedicated wallpaper/preview process, never the editor or clock host.
-        call(old,snow?"a":"destroy",new Class[0]);
-        if(surfaceLease!=null){call(surfaceLease,"destroyed",new Class[0]);surfaceLease=null;}
+
+        call(old,snow?"a":"destroy",new Class<?>[0]);
+        if(surfaceLease!=null){call(surfaceLease,"destroyed",new Class<?>[0]);surfaceLease=null;}
     }
     private static void main(){if(Looper.myLooper()!=Looper.getMainLooper())throw new IllegalStateException("Xiaomi renderer must run on its main looper");}
     private static Object field(Object target,String name)throws Exception{for(Class<?> c=target.getClass();c!=null;c=c.getSuperclass())try{Field f=c.getDeclaredField(name);f.setAccessible(true);return f.get(target);}catch(NoSuchFieldException ignored){}throw new NoSuchFieldException(name);}
@@ -264,10 +251,7 @@ public final class XiaomiPlayer implements AutoCloseable {
         @Override public void setType(int type){source.setType(type);}
         @Override public void setFixedSize(int w,int h){
             try{source.setFixedSize(w,h);}catch(UnsupportedOperationException layoutOnly){
-                // Earth asks for a fixed buffer above 2400 px. WallpaperService
-                // rejects it unless its private fixed-size flag was enabled by
-                // the OEM host. Keep the system-owned buffer; its real dimensions
-                // are delivered through surfaceChanged, including on cold boot.
+
                 source.setSizeFromLayout();
             }
         }

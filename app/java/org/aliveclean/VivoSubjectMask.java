@@ -9,7 +9,6 @@ import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.concurrent.CancellationException;
 
-/** Offline salient-object segmentation with the original U2NetP model. */
 final class VivoSubjectMask {
     private static final Object INFERENCE=new Object();
     private static final String HASH="309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8";

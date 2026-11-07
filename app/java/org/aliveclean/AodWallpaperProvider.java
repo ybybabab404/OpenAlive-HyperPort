@@ -9,9 +9,6 @@ import android.os.ParcelFileDescriptor;
 import java.io.File;
 import java.io.FileNotFoundException;
 
-/** Serves the wallpaper copy to SystemUI. The AOD view runs in SystemUI's process and
- * cannot open files in our private directory, so it asks us over a content provider
- * instead: same data, no shared paths on disk. */
 public final class AodWallpaperProvider extends ContentProvider {
     static final String AUTHORITY = "org.aliveclean.aodwallpaper";
     static final Uri PHOTO = Uri.parse("content://" + AUTHORITY + "/photo");

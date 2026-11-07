@@ -9,7 +9,6 @@ import android.graphics.BitmapFactory;
 import java.io.*;
 import java.nio.*;
 
-/** Original Cosmic shaders/model with a portable GL host. Owns only its GL objects. */
 final class CosmicRenderer implements WallpaperRenderer {
     final CosmicMotion motion;
     private AssetGl sphere,background;
@@ -94,8 +93,7 @@ final class CosmicRenderer implements WallpaperRenderer {
             Matrix.multiplyMM(pv,0,projection,0,view,0);
         }
         sphere.matrix("u_projectionViewMatrix",pv);
-        // Official upload transposes this rotation; explicitly invert the angle
-        // because GLES requires the glUniformMatrix transpose argument to be false.
+
         Matrix.setRotateM(model,0,motion.phoenix?90:-motion.angle,0,1,0);sphere.matrix("u_modelMatrix",model);
         float radians=(float)Math.toRadians(motion.angle);
         if(motion.phoenix)GLES30.glUniform3f(sphere.at("u_eye_position"),0,0,1000);

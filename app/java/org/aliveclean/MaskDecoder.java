@@ -4,7 +4,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.zip.*;
 
-/** Worker-owned zlib state and scratch buffers; output bytes are unchanged. */
 final class MaskDecoder implements AutoCloseable {
     private final Inflater inflater=new Inflater();
     private final byte[] input=new byte[32768],output=new byte[65536];

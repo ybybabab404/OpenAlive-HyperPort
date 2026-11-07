@@ -6,7 +6,6 @@ import android.opengl.Matrix;
 import java.io.IOException;
 import java.nio.*;
 
-/** Flyme 9 gradient, retaining the original shaders and 100-column sampling mesh. */
 final class GradientRenderer implements WallpaperRenderer {
     private static final int COLUMNS=100;
     final GradientMotion motion;
@@ -21,8 +20,7 @@ final class GradientRenderer implements WallpaperRenderer {
         motion=new GradientMotion(assets,variant);
         shader=new AssetGl(assets,"shader/gradient/gradient.vert","shader/gradient/gradient.frag");
         try{
-            // Curves run in the vertex shader. Four corners lose every interior
-            // control point; the original samples 100 vertical columns.
+
             FloatBuffer vertices=ByteBuffer.allocateDirect(COLUMNS*2*4*4).order(ByteOrder.nativeOrder()).asFloatBuffer();
             for(int col=0;col<COLUMNS;col++){
                 float u=col/(float)(COLUMNS-1);
@@ -36,7 +34,7 @@ final class GradientRenderer implements WallpaperRenderer {
             attribute("a_position",0);attribute("a_texCoord0",8);
             GLES30.glBindVertexArray(0);GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER,0);
             Matrix.setIdentityM(projection,0);
-            // Original landscape camera height is h*h/w, against a mesh of height w.
+
             if(width>height){float aspect=width/(float)height;projection[5]=aspect*aspect;}
             shader.use();shader.matrix("u_projection_view_matrix",projection);
             shader.f("u_dark_strength",dark?1:0);

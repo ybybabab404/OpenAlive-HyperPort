@@ -3,7 +3,6 @@ package org.aliveclean;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-/** One immutable presentation sample while its exact RGB mask is being decoded. */
 final class FrameSample {
     final ByteBuffer effect=ByteBuffer.allocateDirect(36*4).order(ByteOrder.nativeOrder());
     final ByteBuffer base=ByteBuffer.allocateDirect(SceneMotion.COUNT*4).order(ByteOrder.nativeOrder());

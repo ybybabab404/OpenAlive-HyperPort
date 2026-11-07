@@ -7,7 +7,6 @@ import android.os.*;
 import android.view.*;
 import android.widget.*;
 
-/** Small asynchronous Root/module status row; never consults installed managers. */
 final class HomeActivationStatus {
     private final Activity activity;
     private final TextView moduleLabel,rootLabel;
@@ -59,8 +58,7 @@ final class HomeActivationStatus {
     }
     void stop(){
         started=false;generation++;main.removeCallbacks(refresh);
-        // A Root permission dialog may itself pause this activity. Detach only
-        // the UI listener; the process-wide request finishes within 15 seconds.
+
         if(rootWatch!=null){rootWatch.close();rootWatch=null;}
     }
     void close(){stop();closed=true;queries.shutdownNow();}
@@ -81,8 +79,7 @@ final class HomeActivationStatus {
                 queryInFlight=false;
                 if(!started||closed||activity.isDestroyed())return;
                 if(request==generation){module=current;moduleKnown=true;show();}
-                // Schedule only after the preceding query finishes. A slow
-                // provider cannot accumulate periodic tasks or block the UI.
+
                 long delay=request!=generation||requestModule?0:SystemClock.uptimeMillis()<moduleDeadline?300:2000;
                 main.removeCallbacks(refresh);main.postDelayed(refresh,delay);
             });

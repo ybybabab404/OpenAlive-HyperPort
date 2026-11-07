@@ -7,7 +7,6 @@ import android.opengl.GLES30;
 import android.view.Surface;
 import java.io.File;
 
-/** Decodes one independently selected clip into an existing Vivo image texture. */
 final class VivoVideoTexture implements AutoCloseable {
     private final MediaPlayer player=new MediaPlayer();
     private SurfaceTexture stream;

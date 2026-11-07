@@ -1,4 +1,4 @@
-# HyperAlive · 项目基本约束（独立文档）
+# AliveHS · 项目基本约束（独立文档）
 
 > 这份文档只记「不能变的前提」。改代码前先看这一页；与 `REQUIREMENTS.md`（要什么）、
 > `docs/port/PROGRESS.md`（做到哪）分工不重叠。
@@ -8,7 +8,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目名 | **HyperAlive** |
+| 项目名 | **AliveHS** |
 | 包名 | `org.aliveclean`（native 符号写死，不可改） |
 | 上游源码 | **OpenAlive-main**（移植来源；本仓库是移植与改造版，不是 fork 出来的新项目） |
 | 目标平台 | 小米 HyperOS（HyperOS 2 / OS4 系列），Android 15–17 |
@@ -29,9 +29,9 @@
 | 机型 | 25102RKBEC（代号 `myron`） |
 | 系统 | HyperOS OS4.0.0.33.XPMCNXM，Android 17 |
 | 屏幕 | 1200×2608，480dpi（density 3.0） |
-| 连接 | 无线 adb `10.11.48.149:39795` |
-| adb | `C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe` |
-| 构建环境 | `JAVA_HOME=C:/Users/ybybabab/app/pcl/JAVA21/graalvm`、`ANDROID_HOME=C:/Users/ybybabab/AppData/Local/Android/Sdk`、Python `C:/Python314/python.exe` |
+| 连接 | 无线 adb `<device>:<port>` |
+| adb | `$ANDROID_HOME/platform-tools/adb.exe` |
+| 构建环境 | `JAVA_HOME=$JAVA_HOME`、`ANDROID_HOME=$ANDROID_HOME`、Python `C:/Python314/python.exe` |
 
 ## 4. 绝对禁止：未经允许的永久性修改
 

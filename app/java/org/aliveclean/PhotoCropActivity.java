@@ -9,7 +9,6 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 
-/** Fixed display-aspect crop. Source remains private and untouched until confirmation. */
 public final class PhotoCropActivity extends Activity {
     private final PhotoViewport viewport=new PhotoViewport();
     private String source;

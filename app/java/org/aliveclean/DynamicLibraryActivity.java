@@ -11,7 +11,6 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Official wallpaper grid cells, backed by the locally supported catalogue. */
 public final class DynamicLibraryActivity extends Activity {
     private final ExecutorService decoder=Executors.newSingleThreadExecutor();
     private final ArrayList<Entry> entries=new ArrayList<>();
@@ -33,7 +32,7 @@ public final class DynamicLibraryActivity extends Activity {
                 public View getView(int p,View recycled,ViewGroup parent){
                     View cell=recycled==null?ui.inflate("item_live_paper_with_category",parent):recycled;
                     Entry entry=entries.get(p);ImageView image=(ImageView)ui.find(cell,"image_thumb");image.setImageBitmap(entry.bitmap);
-                    // The original grid uses responsive square thumbnails for this catalogue.
+
                     int width=Math.max(1,(grid.getWidth()-grid.getPaddingLeft()-grid.getPaddingRight()-2*grid.getHorizontalSpacing())/3);
                     ViewGroup.LayoutParams lp=image.getLayoutParams();lp.width=lp.height=width;image.setLayoutParams(lp);
                     TextView label=(TextView)ui.find(cell,"tv_name");label.setText(entry.name);label.setGravity(Gravity.CENTER);

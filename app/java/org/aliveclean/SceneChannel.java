@@ -4,7 +4,6 @@ import android.content.Context;
 import android.os.*;
 import java.util.LinkedHashSet;
 
-/** Authenticated scene delivery and frame completion feedback; no per-frame IPC. */
 final class SceneChannel {
     interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}default void fingerprint(long time){}default void keyguardHiding(long time){}}
     private static final LinkedHashSet<Listener> listeners=new LinkedHashSet<>();
@@ -15,10 +14,9 @@ final class SceneChannel {
     private static Bundle lastScene;
     private static AodRegion lastArea;
     private static boolean lastBackdrop;
-    /** uptimeMillis of the last successful fingerprint authentication reported by SystemUI. */
+
     private static long lastFingerprint;
-    /** uptimeMillis of the last keyguard-hide-cue reported by SystemUI; never replayed to new
-     *  listeners: starting an unlock transition from a stale cue would skip it entirely. */
+
     private static long lastKeyguardHiding;
     private static int senderUid=-1;
     static int touchTrace=6;
@@ -33,7 +31,7 @@ final class SceneChannel {
                     long time=b.getLong("time",0);
                     if(lastScene!=null&&time<lastScene.getLong("time",0))return true;
                     lastScene=new Bundle(b);
-                    {if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Scene transport=binder mode="+mode+" delayMs="+(SystemClock.uptimeMillis()-time));}
+                    if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Scene transport=binder mode="+mode+" delayMs="+(SystemClock.uptimeMillis()-time));
                     for(Listener l:listeners)l.scene(mode,b.getBoolean("animate",true),time,b.getInt("phase",0),b.getLong("clock_wake",0),b.getFloat("vivo_night_level",Float.NaN),b.getFloat("vivo_aod_mask",Float.NaN));
                 }else if(message.what==2){
                     AodRegion area=decode(b);if(area==null)return true;lastArea=area;

@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-/** Visible frame time, matching Animator.pause/resume for the imported wallpaper tracks. */
 final class WallpaperTransitionTime {
     private long last=-1,elapsed;
     void restart(){elapsed=0;last=-1;}

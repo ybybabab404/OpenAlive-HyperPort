@@ -7,9 +7,8 @@ import android.view.animation.*;
 import java.nio.*;
 import java.util.ArrayList;
 
-/** Independent photo-stack tracks. The stable sphere packet and curves are unchanged. */
 final class FrameMotion {
-    // blur, rotation, scale, content scale, x, y, video microseconds, photo alpha.
+
     final float[] values=new float[8];
     final float[] ratios=new float[3];
     final PhotoStyle style;
@@ -31,7 +30,7 @@ final class FrameMotion {
     FrameMotion(int width,int height,int scene,boolean paired,PhotoStyle style){this.width=width;this.height=height;this.paired=paired&&style.id==1;this.style=style;aspect=(float)height/width;mode=scene;System.arraycopy(state(scene),0,values,0,8);ratios[scene]=1;}
     private float[] state(int scene){return scene==0?new float[]{style.blur,style.rotation,style.scale,style.content,anchorX,anchorY,0,1}:new float[]{0,0,2.35f,aspect/2.35f,0,0,style.endMicros,scene==1&&!paired?1:0};}
     @SuppressWarnings("unchecked") private static FloatProperty<FrameMotion>[] properties(){
-        FloatProperty<FrameMotion>[] result=new FloatProperty[8];
+        FloatProperty<FrameMotion>[] result=(FloatProperty<FrameMotion>[])new FloatProperty<?>[8];
         for(int i=0;i<8;i++){final int slot=i;result[i]=new FloatProperty<FrameMotion>("frameValue"+i){public Float get(FrameMotion m){return m.values[slot];}public void setValue(FrameMotion m,float v){m.values[slot]=slot==6?(long)v:v;}};}
         return result;
     }
@@ -58,9 +57,7 @@ final class FrameMotion {
     void change(int next,SceneMotion common){
         if(next==mode)return;
         boolean interrupted=active();int previous=mode;
-        // A paired photo has the same full-screen endpoint on lock and home.
-        // If an expansion is still running, interrupt it instead of letting it
-        // finish first: the unlock transition must start from the current frame.
+
         if(paired&&mode!=0&&next!=0&&!interrupted){mode=next;return;}
         AnimatorSet a=prepare(next,common.blendDuration(SceneMotion.transition(mode,next)));
         if(previous==0&&!interrupted)a.setStartDelay(150);a.start();
@@ -69,10 +66,7 @@ final class FrameMotion {
     void pause(boolean paused){if(animation!=null){if(paused)animation.pause();else animation.resume();}}
     boolean active(){return animation!=null&&animation.isStarted();}
     boolean expanded(){
-        // The frame's final mask already covers the screen once its geometry
-        // has opened. The composition ratio can keep running for a longer
-        // lockscreen texture (e.g. ground glass); it must not hold the clock.
-        // Other photo styles keep their original completion condition.
+
         return mode!=0&&(style.id==1||ratios[0]<.00001f)
                 &&Math.abs(values[1])<.00001f&&Math.abs(values[2]-2.35f)<.00001f
                 &&Math.abs(values[4])<.00001f&&Math.abs(values[5])<.00001f
@@ -89,20 +83,18 @@ final class FrameMotion {
     void close(){if(animation!=null)animation.cancel();}
     void ratios(SceneMotion common){
         System.arraycopy(ratios,0,common.values,0,3);
-        // The official chromakey shader explicitly provides this branch to avoid
-        // a full-screen ghost when a third state interrupts an AOD transition.
+
         common.values[58]=0;
         if(paired&&mode!=0){common.values[mode]=ratios[1]+ratios[2];common.values[mode==1?2:1]=0;}
     }
     ByteBuffer packet(){
-        // Official model T(x*w,-y*h) S(scale) R(angle). The original square mesh
-        // has side min(w,h); projection is orthographic with top-positive Y.
+
         Matrix.setIdentityM(model,0);Matrix.translateM(model,0,width*values[4],-height*values[5],0);
         Matrix.scaleM(model,0,values[2],values[2],1);Matrix.rotateM(model,0,values[1],0,0,1);
         Matrix.setIdentityM(scratch,0);Matrix.scaleM(scratch,0,2f/width,-2f/height,1);
         Matrix.multiplyMM(data,0,scratch,0,model,0);
         float half=Math.min(width,height)/2f;Matrix.scaleM(data,0,half,half,1);
-        // Original content transform: T(.5) S(aspect/content,1/content) T(-.5).
+
         Matrix.setIdentityM(content,0);Matrix.translateM(content,0,.5f,.5f,0);
         Matrix.scaleM(content,0,aspect/values[3],1/values[3],1);Matrix.translateM(content,0,-.5f,-.5f,0);
         System.arraycopy(content,0,data,16,16);data[32]=values[7];data[33]=values[0];data[34]=values[6];data[35]=1;

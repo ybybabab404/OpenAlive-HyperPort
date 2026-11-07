@@ -19,16 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/**
- * MIUI keeps the lock-screen depth subject in SystemUI, not in a wallpaper
- * surface: KeyguardPanelViewController owns keyguard_foreground_layer and its
- * deducted_image_view is filled from wallpaperInfo.cropSubject. A third-party
- * WallpaperService therefore has no window below that ImageView to sit behind.
- * For our own wallpaper we suppress the depth subject; native wallpapers keep
- * the unmodified MIUI path.
- */
 final class KeyguardDepthHider {
-    private static final String TAG = "HyperAliveDepth";
+    private static final String TAG = "AliveHSDepth";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<Object, Boolean> PANELS =
             Collections.synchronizedMap(new WeakHashMap<Object, Boolean>());
@@ -65,7 +57,7 @@ final class KeyguardDepthHider {
                     cancelParse(call.thisObject);
                     setField(call.thisObject, "isDepthFileParsing", Boolean.FALSE);
                     clear(call.thisObject);
-                    Log.i(TAG, "depth parse skipped: HyperAlive wallpaper");
+                    Log.i(TAG, "depth parse skipped: AliveHS wallpaper");
                     call.setResult(null);
                 }
             });
@@ -96,7 +88,6 @@ final class KeyguardDepthHider {
         Log.i(TAG, "installed");
     }
 
-    /** Called by the SystemUI activation receiver after a wallpaper was applied. */
     static void onActivation(Context context) {
         if (context != null) appContext = context;
         wallpaperCheckedAt = 0L;
@@ -163,7 +154,7 @@ final class KeyguardDepthHider {
                 try {
                     info = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
                 } catch (Throwable ignored) {
-                    // Some builds reject the per-flag query; fall back to the system one.
+
                 }
             }
             if (info == null) info = manager.getWallpaperInfo();

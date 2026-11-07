@@ -1,4 +1,4 @@
-# HyperAlive 需求清单
+# OpenAlive HyperPort 需求清单
 
 > 这份文档只记「用户要什么」。每条都写清来源与状态，实现细节去 docs/port/PROGRESS.md。
 > 每次对话有新要求，都要先更新这里，再动代码。
@@ -70,14 +70,14 @@ python tools/deploy.py --build
 
 这两处一开，系统设置里出现「和锁屏样式一致」，且真的生效。
 
-## 七、新方案：显示模式新增第三项「HyperAlive 样式」（已记录，未实现）
+## 七、新方案：显示模式新增第三项「AliveHS 样式」（已记录，未实现）
 
 ### 目标
 
 在「息屏与锁屏编辑 → 显示模式」里，除现有的
-`自定义（普通 AOD）`、`和锁屏样式一致（全屏 AOD）`，**再增加一项** `HyperAlive 样式`。
+`自定义（普通 AOD）`、`和锁屏样式一致（全屏 AOD）`，**再增加一项** `AliveHS 样式`。
 
-- 选中 `HyperAlive 样式`：底层按**全屏 AOD** 运行（这是流畅不闪的前提），同时启用模块的
+- 选中 `AliveHS 样式`：底层按**全屏 AOD** 运行（这是流畅不闪的前提），同时启用模块的
   球体 / 壁纸后处理效果。
 - 选中其它任何选项：模块**完全不介入**，保持 MIUI 默认行为。
 
@@ -86,7 +86,7 @@ python tools/deploy.py --build
 1. **不改动原有选项**：不重命名、不隐藏、不改变语义。
 2. **不占用别人的逻辑**：不 hook「和锁屏样式一致」的既有实现；与 `full_aod` 这类模块必须能共存。
    只**新建**自己的样式项。
-3. **默认行为不变**：没选 `HyperAlive 样式` 时，效果 / hook / 窗口一律不生效。
+3. **默认行为不变**：没选 `AliveHS 样式` 时，效果 / hook / 窗口一律不生效。
 4. 只在 `com.miui.aod`、`com.android.systemui` 两个进程内工作。
 
 ### 实现前待查
@@ -151,9 +151,9 @@ python tools/deploy.py --build
 
 | # | 要求 | 状态 | 备注 |
 |---|---|---|---|
-| D1 | 在「主题壁纸」的「系统个性化」页注入一个 HyperAlive 入口，位置在「正在使用」与息屏卡之间 | ✅ 已实现 | `PersonalizeEntry.java`，hook `PersonalizeActivity.onResume` |
+| D1 | 在「主题壁纸」的「系统个性化」页注入一个 AliveHS 入口，位置在「正在使用」与息屏卡之间 | ✅ 已实现 | `PersonalizeEntry.java`，hook `PersonalizeActivity.onResume` |
 | D2 | 入口 UI 与原生入口完全一致，用原生实现，不自绘 | ✅ | 复用 `com.miui.support.cardview.CardView` + `miuix_preference_main_layout`；行高/图标/文字与原生行一致（167px 行高、102px 图标） |
 | D3 | 入口必须独立成卡片，与其它入口不相连（参照设置页「小米澎湃AI」） | ✅ | 新卡与原卡放进同一个 vertical LinearLayout，卡间 12dp |
 | D4 | 点击进入项目应用主页 | ✅ | `org.aliveclean.HomeActivity` |
-| D5 | 不得挤掉/替换原生入口（息屏等 8 项必须原样保留） | ✅ | 已实测 aod_item 仍在，HyperAlive 卡片独立在上 |
+| D5 | 不得挤掉/替换原生入口（息屏等 8 项必须原样保留） | ✅ | 已实测 aod_item 仍在，AliveHS 卡片独立在上 |
 | D6 | 模块需在主题壁纸进程生效 | ✅ | `xposed_scope` 增加 `com.android.thememanager`；LSPosed 里需勾选主题壁纸 |

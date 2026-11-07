@@ -20,25 +20,14 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-
-/**
- * Adds a standalone "HyperAlive" card on top of the 系统个性化 page of 主题壁纸
- * (com.android.thememanager.settings.personalize.activity.PersonalizeActivity).
- *
- * The card is built from the app's own resources only: the native MIUI CardView class and the
- * native preference row layout, so the entry looks exactly like the eight rows below it while
- * staying in its own card (like 小米澎湃AI in Settings).
- */
 public final class PersonalizeEntry {
-    private static final String TAG = "HyperAliveHooks";
+    private static final String TAG = "AliveHSHooks";
     private static final String HOST_PKG = "com.android.thememanager";
     private static final String ACTIVITY = HOST_PKG + ".settings.personalize.activity.PersonalizeActivity";
     private static final String SELF_PKG = "org.aliveclean";
     private static final String HOME_ACTIVITY = "org.aliveclean.HomeActivity";
-    private static final String TITLE = "HyperAlive";
-    private static final String MARK = "hyperalive.personalize.card";
+    private static final String TITLE = "AliveHS";
+    private static final String MARK = "alivehs.personalize.card";
     private static final int GAP_DP = 12;
 
     private PersonalizeEntry() {}
@@ -78,7 +67,6 @@ public final class PersonalizeEntry {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             card.setTag(MARK);
 
-            /* stack the new card above the native one so both keep their own rounded card */
             LinearLayout stack = new LinearLayout(activity);
             stack.setOrientation(LinearLayout.VERTICAL);
             stack.setTag(MARK);
@@ -106,8 +94,6 @@ public final class PersonalizeEntry {
         if (decor == null) return;
         decor.postDelayed(() -> inject(activity, attempt + 1), 120);
     }
-
-    /* ---------------------------------------------------------------- views */
 
     private static View newCard(Activity activity, View anchor) throws Exception {
         Class<?> cls = Class.forName("com.miui.support.cardview.CardView", false, activity.getClassLoader());
@@ -177,7 +163,6 @@ public final class PersonalizeEntry {
         }
     }
 
-    /** Same geometry as the stock icons: 28dp squircle, ~16% corner radius, centred in the 34dp box. */
     private static Drawable roundedIcon(Activity activity, Drawable source) {
         if (source == null) return null;
         try {
@@ -208,8 +193,6 @@ public final class PersonalizeEntry {
             Log.w(TAG, "personalize: open home failed", t);
         }
     }
-
-    /* ---------------------------------------------------------------- helpers */
 
     private static View view(Activity activity, String name) {
         int id = id(activity, name, "id");

@@ -5,7 +5,6 @@ import android.graphics.*;
 import android.view.*;
 import android.widget.*;
 
-/** Small, lifecycle-bound previews inside the official three cards. */
 final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceTextureListener {
     private final TextureView texture;
     private final int mode;

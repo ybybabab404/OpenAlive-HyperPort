@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.view.Surface;
 
-/** Loaded by the Snow runtime's class loader, so NOLOAD finds its existing engine. */
 public final class XiaomiSurfaceLease {
     static { System.loadLibrary("alive_clean"); }
     private long handle;

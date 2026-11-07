@@ -8,11 +8,6 @@ import android.os.IBinder;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-/** External provider lease for the short-lived system-UID adapter (Android 12+).
- * An app_process main is not an AMS-registered application: using its ordinary
- * ContentResolver would send an unregistered IApplicationThread. The platform's
- * content command instead acquires and releases an external Binder-token lease.
- */
 final class PlatformProvider implements AutoCloseable {
     private final String authority;
     private final int user;
@@ -31,9 +26,7 @@ final class PlatformProvider implements AutoCloseable {
         call=Class.forName("android.content.IContentProvider").getMethod("call",AttributionSource.class,String.class,String.class,String.class,Bundle.class);
         source=new AttributionSource.Builder(1000).setPackageName("android").build();
         Method acquire=activityManager.getMethod("getContentProviderExternal",String.class,int.class,IBinder.class,String.class);
-        // The AOD process can be between teardown and restart after long uptime.
-        // Retry acquiring a lease, never replay a provider transaction: a setter
-        // may already have taken effect when its reply is lost.
+
         Object resolved=null;
         int[] delays={0,200,600,1200};
         for(int attempt=0;attempt<delays.length;attempt++){
@@ -47,7 +40,7 @@ final class PlatformProvider implements AutoCloseable {
                 throw error;
             }
             if(resolved!=null)break;
-            // A holder without its binder still owns an external reference.
+
             invoke(release,manager,authority,token,user);
         }
         if(resolved==null)throw new IllegalStateException("Provider unavailable after bounded reconnect: "+authority);

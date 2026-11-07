@@ -5,7 +5,6 @@ import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.WindowManager;
 
-/** Xiaomi's AOD auto-density policy, without its global resource hooks. */
 final class XiaomiAodDensity {
     static int resolve(Context host,ClassLoader loader){
         Display display=((WindowManager)host.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();
@@ -16,10 +15,7 @@ final class XiaomiAodDensity {
                 .getConstructor(Context.class,Display.class).newInstance(host,display);
             Object target=config.getClass().getMethod("getTargetConfig").invoke(config);
             int dpi=target.getClass().getField("densityDpi").getInt(target);
-            // On MIUI, keep its own device/resolution/zoom policy. Only replace
-            // the denominator when the host supplies a current default DPI.
-            // The largest supported mode does NOT prove which resolution
-            // DENSITY_DEVICE_STABLE belongs to on an arbitrary vendor device.
+
             if(platformBaseline>0){
                 java.lang.reflect.Field base=config.getClass().getDeclaredField("mCurrentDefaultDpi");base.setAccessible(true);
                 dpi=correctTarget(dpi,base.getInt(config),platformBaseline);
@@ -28,18 +24,13 @@ final class XiaomiAodDensity {
         }catch(Exception|LinkageError unavailable){
             android.util.Log.w("OpenAliveXiaomi","Original auto-density unavailable; using phone policy",unavailable);
         }
-        // DisplayDensityConfig.updatePPIOfDevice + AutoDensityPolicy.calcPhoneScale.
-        // MIUI-only device/SKU APIs may be absent on the host. Preserve the public
-        // phone calculation rather than applying the host's larger logical DPI.
+
         int baseline=platformBaseline>0?platformBaseline:
                 display.getDisplayId()==Display.DEFAULT_DISPLAY?DisplayMetrics.DENSITY_DEVICE_STABLE:m.densityDpi;
         return phoneDensity(m.widthPixels,m.heightPixels,m.xdpi,m.ydpi,m.densityDpi,baseline);
     }
     private static int platformDefaultDpi(Display display){
-        // The host's own KStyleUtil.getInitialDisplayDensity uses this property
-        // before WindowManager's initial density. Reuse that source instead of
-        // assuming ro.sf.lcd_density belongs to the largest supported mode.
-        // Never use a default-display property for a foldable's secondary screen.
+
         if(display.getDisplayId()!=Display.DEFAULT_DISPLAY)return 0;
         try{
             Class<?> properties=Class.forName("android.os.SystemProperties");

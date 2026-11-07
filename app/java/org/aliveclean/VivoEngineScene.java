@@ -7,12 +7,11 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Original Vivo controllers with an OpenAlive texture and lifecycle host. GL-thread owned. */
 final class VivoEngineScene implements AutoCloseable {
     static final String BASE="com.vivo.livewallpaper.box.personalization.",R="com.vivo.livewallpaper.sdk.r2d.render.";
     private final VivoCalls api;
     private final int family;
-    /** Log identity: wallpaper and preview engines share one process and one TAG. */
+
     private static final java.util.concurrent.atomic.AtomicInteger NEXT_ID=new java.util.concurrent.atomic.AtomicInteger();
     private final int id=NEXT_ID.incrementAndGet();
     private final String role;
@@ -29,11 +28,7 @@ final class VivoEngineScene implements AutoCloseable {
     private volatile boolean closed,visible;
     private volatile boolean flashReady;
     private boolean preview,visibilitySet,running,resumePending;
-    // Vivo keeps the live raster/flash controller in a process-wide singleton that its own
-    // plugin re-reads on every frame (onGLPluginDraw). With an editor preview and the wallpaper
-    // alive in the same process, one engine's frame would otherwise draw with the other engine's
-    // controller - and when that other engine is torn down, the survivor keeps a destroyed one.
-    // Every engine therefore pins the singleton back to its own controller before it draws.
+
     private Object controllerSlot;
     private java.lang.reflect.Field controllerSlotField;
     private int mode=1;
@@ -78,7 +73,7 @@ final class VivoEngineScene implements AutoCloseable {
                 Object config=api.make("D3.a",new Class<?>[0]);
                 Object bean=bean(BASE+"plugin.effectscard.EffectsCardCustomDataBean",options.engineJson());
                 api.call(config,"setCustomDataBean",new Class<?>[]{bean.getClass()},bean);
-                // The editor is a live wallpaper preview, not Vivo's eye-button demo.
+
                 api.set(config,"a",1);api.set(config,"c",width);api.set(config,"d",height);api.set(config,"e",true);
                 api.set(config,"surfaceType",2);api.set(config,"isPreview",true);
                 if(options.style==1){
@@ -103,9 +98,7 @@ final class VivoEngineScene implements AutoCloseable {
             }else{
                 Object data=bean(BASE+"PageContext$Data","{}");
                 Object wrap=api.make(BASE+"ThemeEditInterfaceWrap",new Class<?>[]{api.type(BASE+"PageManager")},(Object)null);
-                // Drop any controller left behind by a previous engine of this family; see
-                // clearSharedController(). Without this the new plugin inherits a destroyed
-                // controller and loadSource silently returns.
+
                 if(family==VivoOptions.RASTER||family==VivoOptions.FLASH)clearSharedController();
                 if(family==VivoOptions.RASTER){
                     plugin=api.make(BASE+"plugin.raster.GLRasterWallpaperPrePlugin",new Class<?>[]{Context.class,Context.class,data.getClass(),wrap.getClass(),String.class},runtime,runtime,data,wrap,"layer_img1_bg_wallpaper");
@@ -117,8 +110,7 @@ final class VivoEngineScene implements AutoCloseable {
                 }
                 api.set(plugin,"mRender",render);
                 api.call(plugin,family==VivoOptions.RASTER?"loadSource":"loadFlashCardSource",new Class<?>[]{layerType},layerContract);
-                // Host photos are already in the surface color space; decoded video
-                // still uses the original engine's sRGB-to-P3 shader when needed.
+
                 api.call(render,"setImageSRGBToP3Enable",new Class<?>[]{boolean.class},false);
                 api.call(render,"setVideoSRGBToP3Enable",new Class<?>[]{boolean.class},displayP3&&videoRaster());
                 controller=api.get(plugin,"mIEffectCtrl");
@@ -130,17 +122,15 @@ final class VivoEngineScene implements AutoCloseable {
                 if(family==VivoOptions.FLASH){
                     Object config=api.get(controller,"g");
                     api.call(config,"setCustomDataBean",new Class<?>[]{api.type(BASE+"plugin.effectscard.EffectsCardCustomDataBean")},api.get(plugin,"mCustomDataBean"));
-                    api.set(config,"a",1); // Bundled, byte-identical downloaded textures.
-                    api.set(config,"b",false); // Native wallpaper texture/mask and highlight coordinates.
-                    api.set(config,"isPreview",true); // Host owns visibility and render suspension.
+                    api.set(config,"a",1);
+                    api.set(config,"b",false);
+                    api.set(config,"isPreview",true);
                     layer.bindLiveFlashMask(api,render,controller,options.area);
-                    api.set(controller,"i",true); // Host visibility starts the real sensor mode, not the eye-button demo.
+                    api.set(controller,"i",true);
                 }
                 api.call(controller,family==VivoOptions.RASTER?"onGLSurfaceChanged":"b",new Class<?>[]{int.class,int.class},width,height);
                 sensorGain=new VivoSensorGain(runtime,api,sensor(),options.sensitivity);
-                // One engine, one subscription: created with the engine, released in close().
-                // WallpaperService visibility flaps on every window transition, and gating the
-                // gyro on it left the desktop engine unregistered after a style change.
+
                 sensorGain.start();
             }
         }catch(Exception e){close();throw e;}
@@ -151,11 +141,7 @@ final class VivoEngineScene implements AutoCloseable {
     }
     void visible(boolean value){
         if(closed)return;
-        // The rotation subscription follows the engine's on-screen lifetime, never
-        // the animation value. Scene 1/0/AOD flips several times a second; every
-        // flip used to close and reopen the gyro, and one lost race left the
-        // controller "running" with no samples, i.e. the frozen posture.
-        // Subscription follows real visibility edges; see below.
+
         if(visibilitySet&&visible==value){android.util.Log.i("AliveClean","vivo visible id="+id+" "+role+" value="+value+" same=true mode="+mode+" running="+running);if(value)updateAnimation();return;}
         visibilitySet=true;
         visible=value;
@@ -173,41 +159,32 @@ final class VivoEngineScene implements AutoCloseable {
             android.util.Log.i("AliveClean","vivo anim id="+id+" "+role+" family="+family+" value="+value+" running="+running+" mode="+mode);
             if(value&&resumePending){
                 resumePending=false;
-                // Returning from an app does not always produce a visibility edge: the
-                // wallpaper can stay "visible" while Vivo's own pause/idle path already
-                // tore the animation down. Replay the controller once in that case,
-                // otherwise the gyro keeps integrating and nothing applies the angle.
+
                 if(running){
                     running=false;
                     android.util.Log.i("AliveClean","vivo replay after hidden family="+family);
                 }
             }
             if(running==value){
-                // A display/AOD callback can arrive without a visibility edge.
-                // Restore only the subscription; replaying the controller would
-                // reset the flash posture while AOD is still visible.
+
                 if(value&&sensorGain!=null)sensorGain.start();
                 return;
             }
             if(!value)stop();
             else if(family==VivoOptions.LIQUID){
-                // Isolated: a broken controller call must not skip the sensor start
-                // below, otherwise the engine looks "running" but gets no samples.
+
                 try{api.call(controller,"playAnim");}catch(Exception e){android.util.Log.e("AliveClean","vivo playAnim failed id="+id,e);}
             }
             else if(family==VivoOptions.RASTER){
                 try{
                     Object sensor=sensor();
-                    api.set(sensor,"e",0L); // Never integrate the time spent asleep.
+                    api.set(sensor,"e",0L);
                     api.call(controller,"d",new Class<?>[]{boolean.class},videoRaster());
                     if(sensorGain!=null)sensorGain.reclaim();
                 }catch(Exception e){android.util.Log.e("AliveClean","vivo raster start failed id="+id,e);}
             }
             else {
-                // n3.g.g(0,false), reached through a(), resets both springs, the
-                // intensity and the three-sample posture calibration as Vivo does
-                // on wake. Also discard the host's suspended sensor time span;
-                // no velocity sample may integrate time spent with the screen off.
+
                 try{
                     Object sensor=api.get(api.get(controller,"f"),"e");
                     api.set(sensor,"e",0L);api.set(sensor,"f",0f);api.set(sensor,"g",0f);api.set(sensor,"h",0f);
@@ -236,7 +213,7 @@ final class VivoEngineScene implements AutoCloseable {
         main.post(()->{if(!closed){if(sensorGain!=null)sensorGain.relative(relative);if(liquidSensitivity!=null)liquidSensitivity.relative(relative);}});
         return true;
     }
-    /** Re-asserts this engine as the owner of Vivo's process-wide controller slot. */
+
     private void pinController(){
         if(controller==null||controllerSlot==null||controllerSlotField==null)return;
         try{
@@ -253,15 +230,12 @@ final class VivoEngineScene implements AutoCloseable {
         Object matrix=api.call(render,"getMatrixManager");
         float scale=zoom.sample(System.nanoTime());
         drawnScale=scale;
-        // Original renderer coordinates are centred, with positive Y upward.
-        // Screen Y=40% is +10% of the height in this coordinate system.
+
         api.call(matrix,"c");
         try{
             api.call(matrix,"i",new Class<?>[]{float.class,float.class,float.class},0f,height*.1f*(1-scale),0f);
             api.call(matrix,"e",new Class<?>[]{float.class,float.class},scale,scale);
-            // The native preview renders into a vertically inverted editor FBO.
-            // Lattice physics, masks and touch positions use the live screen axes.
-            // Cancel that FBO rotation and upload an upright bitmap as the live renderer does.
+
             if(uprightLiquid())api.call(matrix,"d",new Class<?>[]{float.class,float.class,float.class},180f,1f,0f);
             if(family==VivoOptions.FLASH)drawFlash();else api.call(controller,"onGLSurfaceDraw");
         }finally{api.call(matrix,"b");}
@@ -271,12 +245,9 @@ final class VivoEngineScene implements AutoCloseable {
     private boolean videoRaster(){return family==VivoOptions.RASTER&&!options.video.isEmpty();}
     private Object sensor()throws Exception{return videoRaster()?api.get(api.get(controller,"f"),"d"):api.get(api.get(controller,"f"),"e");}
     private void drawFlash()throws Exception{
-        // p3.a.e: use the original wallpaper render nodes without p3.c's editor-FBO
-        // rotation. That rotation reverses the spatial relationship to iMouse and
-        // changes the highlight/rainbow result even when gyro angles are identical.
+
         Object animation=api.get(controller,"f"),scene=api.get(controller,"c"),node=api.get(scene,"i"),parameters=api.get(node,"c");
-        // Visibility reaches GL before the main-thread sensor restart. Never draw
-        // the previous wake session's highlight in that intervening frame.
+
         boolean ready=flashReady;
         api.set(parameters,"d",ready?api.get(animation,"n"):0f);api.set(parameters,"e",ready?api.get(animation,"o"):0f);
         api.set(parameters,"f",ready?api.call(animation,"c"):0f);api.set(parameters,"a",1f);
@@ -308,8 +279,7 @@ final class VivoEngineScene implements AutoCloseable {
         int columns=width<height?20:Math.round(20f*width/height),rows=width<height?Math.round(20f*height/width):20;
         float[] weights=(float[])api.type("Q3.c").getMethod("k",Bitmap.class,Rect.class,int.class,int.class).invoke(null,liquidMask,rect,columns,rows);
         api.set(config,"b",weights);
-        // Vivo's live SpringLatticeEffectStrategy reads effect.maskWeights;
-        // the separate eye-button strategy reads b. Keep both contracts identical.
+
         Object effect=api.make(BASE+"bean.EffectJsonBean",new Class<?>[0]);api.set(effect,"maskWeights",weights);api.set(config,"effect",effect);
     }
     void touch(int action,float x,float y){
@@ -322,13 +292,11 @@ final class VivoEngineScene implements AutoCloseable {
         }catch(Exception e){android.util.Log.w("AliveClean","Vivo touch unavailable",e);}});
     }
     private void stop()throws Exception{
-        // The rotation subscription is owned by visibility, not by the animation:
-        // scene 1/0/AOD flips would otherwise close and reopen the gyro several
-        // times a second. close() releases it when the engine is destroyed.
+
         if(family!=VivoOptions.FLASH)api.call(controller,"stopAnim");
         else {Object animation=api.get(controller,"f");api.call(animation,"b");api.call(animation,"f");api.call(api.get(controller,"e"),"h");}
     }
-    /** Clears the family singleton unconditionally, right before a new plugin is built. */
+
     private void clearSharedController(){
         String name=family==VivoOptions.RASTER?BASE+"plugin.raster.RasterPrePluginManger":BASE+"plugin.effectscard.EffectsCardPrePluginManger";
         try{
@@ -341,14 +309,7 @@ final class VivoEngineScene implements AutoCloseable {
             android.util.Log.i("AliveClean","vivo reset shared controller family="+family+" previous="+(previous==null?"null":Integer.toHexString(System.identityHashCode(previous))));
         }catch(Throwable error){android.util.Log.w("AliveClean","vivo controller reset unavailable",error);}
     }
-    /** Vivo keeps the live raster/flash controller in a process-wide singleton
-     *  (RasterPrePluginManger / EffectsCardPrePluginManger .iEffectPreCtrl). Its plugin
-     *  stopDraw() destroys that controller but never clears the singleton. A plugin created
-     *  afterwards copies the singleton into mIEffectCtrl from onGLPluginDraw (foreground
-     *  layer) before loadSource runs; loadSource then sees a non-null field and returns
-     *  without building its own controller, so the new engine keeps a destroyed one and no
-     *  longer reacts to rotation. Clearing the reference when we tear our own controller
-     *  down keeps every engine on its own live instance. */
+
     private void clearSharedController(Object controller){
         if(controller==null)return;
         String name=family==VivoOptions.RASTER?BASE+"plugin.raster.RasterPrePluginManger":BASE+"plugin.effectscard.EffectsCardPrePluginManger";
@@ -366,12 +327,10 @@ final class VivoEngineScene implements AutoCloseable {
     private void drain(){for(Runnable r;(r=glTasks.poll())!=null;)r.run();}
     @Override public void close(){
         if(closed)return;visible=false;
-        // Engine destruction is the only place the rotation subscription is released;
-        // stop() runs on every scene change and must not touch it.
+
         if(sensorGain!=null){sensorGain.close();sensorGain=null;}
         android.util.Log.i("AliveClean","vivo close id="+id+" "+role+" family="+family);
-        // The original animation controllers are main-thread objects. Wait only from GL;
-        // no UI path waits on GL, avoiding the inverse lock order during surface teardown.
+
         FutureTask<Void> shutdown=new FutureTask<>(()->{
             if(controller!=null){stop();if(liquidSensitivity!=null)liquidSensitivity.close();if(family==VivoOptions.LIQUID)api.call(controller,"destroy");
                 else if(family==VivoOptions.FLASH)api.call(plugin,"stopDraw");}
@@ -383,8 +342,7 @@ final class VivoEngineScene implements AutoCloseable {
             if(family==VivoOptions.RASTER||family==VivoOptions.FLASH)clearSharedController(controller);
         }catch(Exception e){android.util.Log.w("AliveClean","Vivo renderer release incomplete",e);}
         closed=true;main.removeCallbacksAndMessages(null);glTasks.clear();dimPass.close();if(layer!=null){layer.close();layer=null;}if(liquidMask!=null){liquidMask.recycle();liquidMask=null;}
-        // A deleted but still-current program can survive until the next renderer
-        // binds another one. Do not let Vivo's FBO helper try to restore that name.
+
         android.opengl.GLES30.glUseProgram(0);android.opengl.GLES30.glBindVertexArray(0);
     }
 }

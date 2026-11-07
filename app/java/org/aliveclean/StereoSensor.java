@@ -7,7 +7,6 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Handler;
 
-/** Optional gyro registration shared by wallpaper and preview host lifecycles. */
 final class StereoSensor implements SensorEventListener,AutoCloseable {
     interface Listener {void onGyroscope(float x,float y,float z,long timestamp);}
     private final SensorManager manager;

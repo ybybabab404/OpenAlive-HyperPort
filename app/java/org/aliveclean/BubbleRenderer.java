@@ -6,7 +6,6 @@ import android.opengl.Matrix;
 import java.io.IOException;
 import java.nio.*;
 
-/** Original Bubble lighting and disk background shaders on a portable GL host. */
 final class BubbleRenderer implements WallpaperRenderer {
     final BubbleMotion motion;
     private AssetGl bubble,background;
@@ -57,10 +56,7 @@ final class BubbleRenderer implements WallpaperRenderer {
         GLES30.glViewport(0,0,width,height);GLES30.glDisable(GLES30.GL_SCISSOR_TEST);GLES30.glDisable(GLES30.GL_DEPTH_TEST);GLES30.glDisable(GLES30.GL_CULL_FACE);GLES30.glDisable(GLES30.GL_BLEND);
         GLES30.glColorMask(true,true,true,true);
         GLES30.glClearColor(0,0,0,1);GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT|GLES30.GL_DEPTH_BUFFER_BIT);
-        // Bubble transparency blends into our own opaque background. Do not
-        // export the intermediate alpha (a*a + dstA*(1-a)) to the host: its
-        // launcher snapshot/blur composition can expose a pale layer below.
-        // Keep the original RGB blend and animation unchanged.
+
         GLES30.glColorMask(true,true,true,false);
         background.use();background.matrix("u_projTrans",bgProjection);
         float rotation=(float)(25*.5*(Math.cos(t*.025*2*Math.PI)+1)*Math.signum(Math.cos(t*.025*Math.PI)));

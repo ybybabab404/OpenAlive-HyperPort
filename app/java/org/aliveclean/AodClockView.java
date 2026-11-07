@@ -9,7 +9,6 @@ import android.view.*;
 import android.widget.*;
 import java.util.*;
 
-/** AOD-only content. Time advances independently of wallpaper drawing. */
 final class AodClockView extends AodClockFace {
     private final LinearLayout content;
     private final TextView time,date,lunar;
@@ -66,13 +65,12 @@ final class AodClockView extends AodClockFace {
                 LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)text.getLayoutParams();p.topMargin=Math.round(w*.025f);text.setLayoutParams(p);
             }
         }
-        // Typography must be set before TextViews measure: a short AOD window may
-        // never get another layout pass before the display enters DOZE again.
+
         super.onMeasure(widthSpec,heightSpec);
     }
     @Override protected void onLayout(boolean changed,int l,int t,int r,int b){
         super.onLayout(changed,l,t,r,b);
-        // Fixed endpoint below the photo stack; never interpolate into the lock clock.
+
         content.setTranslationY(getHeight()*.225f+getWidth()*.22243f);
     }
     int notificationTop(){getLocationOnScreen(screenLocation);return Math.round(screenLocation[1]+content.getY()+content.getHeight()+getWidth()*.035f);}

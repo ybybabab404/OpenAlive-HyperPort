@@ -10,7 +10,6 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Local ROM gallery. Thumbnails are decoded away from the UI/render threads. */
 final class WallpaperLibrary {
     interface Selection { void choose(String asset); }
     private static final class Entry {

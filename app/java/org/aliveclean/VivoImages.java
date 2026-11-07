@@ -16,9 +16,7 @@ final class VivoImages implements AutoCloseable {
                 else {String category=options.family==VivoOptions.LIQUID?"liquid":"flash";
                     images.photos.add(asset(runtime,"vivo/default/"+category+".jpg"));images.subject=asset(runtime,"vivo/default/"+category+"-mask.png");}
                 if(options.family==VivoOptions.FLASH&&options.paint.isEmpty()){
-                    // This particular factory template stores its 1080x2400 photo at
-                    // (0,1200) on a 1080x3600 drawing canvas. Do not stretch the canvas
-                    // onto the photo, or substitute the unrelated subject mask.
+
                     Bitmap canvas=asset(runtime,"vivo/default/flash-doodle.png");
                     try{
                         if(canvas.getWidth()!=1080||canvas.getHeight()!=3600)throw new IOException("Unexpected Vivo factory drawing canvas");

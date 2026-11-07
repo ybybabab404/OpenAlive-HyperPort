@@ -2,7 +2,6 @@ package android.provider;
 
 import android.content.ContentResolver;
 
-/** Framework fallback used by the isolated original Xiaomi UI on non-MIUI ROMs. */
 public final class MiuiSettings {
     private MiuiSettings() {}
 

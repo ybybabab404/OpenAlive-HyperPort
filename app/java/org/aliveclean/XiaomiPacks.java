@@ -8,7 +8,6 @@ import java.security.MessageDigest;
 import java.util.*;
 import org.json.*;
 
-/** Built-in, checksum-pinned original runtime packs; no downloads or APK installation. */
 final class XiaomiPacks {
     static final class Pack {
         final String id,title,digest; final long bytes; final int lands;

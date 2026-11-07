@@ -5,7 +5,6 @@ import android.content.*;
 import android.content.pm.*;
 import android.widget.Toast;
 
-/** Public actions advertised by the installed OPPO theme apps. */
 final class ThemeLinks {
     static Intent resolve(Context context,boolean font){
         String[] actions=font?new String[]{"com.oplus.themestore.action.SET_FONT_INDIVIDUATION","com.oplus.themestore.action.SET_FONT","com.nearme.themespace.SET_FONT"}

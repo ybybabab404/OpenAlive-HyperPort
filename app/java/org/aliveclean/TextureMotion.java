@@ -3,7 +3,6 @@ package org.aliveclean;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-/** Texture lifetime is one wake session, independent of the wallpaper's visibility. */
 final class TextureMotion {
     private final SceneMotion lock,home;
     private final boolean shared;

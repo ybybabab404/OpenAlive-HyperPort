@@ -8,7 +8,6 @@ import android.net.Uri;
 import android.os.*;
 import java.util.*;
 
-/** Same-UID state and scene relay for isolated native player processes. */
 public final class XiaomiState extends ContentProvider {
     static final Uri URI=Uri.parse("content://org.aliveclean.xiaomi/state");
     private final Handler main=new Handler(Looper.getMainLooper());
@@ -24,8 +23,7 @@ public final class XiaomiState extends ContentProvider {
     static XiaomiPacks.Pack selected(Context c,int mode)throws Exception {
         WallpaperManager manager=WallpaperManager.getInstance(c);
         WallpaperInfo info=mode==2||Build.VERSION.SDK_INT<34?manager.getWallpaperInfo():manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
-        // A separate static lock wallpaper has no WallpaperInfo. Do not take
-        // ownership merely because the home wallpaper happens to be Xiaomi.
+
         if(info==null&&manager.getWallpaperId(WallpaperManager.FLAG_LOCK)<0)info=manager.getWallpaperInfo();
         if(!own(c,info))return null;
         for(XiaomiPacks.Pack p:XiaomiPacks.all(c))if(p.component().equals(info.getServiceName()))return p;

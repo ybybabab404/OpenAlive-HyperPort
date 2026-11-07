@@ -9,7 +9,6 @@ import android.view.*;
 import java.io.File;
 import java.util.*;
 
-/** One original native player per service process, with explicit surface ownership. */
 public class XiaomiWallpaper extends WallpaperService implements DisplayManager.DisplayListener {
     public static final class Earth extends XiaomiWallpaper {} public static final class Moon extends XiaomiWallpaper {}
     public static final class Mars extends XiaomiWallpaper {} public static final class Saturn extends XiaomiWallpaper {}
@@ -72,9 +71,7 @@ public class XiaomiWallpaper extends WallpaperService implements DisplayManager.
         boolean waking=next==1&&(mode==0||pendingLock!=null)&&owner!=null&&!owner.isPreview();mode=next;
         if(waking){
             if(pendingLock!=null)return;
-            // Xiaomi screenOn also waits 100 ms and discards the candidate
-            // after authentication. Touch-to-wake can precede fingerprint
-            // success; sending Lock immediately bends a direct AOD->Desk path.
+
             pendingLock=()->{
                 pendingLock=null;if(destroyed||mode!=1||owner==null||!owner.surface)return;
                 if(!getSystemService(KeyguardManager.class).isKeyguardLocked())return;
@@ -88,8 +85,7 @@ public class XiaomiWallpaper extends WallpaperService implements DisplayManager.
     private void refresh(){if(player==null)return;try{player.running(canRun());}catch(Exception e){failure(e);}}
     private void sendOffset(){if(owner!=null&&owner.offset>=0)send("Offset_"+XiaomiDesktopMotion.offset(owner.offset,desktopAmplitude));}
     private void queueOffset(SceneEngine engine,float value){
-        // Keep intermediate samples; debouncing to the final page loses motion.
-        // Invalidate queued samples when controls or the surface owner change.
+
         refresh();
         int generation=offsetGeneration;float adjusted=XiaomiDesktopMotion.offset(value,desktopAmplitude);
         main.postDelayed(()->{if(generation==offsetGeneration&&!destroyed&&owner==engine&&engine.surface&&engine.visible&&canRun())send("Offset_"+adjusted);},XiaomiDesktopMotion.delay(desktopResponsiveness));
@@ -126,7 +122,7 @@ public class XiaomiWallpaper extends WallpaperService implements DisplayManager.
         main.removeCallbacksAndMessages(null);
         Bundle b=new Bundle();b.putBinder("client",client.getBinder());try{XiaomiState.call(this,"unsubscribe",b);}catch(RuntimeException ignored){}
         try{if(player!=null)player.close();}catch(Exception e){failure(e);}
-        // Match Xiaomi's one-shot Snow Mountain process lifecycle after nDestroy.
+
         if("snowmountain".equalsIgnoreCase(getClass().getSimpleName()))android.os.Process.killProcess(android.os.Process.myPid());
         super.onDestroy();
     }

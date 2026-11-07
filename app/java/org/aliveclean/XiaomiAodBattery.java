@@ -9,7 +9,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.lang.reflect.Method;
 
-/** Original Xiaomi battery artwork with host-owned battery events and no wake lock. */
 final class XiaomiAodBattery extends LinearLayout {
     private final Context host;
     private final View container,icon;
@@ -34,8 +33,7 @@ final class XiaomiAodBattery extends LinearLayout {
         battery.read(host.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED)));
         return battery;
         }catch(Exception|LinkageError error){
-            // An optional battery must never take down the clock or leave the
-            // original vendor controller in an attached hierarchy.
+
             if(container!=null&&container.getParent() instanceof ViewGroup)((ViewGroup)container.getParent()).removeView(container);
             android.util.Log.w("OpenAliveXiaomi","Original battery layout unavailable",error);return null;
         }
@@ -50,15 +48,12 @@ final class XiaomiAodBattery extends LinearLayout {
         setId(source.getId());setOrientation(source.getOrientation());setGravity(source.getGravity());
         setLayoutDirection(source.getLayoutDirection());setAlpha(source.getAlpha());
         setPadding(source.getPaddingLeft(),source.getPaddingTop(),source.getPaddingRight(),source.getPaddingBottom());
-        // Keep both original leaves, their drawable resources, spacing and sizes.
-        // Only AODBatteryMeterView owns the vendor BatteryController/wake lock.
+
         while(source.getChildCount()>0){View child=source.getChildAt(0);source.removeViewAt(0);addView(child);}
         text.setTypeface(font);container.setVisibility(GONE);
     }
     private static void restorePaths(View icon)throws Exception{
-        // The original icon reflects android.util.PathParser, blocked for normal
-        // apps on newer Android. Parse the SAME bundled mask data with the APK's
-        // public AndroidX parser, retaining its density-dependent transform.
+
         String[][] paths={{"mChargingMaskPath","battery_meter_charging_mask_path","mMaskCharging","battery_meter_path_to_dp"},
                 {"mQuickChargingMaskPath","battery_meter_quick_charging_mask_path","mMaskCharging","battery_meter_path_to_dp"},
                 {"mProgressMaskPath","battery_meter_progress_mask_path","mMaskProgress","battery_meter_progress_mask_scale_path_to_dp"}};
@@ -72,8 +67,7 @@ final class XiaomiAodBattery extends LinearLayout {
             Class<?> parser=icon.getClass().getClassLoader().loadClass("androidx.core.graphics.PathParser");
             android.graphics.Path path=(android.graphics.Path)parser.getMethod("createPathFromPathData",String.class).invoke(null,data);
             if(path==null)throw new IllegalStateException("Original battery mask missing");
-            // The rounded progress mask has its own coordinate scale. Reusing
-            // the charging scale here cuts into the original battery outline.
+
             float scale=res.getDimension(res.getIdentifier(item[3],"dimen","com.miui.aod"));
             android.graphics.Matrix matrix=new android.graphics.Matrix();matrix.setScale(scale,scale);path.transform(matrix);field.set(icon,path);
         }
@@ -98,8 +92,7 @@ final class XiaomiAodBattery extends LinearLayout {
         if(next==level&&nextCharging==charging)return;
         level=next;charging=nextCharging;
         try{
-            // Match AODBatteryMeterView: external percentage, no power-save tint
-            // or digit inside the icon. Android does not expose MIUI fast-charge tiers.
+
             if(level>=0)iconUpdate.invoke(icon,level,false,false,false,charging,false);
             refreshLabels();if(onChanged!=null)onChanged.run();
         }catch(Exception|LinkageError error){unavailable(error);}

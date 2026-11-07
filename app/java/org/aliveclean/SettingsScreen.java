@@ -5,7 +5,6 @@ import android.graphics.drawable.Drawable;
 import android.view.*;
 import android.widget.*;
 
-/** Original Flyme toolbar and page resources, with host-owned navigation. */
 final class SettingsScreen {
     static LinearLayout create(Activity activity,SettingsUi ui,String title)throws Exception{
         LinearLayout screen=new LinearLayout(activity);screen.setOrientation(LinearLayout.VERTICAL);

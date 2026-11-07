@@ -7,9 +7,6 @@ import android.content.Context;
 import android.os.Looper;
 import java.lang.reflect.InvocationTargetException;
 
-/** System-UID adapter that binds the Flyme scene wallpaper without the OEM picker.
- * HyperOS' live picker reports RESULT_CANCELED for third-party components, so the
- * editor applies the component transactionally and verifies it instead. */
 public final class SceneApply {
     static void apply(Context context) throws Exception {
         if (android.os.Process.myUid() / 100000 != 0) throw new java.io.IOException("目前仅支持主用户");
@@ -27,8 +24,7 @@ public final class SceneApply {
         reader.join(1000);
         String output; synchronized (result) { output = result.toString(); }
         if (process.exitValue() != 0 || !output.contains("SCENE_APPLIED")) throw new java.io.IOException("系统未完成壁纸应用：" + output.trim());
-        // Whole-process freeze protection is intentionally disabled in this test build: as an FGS
-        // it still left oom_score_adj at 651, inside the freezer threshold, and would mask surface issues.
+
     }
 
     public static void main(String[] args) {

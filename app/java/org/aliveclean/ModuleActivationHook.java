@@ -4,7 +4,6 @@ import android.app.Application;
 import android.content.*;
 import android.os.Build;
 
-/** Only loaded in the injected SystemUI process, never in the settings app. */
 final class ModuleActivationHook {
     private static boolean registered;
     static void install(){

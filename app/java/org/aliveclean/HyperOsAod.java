@@ -55,16 +55,11 @@ final class HyperOsAod {
             @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
                 Trace.log("T07", "dreaming started");
+                // The injected TextureView is destroyed when dozing stops, so the next
+                // entry already builds a fresh RenderLoop and re-reads the scene options.
+                // A second rebuild here decoded the photo and recreated the whole EGL
+                // stack in the middle of the doze transition, which dropped ~30 frames.
                 AodOverlay.show(svc);
-                android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
-                // SharedPreferences does not notify across processes, so the scene
-                // chosen in the app is only visible if we rebuild the host here.
-                handler.postDelayed(new Runnable() {
-                    @Override public void run() { refreshScene(); }
-                }, 900);
-                handler.postDelayed(new Runnable() {
-                    @Override public void run() { dumpTree("dozing"); }
-                }, 3000);
             }
         });
         Xp.hookAllMethods(service, "onDreamingStopped", new Xp.MethodHook() {
@@ -83,19 +78,6 @@ final class HyperOsAod {
     static boolean hasInjectedView() {
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
         return root != null && root.findViewWithTag(TAG) != null;
-    }
-
-    /** Rebuilds the scene host so a style picked in the app (written to another
-     * process) is re-read on every doze entry. */
-    static void refreshScene() {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        if (root == null) return;
-        View old = root.findViewWithTag(TAG);
-        if (old != null && old.getParent() instanceof ViewGroup) {
-            ((ViewGroup) old.getParent()).removeView(old);
-            Log.i(TAG, "scene host dropped for refresh");
-        }
-        attach(root);
     }
 
     static boolean injectIntoAod() {
@@ -140,14 +122,12 @@ final class HyperOsAod {
         surface.setAlpha(1f);
         target.addView(surface, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        liveSurface = new java.lang.ref.WeakReference<>(surface);
         Trace.log("T04", "surface#create id=" + System.identityHashCode(surface)
                 + " host=" + System.identityHashCode(target) + " children=" + target.getChildCount());
         // supervise() re-attached on every transient detach; each re-attach destroyed the
         // SurfaceTexture and restarted the flow. Attachment is driven by doze start only.
         // supervise(root, surface);
-        root.postDelayed(new Runnable() {
-            @Override public void run() { dumpTree("after-attach"); }
-        }, 1500);
     }
 
     /** The inner com.miui.aod.AODView is inflated after the outer AodView, so the
@@ -212,59 +192,6 @@ final class HyperOsAod {
         return null;
     }
 
-    /** Diagnostic: prints the real hierarchy the AOD lives in, so we can see
-     * which sibling covers the scene surface and where the depth wallpaper
-     * foreground sits. Each node gets its own log line to stay under the
-     * logcat line limit. */
-    static void dumpTree(String why) {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        if (root == null) { Log.i(TAG, "tree[" + why + "]: no aod root"); return; }
-        View top = root.getRootView();
-        Log.i(TAG, "tree[" + why + "]: rootView=" + top.getClass().getName()
-                + " aod=" + root.getClass().getName()
-                + " aodParent=" + (root.getParent() instanceof View
-                        ? ((View) root.getParent()).getClass().getName() : String.valueOf(root.getParent())));
-        walk(top, 0);
-    }
-
-    private static void walk(View view, int depth) {
-        if (depth > 18) return;
-        StringBuilder line = new StringBuilder(160);
-        for (int i = 0; i < depth; i++) line.append("  ");
-        line.append(view.getClass().getSimpleName())
-            .append(" vis=").append(visibilityName(view.getVisibility()))
-            .append(" a=").append(view.getAlpha())
-            .append(" ").append(view.getWidth()).append('x').append(view.getHeight())
-            .append(" @").append(view.getLeft()).append(',').append(view.getTop());
-        if (view.getElevation() != 0f) line.append(" elev=").append(view.getElevation());
-        if (view.getTranslationZ() != 0f) line.append(" tz=").append(view.getTranslationZ());
-        if (view instanceof TextureView) {
-            line.append(" textureAvailable=").append(((TextureView) view).isAvailable());
-        }
-        if (view.getTag() != null) line.append(" tag=").append(view.getTag());
-        String name = view.getClass().getName();
-        if (name.contains("Wallpaper") || name.contains("Scrim") || name.contains("Pictorial")) {
-            line.append("  <<< ").append(name);
-        }
-        Log.i(TAG, "tree[" + depth + "] " + line);
-        if (view instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) view;
-            int count = group.getChildCount();
-            for (int i = 0; i < count; i++) walk(group.getChildAt(i), depth + 1);
-        }
-    }
-
-    private static String visibilityName(int visibility) {
-        switch (visibility) {
-            case View.VISIBLE: return "V";
-            case View.INVISIBLE: return "I";
-            case View.GONE: return "G";
-            default: return "?";
-        }
-    }
-
-
-
     /** The AOD lives in SystemUI, so its context resolves SystemUI's assets and data
      * directory. Everything the renderer reads (shaders, scene options) belongs to our
      * own package, so build a context for it instead of borrowing the host's. */
@@ -327,6 +254,7 @@ final class HyperOsAod {
         @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
             if (loop != null) { loop.close(); loop = null; }
             if (surface != null) { surface.release(); surface = null; }
+            if (liveSurface != null && liveSurface.get() == this) liveSurface = null;
             return true;
         }
 
@@ -335,6 +263,7 @@ final class HyperOsAod {
         @Override protected void onDetachedFromWindow() {
             if (loop != null) { loop.close(); loop = null; }
             if (surface != null) { surface.release(); surface = null; }
+            if (liveSurface != null && liveSurface.get() == this) liveSurface = null;
             super.onDetachedFromWindow();
         }
     }

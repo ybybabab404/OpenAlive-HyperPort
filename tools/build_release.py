@@ -270,7 +270,7 @@ def main(argv) -> None:
         write_entry(package, "META-INF/xposed/module.prop",
                     b"minApiVersion=102\ntargetApiVersion=102\nstaticScope=true\n")
         write_entry(package, "META-INF/xposed/scope.list",
-                    b"system\ncom.android.systemui\ncom.miui.aod\ncom.android.thememanager\n")
+                    b"android\ncom.android.systemui\ncom.miui.aod\ncom.android.thememanager\n")
         write_entry(package, "classes.dex", (OUT / "dex/classes.dex").read_bytes())
         write_entry(package, "classes2.dex", (VENDOR / "editor-ui.dex").read_bytes())
         write_entry(package, "lib/arm64-v8a/libalive_clean.so", native.read_bytes())

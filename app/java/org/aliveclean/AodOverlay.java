@@ -42,7 +42,10 @@ final class AodOverlay {
     /** AOD fades out during the wake animation; keep the scene until the screen is on. */
     static void hide() {
         Trace.log("T11", "overlay#hide");
-        if (view == null && !HyperOsAod.hasInjectedView()) return;
+        if (view == null) {
+            if (loop != null) { loop.close(); loop = null; }
+            return;
+        }
         try { ((WindowManager) view.getContext().getSystemService(Context.WINDOW_SERVICE)).removeView(view); }
         catch (Throwable error) { Log.e(TAG, "overlay remove failed", error); }
         if (loop != null) { loop.close(); loop = null; }

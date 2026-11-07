@@ -20,7 +20,7 @@ HyperAlive 是 LSPosed API 102 模块，给 HyperOS / Android 17 补「活的壁
 |---|---|
 | 当前分支 | `deep-clean-v2` |
 | 代码基线 | `7118782 fix: defer device-idle no-activity during AOD entry`（tag `save-20261107-idlefix`） |
-| 文档提交 | `2a5f2a6 docs: refresh handover for 0.6.1 animation fixes` |
+| 文档版本 | 以 `git log -1 -- docs/HANDOVER.md` 为准 |
 | 最新 tag | `save-20261107-idlefix`（指向 `7118782`） |
 | versionCode / versionName | `60` / `0.6.1-preview` |
 | 当前 APK | `dist/HyperAlive-0.6.1-preview-arm64-v8a.apk` |
@@ -195,6 +195,16 @@ device idle: first no-activity deferred
 ```
 
 用户随后确认「好了」。
+
+事后复核（2026-11-07 18:32，用户保持息屏）：
+
+```
+18:32:30.192  screen_toggled 0
+18:32:31.493  device_idle [7,no activity]
+间隔 1301ms
+```
+
+`dumpsys deviceidle` 当时 `mState=QUICK_DOZE_DELAY`（state 7），`mScreenOn=false`、`mCharging=false`。说明 1.2 秒窗口结束后仍会正常进入 `no activity`，不是永久停在 active。
 
 ### 5.3 唤醒与锁屏动画
 

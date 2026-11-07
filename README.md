@@ -2,6 +2,8 @@
 
 把 Flyme Alive 那套「息屏—锁屏—桌面」的连贯过渡，搬到小米澎湃系统上。
 
+本项目以 Vibe Coding 方式开发：代码、文档和调试大量由 AI 生成，再由人工在真机上验证。
+
 [![HyperOS 4.0](https://img.shields.io/badge/HyperOS-4.0-ff6900)](https://www.mi.com/hyperos)
 [![Android 17](https://img.shields.io/badge/Android-17-3ddc84)](https://www.android.com/17/)
 [![LSPosed API 102](https://img.shields.io/badge/LSPosed-API%20102-5b7cfa)](https://github.com/LSPosed/LSPosed)
@@ -48,6 +50,13 @@
 - 小米壁纸的桌面翻页联动依赖系统桌面的滚动回调，换桌面后可能失效。
 - 显示模式下拉偶尔切换完不立刻生效，退出重进设置页即可。
 - 换壁纸后黑屏或残留，清一次「主题壁纸」的缓存。
+
+## 注意事项
+
+**Q：为什么锁屏界面无法通过上滑解锁？**
+
+A：可能是因为你正在使用「液态」样式。为避免误触，液态样式下只有屏幕最底部约 12% 的区域（屏幕高度 88% 以下）能起手上滑解锁，从更靠上的位置往上滑会被当作误触吞掉。把手指放到屏幕底部再往上滑即可。如果遇到其他无法解锁的情况，请按下面的反馈方式提交。
+
 
 ## 和上游不一样的地方
 

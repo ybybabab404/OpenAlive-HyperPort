@@ -1,30 +1,40 @@
 # HyperAlive 交接文档
 
-> 写给下一个接手这个项目的人（或 agent）。读这一份就够了，再往下才需要翻代码。
-> 最后更新：2026-11-05
+> 写给下一个接手这个项目的人（或 agent）。先读这一份，再翻代码。
+> 最后更新：2026-11-07 18:30（周六）
+> 当前结论：用户已确认「好了」；0.6.1-preview 已提交、已打 tag、已安装验证。
 
 ---
 
-## 0. 一句话
+## 0. 一句话现状
 
-HyperAlive 是一个 LSPosed 模块，给 HyperOS 补上「活的壁纸」：液态、光栅、闪卡三种渲染，配上锁屏触摸、息屏（AOD）联动，以及在系统「个性化」页里的一个原生入口。
+HyperAlive 是 LSPosed API 102 模块，给 HyperOS / Android 17 补「活的壁纸」：液态、光栅、闪卡三种壁纸渲染，锁屏触摸转发，息屏（AOD）联动，系统「个性化」页入口，以及小米预览 / AOD 预览。
 
-设备只有一台：25102RKBEC / myron，HyperOS OS4.0.0.33.XPMCNXM，Android 17。所有验证都在真机上做，没有模拟器。
+当前 0.6.1 的重点不是加功能，而是修「进入息屏」的合成卡顿：AOD Surface 重复初始化已消除，熄屏后的 quick-doze `no activity` 被延迟 1.2 秒，避开 AOD 入场首帧。用户已在真机确认正常。
 
 ---
 
-## 1. 现在能用的功能
+## 1. 版本、分支与基线
 
-| 功能 | 状态 | 怎么验 |
-|---|---|---|
-| 液态 / 光栅 / 闪卡壁纸渲染 | 可用 | 应用后看桌面与锁屏动效 |
-| 锁屏触摸转发到渲染器 | 可用 | logcat 出现 `lock touch sent action=0/2/1` |
-| 只在屏幕底部上滑解锁 | 可用 | 中部上滑解锁无反应，底部上滑正常 |
-| 息屏样式锁定为「和锁屏样式一致」 | 可用 | 设置→息屏，「息屏样式」显示「HyperAlive 样式」 |
-| 主题壁纸「系统个性化」页入口 | 可用 | `PersonalizeActivity` 里出现独立卡片 |
-| 息屏预览整块隐藏 | 可用 | 设置→息屏，卡片下方没有「息屏预览」和预览图 |
+| 项 | 值 |
+|---|---|
+| 当前分支 | `deep-clean-v2` |
+| HEAD | `7118782 fix: defer device-idle no-activity during AOD entry` |
+| 最新 tag | `save-20261107-idlefix`（指向 `7118782`） |
+| versionCode / versionName | `60` / `0.6.1-preview` |
+| 当前 APK | `dist/HyperAlive-0.6.1-preview-arm64-v8a.apk` |
+| APK sha256 | `ea5d0c4fa10617c6768db266a85605e7acf72b674c3eaa648f3e2c7fe9f72451` |
+| APK 大小 | 307,306,830 字节 |
+| 安装时间 | 2026-11-07 18:00:47（设备 `192.168.1.13:39795`） |
 
-已确认**未能解决**的一项：锁屏左右滑动时钟时，时钟数字会横移并变淡。这是系统自带效果，四次尝试（窗口层 CANCEL、区域矩形拦截、View 变换复位、独立形状排除）都没消掉。不要再轻易接这个活，代价很高。
+回退基线（按时间从新到旧）：
+
+- `save-20261107-idlefix` / `7118782`：device-idle 延迟 + AOD 单次初始化
+- `save-20261107-aodentry` / `cb037af`：去掉 doze 入场重复 `refreshScene`
+- `save-20261107-raster-fix` / `eab57a1`：Vivo raster controller 保活
+- `save-20261106-fingerprint-unlock` / `1311931`：指纹解锁不播锁屏动画
+- `save-20261106-zerochange-0.6.1` / `b6ae18e`：0.6.1 零行为清理
+- `save-20261105-gles` / `c0b8793`：Vulkan 回退后的纯 GLES 基线
 
 ---
 
@@ -34,172 +44,251 @@ HyperAlive 是一个 LSPosed 模块，给 HyperOS 补上「活的壁纸」：液
 JAVA_HOME    = C:/Users/ybybabab/app/pcl/JAVA21/graalvm
 ANDROID_HOME = C:/Users/ybybabab/AppData/Local/Android/Sdk
 Python       = C:/Python314/python.exe
+adb          = C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe
 ```
 
-唯一可靠的构建入口：
+唯一推荐的构建 + 部署入口：
 
-```bash
+```powershell
 cd "C:/Users/ybybabab/app/项目开发/HyperAlive"
-HYPERALIVE_NATIVE_SO=.tmp/libalive_clean.so C:/Python314/python.exe tools/deploy.py --build
+$env:HYPERALIVE_NATIVE_SO='.tmp/libalive_clean.so'
+C:/Python314/python.exe tools/deploy.py --build
 ```
 
-- 一次 build+deploy 约 120–150 秒，产物 `dist/HyperAlive-0.5.0-preview-arm64-v8a.apk` 约 320 MB。
-- **不要**直接跑 `tools/build_release.py`，会在 javac 阶段报 `FileNotFoundError [WinError 2]`。`deploy.py --build` 会正确设置临时目录。
-- 编译错误是 GBK 输出，直接看是乱码：`iconv -f GBK -t UTF-8 <log> | grep 错误`。
+要点：
 
-### 设备连接
+- 不要直接跑 `tools/build_release.py`，它会在 javac 阶段找临时目录失败；`deploy.py --build` 会准备好。
+- 一次构建约 50–200 秒，APK 约 307 MB；产物和哈希写在 `dist/build-report.json`。
+- `deploy.py` 从 `app/AndroidManifest.xml` 的 `versionName` 推导 APK 文件名；改版本后不会误推旧包。
+- javac 错误是 GBK，PowerShell 里常显示乱码；需要原文时用 `iconv`/Python 以 GBK 解码。
+- 本机手动 javac：
+  `& 'C:\Users\ybybabab\app\pcl\JAVA21\graalvm\bin\javac.exe' '@build\release\app.args'`
 
-无线调试，端口每次重开「无线调试」都会变。旧的连不上就先：
+### APK 入口与打包
 
-```bash
-adb mdns services        # 找到 _adb-tls-connect._tcp 的地址
-adb connect <ip>:<port>
+- `META-INF/xposed/java_init.list` → `org.aliveclean.CleanHooks`
+- `META-INF/xposed/module.prop` → `minApiVersion=102`、`targetApiVersion=102`、`staticScope=true`
+- `META-INF/xposed/scope.list` → `android` / `com.android.systemui` / `com.miui.aod` / `com.android.thememanager`
+- 旧 `assets/xposed_init` 已删除；不要再加回来。
+- `tools/build_release.py` 用 `aapt2 -A app/assets` 把整个 assets 打进 APK；`app/assets` 里的大文件不是“源码残留”，删之前必须查运行引用。
+- `workbench/` 是本次清理临时移出的反编译材料 / 参考字体 / 备份，已在 `.gitignore`，**不要打进 APK，也不要提交**。
+
+---
+
+## 3. 设备与调试回路
+
+当前设备：
+
+```
+192.168.1.13:39795   product:myron   model:25102RKBEC   Android 17 / SDK 37
 ```
 
-`adb` 在 `C:/Users/ybybabab/AppData/Local/Android/Sdk/platform-tools/adb.exe`，MSYS 下要 `export MSYS2_ARG_CONV_EXCL="*"`，否则带 `/` 的参数会被转成路径。
+无线调试端口会变；旧的 `10.11.48.149:39795`、`10.10.8.91:39795` 都可能失效。先：
 
-### 改完代码怎么让它生效
+```powershell
+& $adb devices -l
+& $adb connect <ip>:39795
+```
 
-- `systemui` 相关（锁屏触摸、状态栏）：`su -c "killall com.android.systemui"`
-- `com.miui.aod` 相关（息屏页、AOD 策略）：`am force-stop com.miui.aod`，再 `am start -n com.miui.aod/com.miui.aod.settings.AodStyleCategoriesActivity`
-- 壁纸服务（`org.aliveclean`）：`am force-stop` 无效，必须 `su -c "kill -9 <pid>"`
+### 改完代码怎么生效
 
-日志标签：`AliveClean`、`HyperAliveHooks`。
+| 改动位置 | 生效方式 |
+|---|---|
+| `com.android.systemui` 里的 hook | `adb shell su -c "killall com.android.systemui"`，等 10–15 秒 |
+| `com.miui.aod` / AOD 设置 | `adb shell am force-stop com.miui.aod`，再打开 AOD 设置 |
+| 壁纸服务 `org.aliveclean` | `adb shell su -c "kill -9 <pid>"`；`am force-stop` 杀不掉 |
+| `system_server` hook（`DeviceIdleDelayHook` 等） | 必须重启框架或手机；本次是系统重启后 `module loaded process=system` 才加载 |
+| APK 更新 | `adb install -r -t dist/HyperAlive-0.6.1-preview-arm64-v8a.apk` |
 
----
-
-## 3. 架构地图
-
-全部源码在 `app/java/org/aliveclean/`，约 165 个类。无 Gradle，资源在 `app/res/`，素材在 `app/assets/`。
-
-入口与钩子装配：
-- `CleanHooks.java` — 所有 Xposed 钩子的装配点（`META-INF/xposed/java_init.list` 指向它）。加钩子就在这里加一行 `step("...", () -> Xxx.install(p.classLoader))`。
-- `PlatformProfile.java` — 只区分 `UNKNOWN` 和 `HYPEROS`。ColorOS 支持已经整套删除，不要再加回来。
-
-壁纸渲染：
-- `CleanWallpaper.java` — WallpaperService，内含 `SceneEngine`。
-- `RenderLoop.java` — 渲染主循环，负责加载 shader 与纹理。
-- `VivoEngineScene.java` — 液态 / 光栅 / 闪卡的场景实现。`touch()` 只在 `family == VivoOptions.LIQUID` 时才生效。
-- `VivoEditorActivity.java` / `MainActivity.java` — 选图、调参、应用。
-
-跨进程通道：
-- `SceneProvider.java` — ContentProvider，`content://org.aliveclean.scene/configuration`。
-- `SceneChannel.java` — 消息协议。`what`：1 场景、2 区域、3 背景、4 触摸。调用方必须持 `android.permission.STATUS_BAR`，进入消息要校验 `sendingUid`。
-
-锁屏：
-- `KeyguardTouchRelay.java` — 钩 `com.android.systemui.shade.NotificationShadeWindowView.dispatchTouchEvent`，把触摸归一化后转发给渲染器，并做解锁区判定。
-
-息屏：
-- `AodWallpaperMode.java` — 应用模块壁纸时把息屏样式强制成「和锁屏样式一致」；`alive(Context)` 是全局判据，查的是**当前壁纸组件是不是 org.aliveclean**。
-- `AodSettingsGuard.java` — 在 `com.miui.aod.settings.SettingsView` 里锁住那一行，并把文案换成「HyperAlive 样式」。
-- `AodPreviewHider.java` — 把「息屏预览」整块藏掉，**只在 `AodWallpaperMode.alive()` 为真时动**。
-
-个性化页入口：
-- `PersonalizeEntry.java` — 钩 `PersonalizeActivity.onResume`，插一张原生卡片 + 原生 `ThemePreferenceView` 行，点击进 `HomeActivity`。
+> 注意：`su -c "stop; start"` 在这台机器上可能返回 `Must be root`，且会把 adb 弄成 `offline` 一阵；不要把它当成可靠的重启方式。优先 `adb reboot`，等 `sys.boot_completed=1` 再重连。
 
 ---
 
-## 4. 硬约束（不要碰）
+## 4. 代码地图
 
-这几条都是踩过坑换来的，不是偏好。
+源码都在 `app/java/org/aliveclean/`，无 Gradle。
 
-1. **不要写 `aod_show_style`。** 会和其他模块打架。
-2. **不要抢第三方全屏 AOD 模块的 hook。** 别人在管的事不要插手。
-3. **不要改系统壁纸。** 不调 `WallpaperManager` 去设置或替换用户原本的壁纸。
-4. **不要自绘 UI。** 所有系统页里的入口、卡片、行，一律用系统原生控件（`ThemePreferenceView`、`CardView`、miuix 的 Preference），不自绘。
-5. **不要做过渡动画。** 从「系统个性化」跳到项目主页，就用系统的普通跳转。原生那几项（息屏、壁纸、主题、图标、字体）是无缝的，「锁屏样式」是直接跳的——我们对齐后者。之前做过三版动画方案（`makeCustomAnimation`、task 劫持、半透明窗口 + `overridePendingTransition`）全部无效或效果不对，已回滚，不要再试。
-6. **不要在 `alive()` 为假时动系统的东西。** 用户用系统壁纸时，息屏页必须完全是原生状态。
+### 入口与兼容层
 
----
+- `CleanHooks.java` — LSPosed API 102 入口（`extends XposedModule`），所有 hook 的装配点。
+- `Xp.java` — 旧 `XposedHelpers` 风格的兼容层：`hookAllMethods`、`findAndHookMethod`、`MethodHookParam`、`callMethod`、`getObjectField` 等。
+- `ModuleActivationProvider.java` — `org.aliveclean.clock.runtime` authority 的 provider；`ModuleActivation` 用它判断模块是否激活。不要删，否则主页会显示「LSP 未激活」。
 
-## 5. 这个用户怎么合作（很重要）
+### 壁纸与渲染
 
-我按这些偏好干活，效果最好；反着来会被当场纠正。
+- `CleanWallpaper.java` — WallpaperService / SceneEngine；`WAKE_DWELL=0L`、`WAKE_POLL=50L`；唤醒与 SCREEN_OFF 的模式切换都在这里。
+- `RenderLoop.java` — GLES 渲染主循环、`mode()`、surface attach/redraw。
+- `NativeScene.java` — JNI 入口，包名 `org.aliveclean` 写死在 `.so` 里，不能改包名。
+- `VivoEngineScene.java` / `VivoEngineRuntime.java` — 液态 / 光栅 / 闪卡。
+- `SceneApply.java` — 用 `su 1000` 起 `app_process`，反射调用 `WallpaperManager.setWallpaperComponentWithFlags(FLAG_SYSTEM|FLAG_LOCK)`。
 
-### 工作方式
+### 息屏 / AOD
 
-- **喜欢派子智能体。** 独立的调查、反编译核对、只在读的排查，派一个子智能体去跑，主线不堵。子智能体交回结论时要带证据（文件、行号、日志原文）。
-- **质量优先，不急。** 他的原话是「不是要尽快，是质量优先，不急，效果好最重要」。宁可多跑一次真机验证，也不要交一个"应该能行"的东西。
-- **喜欢原生实现。** 能在系统里复用现成控件/接口，就不要自己画、不要自己造动画。
-- **先读真实代码，再动手。** 不许凭记忆猜 API 签名、猜方法名。`hookAllMethods` 签名不对不会报错，只是永远不命中——这种"静默失败"最坑。
+- `HyperOsAod.java` — 在 SystemUI 的 AOD 宿主里注入 `AodSurface`；`installDoze()` 只负责 dreaming 生命周期；`liveSurface` 只在 `isAttachedToWindow() && isShown()` 时复用，否则清空重建。
+- `AodOverlay.java` — 早期独立 overlay 窗口，保留作兜底；`hide()` 已做空 View 防护。
+- `AodWallpaperMode.java` — 应用模块壁纸时强制「和锁屏样式一致」；`alive(Context)` 是全局判据。
+- `AodSettingsGuard.java` — 锁住 AOD 设置里的样式行，文案「HyperAlive 样式」。
+- `AodPreviewHider.java` — 只在 `alive()` 时隐藏 AOD 设置预览块。
+- `AodWallpaperPreview.java` — ThemeManager / AOD 的预览占位图替换；hook `getPlaceholderWallpaper`、`uf`、`ni7`、`t8r`，不要轻易动。
 
-### 沟通方式
+### 跨进程与锁屏
 
-- 全中文，结论先行，不要客套，不要自我表扬。
-- 不确定就说不确定，并把不确定的部分单独标出来。他会追问，而且追问得很准。
-- **没验证的事不许说成修好了。** 他明确讨厌这种表述。验证过就说验证过，怎么验的、看到什么日志/截图，一起给。
-- 报告里带上反例检查：这个改动会不会破坏别的地方？有没有可能是我判断错了？
-- 别写"零新增持久化"这种自己发明的词糊弄人，说清楚改了什么、影响范围在哪。
-- 不要频繁发进度提醒/"换气"，他不喜欢；有实质进展再说。
+- `SceneProvider.java` — `content://org.aliveclean.scene/configuration`。
+- `SceneChannel.java` — `what`：1 场景、2 区域、3 背景、4 触摸；调用方校验 `STATUS_BAR` 权限和 `sendingUid`。
+- `KeyguardTouchRelay.java` — 钩 `NotificationShadeWindowView.dispatchTouchEvent`，转发锁屏触摸；不要恢复旧的 `scene what=1` 发送逻辑，锁屏动画由 `CleanWallpaper.update()` 根据 keyguard 状态决定。
 
-### 他会纠正你什么
+### 系统服务 hook
 
-- 把约束读错。他说过「不要影响原有的系统壁纸」，我一度扩大成「不要动应用/提交链路」，被当场指出。约束就是字面那些，不要自行加码。
-- 把现象归错因。「误伤」那次，我以为是标签被改，实际是预览图被我藏没了。遇到含糊的反馈，先问清楚，或者去 dump 界面找证据。
-- 删除前不确认。「闪一下」那轮我顺手把 `applyLabel()` 删了，结果模块壁纸下不显示「HyperAlive 样式」，返工一次。
+- `DeviceIdleDelayHook.java` — 本次新增；hook `com.android.server.DeviceIdleController`：
+  - `updateInteractivityLocked()` 之前，如果 `mScreenOn == true`，记录 1200ms 延迟窗口并 `postDelayed`。
+  - `becomeInactiveIfAppropriateLocked()` 之前，如果窗口未到、`mQuickDozeActivated == true`、`mState == 0`，直接 `setResult(null)` 跳过。
+  - 1200ms 后由 handler 调用原方法，恢复正常的 `no activity` 转换。
+  - 日志：`device idle: no-activity armed for 1200ms`、`device idle: first no-activity deferred`。
 
----
+### 已删除 / 保留的边界
 
-## 6. 踩过的坑（省你几天）
-
-**签名猜错 = 静默不命中。** `hookAllMethods` 找不到方法不报错，只返回 0。每次加钩子，先打一行 `hook count=N` 的日志确认命中。
-
-**`ViewRootImpl.dispatchTouchEvent` 在这台机器上不存在。** `hookAllMethods` count=0。真正能拿到锁屏触摸的是 `NotificationShadeWindowView.dispatchTouchEvent`（count=1）。
-
-**`dispatchInputEvent` 存在（count=2）但锁屏时从不触发。** 不要往那儿使劲。
-
-**HyperOS 不给第三方 WallpaperService 发触摸。** 桌面、锁屏、息屏三处都测过，`onTouchEvent` 零调用。所以触摸必须从 systemui 侧转发。
-
-**`am force-stop` 杀不掉壁纸服务。** 要 `kill -9`。
-
-**recycler 里折叠 View 只能折一层。** 「息屏预览」那次，`title.getParent()` 已经是整个列表条目，再往上取一层就是 `CategoriesItemRecyclerView`，结果把设置卡片一起藏了。折叠前先 `uiautomator dump` 看清层级。
-
-**`decorView.post()` 太晚，会闪一下。** 要隐藏的块必须在首帧之前就 GONE，用 `ViewTreeObserver` 的预绘制阶段，不要用 post。
-
-**AOD 相关的钩子在 `android`（system_server）进程里，必须重启手机才加载。** `killall com.android.systemui` 不够。
-
-**预览图取不到时不要塞自己的图。** 用户明确要求兜底是系统默认，不是项目自带的占位图。
+- 0.6.0 删掉了 ColorOS 时钟层（`NativeClockProvider` 等 34 个不可达类）和 `com.oplus.*` 相关死代码。
+- 保留 `native-clock/runtime/hyperos/runtime.apk` 及 HyperOS 字体：这是官方 AOD/时钟运行时，不是 ColorOS 残留；`OfficialHyperOsUi` / `XiaomiAodPreview` / `XiaomiPreviewActivity` 仍依赖。
+- `app/assets/vivo/**` 是 Vivo 活壁纸功能，不要按“无静态引用”删除。
+- `research/`、`workbench/` 不是 APK 内容；`workbench` 不提交。
 
 ---
 
-## 7. 代码卫生
+## 5. 0.6.1 修了什么
 
-现在仓库里还有一些东西看起来可疑但**不能删**：
+### 5.1 AOD 入场重复初始化
 
-- `CleanHooks` 全仓库零引用——它是 `META-INF/xposed/java_init.list` 的入口。
-- `NativeClockStatusProvider`、`XiaomiLibraryActivity` 零引用——在 `AndroidManifest.xml` 里注册着。
-- `tools/import_*.py` — 一次性素材导入脚本，素材已经进 `app/assets/`，脚本留着是为了改素材时可重跑。
-- `tools/check_layout.py`、`tools/check_xiaomi_assets.py` — 还能运行的检查脚本。
+旧 `HyperOsAod.installDoze()` 在 `onDreamingStarted` 后 900ms 又 `refreshScene()`，把 AOD Surface detach 后重新 attach，导致一次息屏里两套 EGL 初始化、两次照片解码。
 
-删类之前要查三处：`git grep 类名`、`AndroidManifest.xml`、`META-INF/xposed/java_init.list`。反射用的字符串（`Class.forName("...")`）不会被 grep 到，要单独搜。
+修复：
+
+- 删除 900ms `refreshScene()` 与 3000ms `dumpTree()`；
+- 删除 `refreshScene()` 本身；
+- `attach()` 在 `target.addView(surface, 0, ...)` 后设置 `liveSurface`；
+- `onSurfaceTextureDestroyed` / `onDetachedFromWindow` 清理 `liveSurface`；
+- 删除 `attach` 后的 `dumpTree("after-attach")`；
+- `AodOverlay.hide()` 增加空 View 防护。
+
+真机日志（SystemUI 重启后）：每次 `onDreamingStarted` 只有 1 条 `EGL init requested=1200x2608` 和 1 条 `aod photo from provider`，没有 `scene host dropped for refresh`。
+
+### 5.2 熄屏 quick-doze 卡顿
+
+`DeviceIdleController` 在这台机器上是 quick-doze 模式：`screen_toggled 0` 后约 116–191ms 就会 `device_idle [7,no activity]`，正好压在 AOD 入场动画上，CPU 频率下降会造成首帧抽帧。
+
+修复就是上面的 `DeviceIdleDelayHook`：把第一次 `no activity` 推迟 1200ms，不改变全局 doze 常量、不加 boost、不加 wakelock。
+
+真机证据（2026-11-07 18:03）：
+
+```
+18:03:24.298  screen_toggled 0
+18:03:25.653  device_idle [7,no activity]
+间隔 1355ms（修复前 116–191ms）
+```
+
+同时 `HyperAliveHooks` 有：
+
+```
+device idle delay hook: ok
+device idle: no-activity armed for 1200ms
+device idle: first no-activity deferred
+```
+
+用户随后确认「好了」。
+
+### 5.3 唤醒与锁屏动画
+
+- `CleanWallpaper` 当前 `WAKE_DWELL=0L`、`WAKE_POLL=50L`；唤醒窗口逻辑靠 keyguard 状态采样，不再使用旧的固定 300/450ms 延迟。
+- 目标行为：
+  - 息屏直接到桌面：0→2；
+  - 真正进锁屏再解锁：0→1→2；
+  - 指纹解锁：不播锁屏段。
+- 不要重新引入 display-on 固定延时或 `lockGrace` 固定窗口；之前 300/450/800/2500ms 都试过，均不稳定。
 
 ---
 
-## 8. 质量规则（用户明确要求写进交接文档）
+## 6. 硬约束（不要碰）
 
-优先保证产出质量，但不接受严重的速度损耗。
-
-具体到执行：
-
-1. **一次只改一个变量。** 多个改动一起上是没法归因的，出错要整轮返工。
-2. **每次改完必须真机验证，并留下证据**：日志原文、`uiautomator dump` 的节点、截图。没有证据就等于没做。
-3. **改动前先读要改的那段真实代码**，不凭记忆、不凭对话里的转述。
-4. **删代码前先确认零引用**（含 manifest、`java_init.list`、反射字符串）。
-5. **报错要贴原文**，不要转述成"编译失败"。
-6. **假设自己可能错。** 每次下结论前问一句：有没有反例能推翻它？如果有，先去验反例。
-7. **不要为了显得勤快而做无效工作。** 该想的想透（可以长考），不该试的别瞎试。
-
-允许长时间的深入思考，但不要在没有新信息的情况下反复重试同一个失败方案——那既不快也不对。
+1. 不写 `aod_show_style`。
+2. 不抢第三方全屏 AOD 模块的 hook。
+3. 不替换系统壁纸；只通过 `SceneApply` 设置自己的 `WallpaperService`。
+4. 不在系统页自绘 UI；入口/卡片用系统原生控件。
+5. 不做系统页跳转的过渡动画。
+6. `AodWallpaperMode.alive()` 为假时，绝不改系统 AOD 状态。
+7. 不改包名 `org.aliveclean`；JNI 符号写死。
+8. 不把 `research/`、`workbench/`、反编译 APK/中间 dex 提交进仓库或打进 APK。
 
 ---
 
-## 9. 当前状态与待办
+## 7. 用户怎么合作
 
-已提交（分支见 `git log`）：ColorOS 整套删除、锁屏触摸转发、息屏预览归属判断、预览整块隐藏、死代码清理。
+- 全中文，结论先行，不要客套和自我表扬。
+- 质量优先，不急；宁可多跑一次真机，也不交“应该能行”。
+- 先读真实代码再改；不凭记忆猜 API 签名。`hookAllMethods` 签名不对不会报错，只是永远不命中。
+- 没验证的事不许说“修好了”。要说清楚：改了什么、怎么验的、看到哪条日志/截图。
+- 用户明确不喜欢用 boost / wakelock 掩盖问题；优先找系统机制的真实边沿（doze、wakeup、AOD 生命周期）。
+- 独立调查、反编译核对、只读审计可以派子智能体；子智能体交回结论要带文件、行号、日志原文。主线负责合并和真机验证。
+- 用户会追问反例。下结论前先问：有没有可能是我判断错了？有没有别的路径被破坏？
 
-还没做：
+---
 
-- 锁屏时钟左右滑动形变（见第 1 节，已判定不划算）。
-- 桌面「应用模块壁纸后变灰」那个 bug 只做了缩略图层面的排查，没有最终结论。当时的怀疑方向是 `wallpaper.xml` 缺 `android:thumbnail`，以及 `setWallpaperComponentWithFlags` 的 flag 组合，但都没有真机坐实。
+## 8. 踩过的坑（省时间）
 
-如果继续做，建议顺序：先把"模块壁纸在用"这条路径完整走一遍（应用 → 息屏页看标签与预览 → 锁屏上滑 → 桌面返回），确认第 1 节那张表都成立，再开新功能。
+1. `adb shell input keyevent 26` 能触发熄屏，但不等价于用户双击桌面/物理电源键；用户实测“助手触发不卡、自己触发卡”。验证动画必须用用户的真实触发路径，不能只用 adb 注入。
+2. `DeviceIdleController` 在 `com.android.server` 包，不是 `com.android.server.deviceidle`；在 `services.jar` 的 `classes.dex` 里，不在 `classes4.dex`。
+3. `system_server` 的 hook 必须等系统重启/框架重启；`killall com.android.systemui` 只重载 SystemUI，不会加载 `DeviceIdleDelayHook`。
+4. `AOD` 首帧卡顿不是 `NativeScene.render` 的 CPU 时间；`eglSwapBuffers` 会阻塞约 250ms，问题在合成/调度，不要在 render 里盲目优化。
+5. `SurfaceView` 会被 AOD 窗口的不透明底盖住；不要再走 SurfaceView 方案。
+6. 不要停 wallpaper producer、不要半分辨率、不要限 60fps；这些都会破坏变球/画质/流畅度，用户明确拒绝。
+7. `AodOverlay.hide()` 在 View 已 detach 时可能空指针；调用前必须判空。
+8. `deploy.py` 以前硬编码 0.5.0 APK，已改成从 manifest 读版本；如果发现装的是旧包，先看 `dist` 和 `dist/build-report.json`。
+9. `adb` 不在 PATH；无线调试地址会变，先用 `adb devices -l` 确认。
+10. `AodWallpaperModeHook` 里的 `WallpaperManagerService missing` 是 Android 17 上的旧问题（旧版同样找不到类），不影响当前动画链路；不要把它误判成本次回归。
+
+---
+
+## 9. 验证命令
+
+```powershell
+$adb='C:\Users\ybybabab\AppData\Local\Android\Sdk\platform-tools\adb.exe'
+
+# 版本 / 壁纸组件
+& $adb -s 192.168.1.13:39795 shell dumpsys package org.aliveclean | Select-String 'versionName|lastUpdateTime'
+& $adb -s 192.168.1.13:39795 shell dumpsys wallpaper | Select-String 'mWallpaperComponent|mBindSource'
+
+# 模块加载 & device-idle hook
+& $adb -s 192.168.1.13:39795 logcat -d -s HyperAliveHooks:I | Select-String 'module loaded|device idle'
+
+# 熄屏 → no activity 时间差（应 >1200ms）
+& $adb -s 192.168.1.13:39795 logcat -b events -d | Select-String 'screen_toggled|device_idle'
+
+# 现场抓 AOD 首帧
+& $adb -s 192.168.1.13:39795 logcat -c
+& $adb -s 192.168.1.13:39795 shell input keyevent 26
+& $adb -s 192.168.1.13:39795 logcat -d -s HyperAliveHooks:I AliveClean:I
+```
+
+---
+
+## 10. 当前待办 / 下一步
+
+当前请求（进入息屏卡顿）已完成，用户确认正常；没有必须继续的代码任务。
+
+如果后续用户再报卡顿：
+
+1. 先抓 `screen_toggled 0` → `device_idle [7,no activity]` 的间隔，确认 1.2s 窗口是否仍然生效；
+2. 同时抓 CPU 频率和 `Choreographer Skipped`，确认是否还有第二个降频机制；
+3. 不要先加 boost / wakelock；用户明确更接受“延迟 no activity”，不是提高频率掩盖；
+4. 若 1.2s 不够，再和用户确认窗口长度；不要凭感觉改成 2s/3s 并宣称修复。
+
+已知但暂不处理：
+
+- `AodWallpaperModeHook` 的 `WallpaperManagerService missing`（Android 17 旧问题，实际未挂上）；
+- `AodOverlay` 兜底路径的 NPE 已加防护，但这条路径不是主路径；
+- `NativeClock` 的 HyperOS runtime 资源体积大（约 57MB），但预览/AOD 仍依赖，删除属于功能取舍，不是清理；
+- `workbench/` 里的 `research/`、参考字体、备份 AAR 不进仓库；若需要重新审计，另行确认。
+
+---
+
+## 11. 一句话给下一个人
+
+先看 `CleanWallpaper` 的唤醒/息屏模式切换，再看 `HyperOsAod` 的 `liveSurface` 生命周期，最后看 `DeviceIdleDelayHook` 的 1200ms 窗口；这三条是 0.6.1 动画稳定的主线。不要用固定延时猜时序，不要在没抓 `device_idle` 时间戳前改动画参数。

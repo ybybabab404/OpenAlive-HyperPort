@@ -275,6 +275,22 @@ public final class Xp {
         return null;
     }
 
+    public static void setField(Object object, String name, Object value) {
+        if (object == null) throw new IllegalArgumentException("object is null");
+        for (Class<?> current = object.getClass(); current != null; current = current.getSuperclass()) {
+            try {
+                Field field = current.getDeclaredField(name);
+                field.setAccessible(true);
+                field.set(object, value);
+                return;
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable error) {
+                throw new IllegalStateException("cannot write field " + name, error);
+            }
+        }
+        throw new IllegalStateException("no such field " + name);
+    }
+
     public static Object callStaticMethod(Class<?> clazz, String name, Object... args) {
         Method method = findCallable(clazz, name, args, true);
         try {

@@ -13,7 +13,7 @@ final class ModuleActivationHook {
                 if(!"com.android.systemui".equals(context.getPackageName())||registered)return;
                 registered=true;
                 BroadcastReceiver receiver=new BroadcastReceiver(){
-                    @Override public void onReceive(Context c,Intent intent){if(ModuleActivation.QUERY.equals(intent.getAction()))ModuleActivation.announce(context);KeyguardDepthHider.onActivation(context);}
+                    @Override public void onReceive(Context c,Intent intent){if(ModuleActivation.QUERY.equals(intent.getAction()))ModuleActivation.announce(context);KeyguardDepthHider.onActivation(context);AodFullScreen.onActivation(context);}
                 };
                 IntentFilter filter=new IntentFilter(ModuleActivation.QUERY);filter.addAction(Intent.ACTION_WALLPAPER_CHANGED);
                 if(Build.VERSION.SDK_INT>=33)context.registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED);

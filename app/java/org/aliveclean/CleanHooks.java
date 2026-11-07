@@ -46,6 +46,8 @@ public final class CleanHooks extends XposedModule {
         if (miuiAod) step("aod settings hotfix", () -> AodSettingsGuard.install(loader));
         if (miuiAod) step("aod preview hide", () -> AodPreviewHider.install(loader));
         if (miuiAod) step("aod wallpaper preview", () -> AodWallpaperPreview.install(loader));
+        if (systemUi) step("aod full screen", () -> AodFullScreen.install(loader));
+        if (miuiAod) step("aod full screen", () -> AodFullScreen.install(loader));
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(loader));
         if (systemUi) step("lock touch relay", () -> KeyguardTouchRelay.install(loader));
         if (systemUi) step("keyguard depth", () -> KeyguardDepthHider.install(loader));

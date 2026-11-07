@@ -54,6 +54,7 @@ public final class CleanHooks extends XposedModule {
         if (system && !systemHandled) {
             systemHandled = true;
             step("aod wallpaper mode", () -> AodWallpaperModeHook.install(loader));
+            step("device idle delay", () -> DeviceIdleDelayHook.install(loader));
         }
         if (!system && !systemUi) return;
         if (!ambientHooked) {

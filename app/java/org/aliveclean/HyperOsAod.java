@@ -97,9 +97,15 @@ final class HyperOsAod {
         // entering doze (keyguard one, then the doze one). A second surface means two
         // balls, and whichever host is torn down makes the visible one restart.
         AodSurface existing = liveSurface == null ? null : liveSurface.get();
-        if (existing != null) {
+        if (existing != null && existing.isAttachedToWindow() && existing.isShown()) {
             Trace.log("T03", "attach skipped, live surface id=" + System.identityHashCode(existing));
             return;
+        }
+        if (existing != null) {
+            // A transient keyguard host can disappear while the doze host is being built.
+            // Never let a hidden, stale host block the new host from creating a surface.
+            Trace.log("T03", "attach replacing hidden surface id=" + System.identityHashCode(existing));
+            liveSurface = null;
         }
 
         if (root.findViewWithTag(TAG) != null) return;

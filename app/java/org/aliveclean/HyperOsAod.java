@@ -79,6 +79,11 @@ final class HyperOsAod {
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
         if (!aodSceneEnabled(context)) return;
+        if (!AodWallpaperMode.alive(context)) {
+            AliveLog.once(TAG, "aod-wallpaper-foreign", "AOD scene skipped: wallpaper is not ours");
+            return;
+        }
+        AliveLog.reset("aod-wallpaper-foreign");
 
         AodSurface existing = liveSurface == null ? null : liveSurface.get();
         if (existing != null && existing.isAttachedToWindow() && existing.isShown()) {

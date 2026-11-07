@@ -1,6 +1,5 @@
 package org.aliveclean;
 
-import android.content.Context;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -10,70 +9,62 @@ final class AodFullScreen {
     private static final String CONFIGS = "com.miui.utils.configs.MiuiConfigs";
     private static final String INITIALIZER = "com.android.systemui.SystemUIInitializer";
     private static final String FULL_AOD = "com.android.keyguard.fullaod.MiuiFullAodManager";
-    private static final String DOZE_INJECTOR = "com.android.keyguard.injector.DozeServiceHostInjector";
     private static final String[] FLAGS = {"SUPPORT_FULL_AOD", "INNER_SCREEN_SUPPORT_FULL_AOD"};
     private static final long[] UNSAFE_SLOT = {0L};
     private static volatile ClassLoader loaderRef;
+    private static String lastFlags = "";
 
-    private AodFullScreen() {}
+    private AodFullScreen() {
+    }
 
     static void install(ClassLoader loader) {
         loaderRef = loader;
         int hooks = 0;
-        hooks += hookTrue(loader, UTILS, "isSupportFsAod");
-        hooks += hookTrue(loader, UTILS, "isInnerScreenSupportFsAod");
-        hooks += hookTrue(loader, UTILS, "isFsAodSameToLock", Context.class);
-        hooks += hookTrue(loader, UTILS, "isCurrentScreenSupportFsAod", Context.class);
-        hooks += hookStyle(loader);
+        hooks += hookSupport(loader);
         hooks += hookManager(loader);
-        hooks += hookDoze(loader);
         hooks += hookInitializer(loader);
         AliveLog.i(TAG, "force full aod: hooks=" + hooks);
         writeFlags("install");
     }
 
-    static void onActivation(Context context) {
+    static void onActivation(android.content.Context context) {
         writeFlags("activation");
     }
 
-    private static int hookTrue(ClassLoader loader, String className, String method, Object... types) {
+    private static int hookSupport(ClassLoader loader) {
+        Class<?> clazz = Xp.findClassIfExists(UTILS, loader);
+        if (clazz == null) {
+            AliveLog.warnOnce(TAG, "full aod support", "force full aod: com.miui.aod.Utils missing", null);
+            return 0;
+        }
+        int count = 0;
+        count += hookTrue(clazz, "isSupportFsAod");
+        count += hookTrue(clazz, "isInnerScreenSupportFsAod");
+        return count;
+    }
+
+    private static int hookTrue(Class<?> clazz, String name) {
         try {
-            Class<?> clazz = Xp.findClassIfExists(className, loader);
-            if (clazz == null) return 0;
-            Xp.findAndHookMethod(clazz, method, append(types, new Xp.MethodHook() {
+            Xp.findAndHookMethod(clazz, name, new Xp.MethodHook() {
                 @Override
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
                     param.setResult(Boolean.TRUE);
                 }
-            }));
-            return 1;
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod " + simple(className) + "#" + method + " failed", error);
-            return 0;
-        }
-    }
-
-    private static int hookStyle(ClassLoader loader) {
-        try {
-            Class<?> clazz = Xp.findClassIfExists(UTILS, loader);
-            if (clazz == null) return 0;
-            Xp.findAndHookMethod(clazz, "getFsAodStyle", Context.class, new Xp.MethodHook() {
-                @Override
-                protected void beforeHookedMethod(Xp.MethodHookParam param) {
-                    param.setResult(1);
-                }
             });
             return 1;
         } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod style failed", error);
+            AliveLog.warnOnce(TAG, "full aod hook " + name, "force full aod hook failed: " + name, error);
             return 0;
         }
     }
 
     private static int hookManager(ClassLoader loader) {
+        Class<?> clazz = Xp.findClassIfExists(FULL_AOD, loader);
+        if (clazz == null) {
+            AliveLog.warnOnce(TAG, "full aod manager", "force full aod: MiuiFullAodManager missing", null);
+            return 0;
+        }
         try {
-            Class<?> clazz = Xp.findClassIfExists(FULL_AOD, loader);
-            if (clazz == null) return 0;
             Xp.hookAllConstructors(clazz, new Xp.MethodHook() {
                 @Override
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
@@ -84,40 +75,26 @@ final class AodFullScreen {
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
                     try {
                         Xp.setField(param.thisObject, "isDeviceSupport", Boolean.TRUE);
-                        AliveLog.i(TAG, "force full aod: manager device support");
+                        AliveLog.once(TAG, "full aod manager", "force full aod: manager device support");
                     } catch (Throwable error) {
-                        AliveLog.w(TAG, "force full aod manager field failed", error);
+                        AliveLog.warnOnce(TAG, "full aod manager field", "force full aod: manager field failed", error);
                     }
                 }
             });
-            return 1;
         } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod manager hook failed", error);
+            AliveLog.warnOnce(TAG, "full aod manager hook", "force full aod: manager hook failed", error);
             return 0;
         }
-    }
-
-    private static int hookDoze(ClassLoader loader) {
-        try {
-            Class<?> clazz = Xp.findClassIfExists(DOZE_INJECTOR, loader);
-            if (clazz == null) return 0;
-            Xp.findAndHookMethod(clazz, "isCurrentScreenFullAodEnabled", new Xp.MethodHook() {
-                @Override
-                protected void beforeHookedMethod(Xp.MethodHookParam param) {
-                    param.setResult(Boolean.TRUE);
-                }
-            });
-            return 1;
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod doze hook failed", error);
-            return 0;
-        }
+        return 1;
     }
 
     private static int hookInitializer(ClassLoader loader) {
+        Class<?> clazz = Xp.findClassIfExists(INITIALIZER, loader);
+        if (clazz == null) {
+            AliveLog.warnOnce(TAG, "full aod initializer", "force full aod: SystemUIInitializer missing", null);
+            return 0;
+        }
         try {
-            Class<?> clazz = Xp.findClassIfExists(INITIALIZER, loader);
-            if (clazz == null) return 0;
             Xp.findAndHookMethod(clazz, "init", boolean.class, new Xp.MethodHook() {
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
@@ -126,7 +103,7 @@ final class AodFullScreen {
             });
             return 1;
         } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod initializer hook failed", error);
+            AliveLog.warnOnce(TAG, "full aod initializer hook", "force full aod: initializer hook failed", error);
             return 0;
         }
     }
@@ -142,47 +119,41 @@ final class AodFullScreen {
         StringBuilder report = new StringBuilder();
         boolean ok = true;
         for (String name : FLAGS) {
-            Boolean value = force(clazz, name);
-            report.append(' ').append(name).append('=').append(value);
-            ok &= Boolean.TRUE.equals(value);
+            Field field = findField(clazz, name);
+            if (field == null) {
+                ok = false;
+                report.append(' ').append(name).append("=missing");
+                continue;
+            }
+            boolean applied = force(clazz, field, true);
+            ok &= applied;
+            report.append(' ').append(name).append('=').append(applied ? Boolean.TRUE.toString() : "failed");
         }
-        if (ok) AliveLog.i(TAG, "force full aod flags " + reason + ":" + report);
-        else AliveLog.warnOnce(TAG, "full aod flags", "force full aod flags " + reason + ":" + report, null);
+        String line = "force full aod flags " + reason + ":" + report;
+        if (!line.equals(lastFlags)) {
+            lastFlags = line;
+            if (ok) AliveLog.i(TAG, line);
+            else AliveLog.w(TAG, line);
+        }
     }
 
-    private static Boolean force(Class<?> clazz, String name) {
-        Field field = findField(clazz, name);
-        if (field == null) return null;
-        if (read(field)) return Boolean.TRUE;
+    private static boolean force(Class<?> clazz, Field field, boolean value) {
+        if (read(field) == value) return true;
         try {
             field.setAccessible(true);
-            field.setBoolean(null, true);
+            field.setBoolean(null, value);
         } catch (Throwable ignored) {
         }
-        if (read(field)) return Boolean.TRUE;
-        if (viaHelpers(clazz, name) && read(field)) return Boolean.TRUE;
+        if (read(field) == value) return true;
         try {
-            viaUnsafe(field);
+            viaUnsafe(field, value);
         } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod unsafe write failed: " + name, error);
+            AliveLog.warnOnce(TAG, "full aod unsafe", "force full aod unsafe write failed: " + field.getName(), error);
         }
-        return read(field);
+        return read(field) == value;
     }
 
-    private static boolean viaHelpers(Class<?> clazz, String name) {
-        try {
-            ClassLoader loader = clazz.getClassLoader();
-            Class<?> helpers = Class.forName("de.robv.android.xposed.XposedHelpers", false, loader);
-            Method setter = helpers.getMethod("setStaticBooleanField", Class.class, String.class, boolean.class);
-            setter.invoke(null, clazz, name, true);
-            return true;
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "force full aod helpers unavailable: " + name, error);
-            return false;
-        }
-    }
-
-    private static void viaUnsafe(Field field) throws Throwable {
+    private static void viaUnsafe(Field field, boolean value) throws Throwable {
         Class<?> type = Class.forName("sun.misc.Unsafe");
         Field holder = type.getDeclaredField("theUnsafe");
         holder.setAccessible(true);
@@ -198,37 +169,28 @@ final class AodFullScreen {
             UNSAFE_SLOT[0] = slot;
         }
         int target = (Integer) getInt.invoke(unsafe, field, slot);
-        putBoolean.invoke(unsafe, field.getDeclaringClass(), (long) target, Boolean.TRUE);
-    }
-
-    private static boolean read(Field field) {
-        try {
-            field.setAccessible(true);
-            return field.getBoolean(null);
-        } catch (Throwable error) {
-            return false;
-        }
+        putBoolean.invoke(unsafe, field.getDeclaringClass(), (long) target, value);
     }
 
     private static Field findField(Class<?> clazz, String name) {
-        for (Class<?> type = clazz; type != null; type = type.getSuperclass()) {
+        Class<?> type = clazz;
+        while (type != null) {
             try {
-                return type.getDeclaredField(name);
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field;
             } catch (Throwable ignored) {
+                type = type.getSuperclass();
             }
         }
         return null;
     }
 
-    private static Object[] append(Object[] types, Object hook) {
-        Object[] all = new Object[types.length + 1];
-        System.arraycopy(types, 0, all, 0, types.length);
-        all[types.length] = hook;
-        return all;
-    }
-
-    private static String simple(String className) {
-        int dot = className.lastIndexOf('.');
-        return dot < 0 ? className : className.substring(dot + 1);
+    private static boolean read(Field field) {
+        try {
+            return field.getBoolean(null);
+        } catch (Throwable error) {
+            return false;
+        }
     }
 }

@@ -167,6 +167,19 @@ public final class CleanWallpaper extends WallpaperService {
                     +" mode="+lastSentMode+" locked="+keyguardLocked());
             if(!isPreview()&&screenOn){update("fingerprint");settle("fingerprint");}
         }
+        /** SystemUI reports the instant the keyguard begins to hide, i.e. the instant the system
+         *  starts its own wallpaper reveal animation. Committing the home scene here keeps our
+         *  0->2 on the same clock as the system transition: starting it earlier (at the wake-up
+         *  cue) plays part of it behind a still-covered keyguard, starting it later (when
+         *  isKeyguardLocked() turns false) begins the wallpaper reveal mid-animation. */
+        @Override public void keyguardHiding(long time){
+            android.util.Log.i(TAG,"scene keyguard hide t="+time+" screenOn="+screenOn+" ambient="+ambient
+                    +" mode="+lastSentMode+" locked="+keyguardLocked());
+            if(isPreview())return;
+            if(!screenOn){screenOn=true;ambient=false;}
+            cancelLockGrace();
+            if(lastSentMode!=2)send(2,true);
+        }
         @Override public void disconnected(){renderer.backdrop(false);scenesState.disconnect();update("disconnected");}
         private android.view.Display engineDisplay(){
             if(android.os.Build.VERSION.SDK_INT>=30)return getDisplayContext().getDisplay();

@@ -195,7 +195,8 @@ final class RenderLoop {
         if(cosmic!=null&&mode!=next){cosmic.motion().change(next,animate);cosmicUntil=System.nanoTime()+5_000_000_000L;}
         // Apply the wake target and scene together, before any frame can be submitted.
         if(vivo!=null&&(mode!=next||lightSnapshot)){vivo.transition(next,animate,vivoDarkWallpaper?.76f:1f,vivoAodMask);vivo.visible(renderingVisible());}
-        mode=next;updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!renderingVisible())frameMotion.pause(true);}motion.change(next);if(!animate)motion.finish();if(!renderingVisible())motion.pause(true);}schedule();
+        int previous=mode;boolean visible=renderingVisible();
+        mode=next;updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)Log.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
     });}
     private boolean renderingVisible(){return visible&&!backdropCovered;}
     void backdrop(boolean covered){handler.post(()->{if(preview||backdropCovered==covered)return;backdropCovered=covered;updateRenderActivity();});}
@@ -203,7 +204,7 @@ final class RenderLoop {
     private void updateRenderActivity(){
         boolean active=renderingVisible();
         if(vivo!=null)vivo.visible(active);if(cosmic!=null)cosmic.motion().pause();updateCosmicLifecycle();
-        if(motion!=null)motion.pause(!active);if(frameMotion!=null)frameMotion.pause(!active);stopFrames();
+        if(motion!=null){motion.pause(!active);if(active&&motion.pending())Log.i("AliveClean","scene motion start deferred visible=true mode="+mode);}if(frameMotion!=null)frameMotion.pause(!active);stopFrames();
         if(active){if(mode==0){long now=System.nanoTime();aodMotion.enter(now);cosmicUntil=now+5_000_000_000L;}pacer.reset();schedule();}
         else if(clockToken!=0)reportClock(false);
     }

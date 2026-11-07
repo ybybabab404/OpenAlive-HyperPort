@@ -37,6 +37,7 @@ final class SceneMotion {
     private long lastFrame;
     private float aodX,aodY=.335f;
     private int mode;
+    private boolean pending;
     private static final Interpolator DEFAULT=new AccelerateDecelerateInterpolator();
     private static final Interpolator LINEAR=new LinearInterpolator();
     private static final Interpolator EASE=path(.33f,0,.67f,1);
@@ -200,14 +201,43 @@ final class SceneMotion {
         if(previous==0&&!interrupted)animation.setStartDelay(150);
         mode=next;return animation;
     }
-    void change(int next){if(mode!=next)prepare(next).start();}
+    void change(int next){change(next,true);}
+    /**
+     * Starts the transition only when the scene is actually on screen. Starting it while the
+     * wallpaper is hidden (keyguard dismissal, app-open transition) used to rely on pause(),
+     * which an AnimatorSet that has not reached its first frame ignores: the play head then ran
+     * on with the wall clock and the first visible frame already showed 0.x s of the animation.
+     */
+    void change(int next,boolean start){
+        if(mode==next)return;
+        prepare(next);
+        if(start)animation.start();else pending=true;
+    }
+    void startPending(){
+        if(!pending)return;
+        pending=false;
+        if(animation!=null&&!animation.isStarted())animation.start();
+    }
+    boolean pending(){return pending;}
     /** Switch composition owner without creating a second texture timeline. */
     void preserveMode(int next){mode=next;}
-    void finish(){if(animation!=null)animation.end();}
+    void finish(){
+        if(animation!=null){
+            // A deferred transition never started: starting it first lets end() apply the
+            // final values instead of leaving the old frame on screen.
+            if(!animation.isStarted())animation.start();
+            animation.end();
+        }
+        pending=false;
+    }
     boolean active(){return animation!=null&&animation.isStarted()||aod==0&&mode==0;}
     boolean transitionActive(){return animation!=null&&animation.isStarted();}
-    void pause(boolean paused){lastFrame=0;if(animation!=null){if(paused)animation.pause();else animation.resume();}}
-    void close(){if(animation!=null)animation.cancel();lastFrame=0;}
+    void pause(boolean paused){
+        lastFrame=0;
+        if(pending){if(!paused)startPending();return;}
+        if(animation!=null){if(paused)animation.pause();else animation.resume();}
+    }
+    void close(){pending=false;if(animation!=null)animation.cancel();lastFrame=0;}
     void advance(long frameNanos) {
         advance(frameNanos,1f);
     }

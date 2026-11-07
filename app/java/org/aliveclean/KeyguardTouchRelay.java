@@ -55,6 +55,7 @@ final class KeyguardTouchRelay {
         hookPropertyWrites(loader);
         hookLockDeform(loader);
         hookFingerprint(loader);
+        hookKeyguardHide(loader);
         int hooked=0;
         for (String name:SHADE_VIEWS) {
             Class<?> view=Xp.findClassIfExists(name,loader);
@@ -417,6 +418,38 @@ final class KeyguardTouchRelay {
         } catch (Throwable error) {Log.w(TAG,"fingerprint hook unavailable",error);}
     }
 
+    /** The keyguard starts its exit animation in KeyguardViewMediator.handleHide(): that is the
+     *  instant SurfaceFlinger begins the wallpaper reveal. Sending scene 2 there keeps the
+     *  wallpaper's own 0->2 timeline aligned with the system one. Waiting for
+     *  isKeyguardLocked()==false fires roughly 0.3-0.5 s into that animation, so the first frame
+     *  the user sees is already part-way through and the unlock looks like a jump. */
+    private static void hookKeyguardHide(ClassLoader loader) {
+        try {
+            Class<?> mediator=Xp.findClassIfExists("com.android.systemui.keyguard.KeyguardViewMediator",loader);
+            if (mediator==null) {Log.w(TAG,"keyguard hide hook: KeyguardViewMediator missing");return;}
+            java.util.Set<Xp.Unhook> set=Xp.hookAllMethods(mediator,"handleHide",new Xp.MethodHook(){
+                @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                    reportKeyguardHiding();
+                }
+            });
+            Log.i(TAG,"keyguard hide hook installed methods="+(set==null?0:set.size()));
+        } catch (Throwable error) {Log.w(TAG,"keyguard hide hook unavailable",error);}
+    }
+
+    private static void reportKeyguardHiding() {
+        long now=SystemClock.uptimeMillis();
+        Messenger target=signalChannel();
+        if (target==null) return;
+        Message message=Message.obtain();
+        message.what=6;
+        Bundle data=new Bundle();
+        data.putLong("time",now);
+        message.setData(data);
+        try {
+            target.send(message);
+            Log.i(TAG,"keyguard hiding t="+now);
+        } catch (Throwable dead) {channel=null;Log.w(TAG,"keyguard channel dropped",dead);}
+    }
     private static void reportFingerprint(int user,boolean strong) {
         long now=SystemClock.uptimeMillis();
         Log.i(TAG,"fingerprint authenticated user="+user+" strong="+strong+" t="+now);

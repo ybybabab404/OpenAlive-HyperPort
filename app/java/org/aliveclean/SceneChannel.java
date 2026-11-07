@@ -6,7 +6,7 @@ import java.util.LinkedHashSet;
 
 /** Authenticated scene delivery and frame completion feedback; no per-frame IPC. */
 final class SceneChannel {
-    interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}default void fingerprint(long time){}}
+    interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}default void fingerprint(long time){}default void keyguardHiding(long time){}}
     private static final LinkedHashSet<Listener> listeners=new LinkedHashSet<>();
     private static Messenger messenger;
     private static volatile Messenger clockFeedback;
@@ -17,6 +17,9 @@ final class SceneChannel {
     private static boolean lastBackdrop;
     /** uptimeMillis of the last successful fingerprint authentication reported by SystemUI. */
     private static long lastFingerprint;
+    /** uptimeMillis of the last keyguard-hide-cue reported by SystemUI; never replayed to new
+     *  listeners: starting an unlock transition from a stale cue would skip it entirely. */
+    private static long lastKeyguardHiding;
     private static int senderUid=-1;
     static int touchTrace=6;
     static synchronized IBinder connect(Context context,IBinder source,int api,IBinder feedback)throws Exception {
@@ -47,6 +50,12 @@ final class SceneChannel {
                     lastFingerprint=time;
                     android.util.Log.i("AliveClean","fingerprint signal t="+time+" listeners="+listeners.size());
                     for(Listener l:listeners)l.fingerprint(time);
+                }else if(message.what==6){
+                    long time=b.getLong("time",0);
+                    if(time<=0||time<lastKeyguardHiding)return true;
+                    lastKeyguardHiding=time;
+                    android.util.Log.i("AliveClean","keyguard hiding signal t="+time+" listeners="+listeners.size());
+                    for(Listener l:listeners)l.keyguardHiding(time);
                 }else if(message.what==3){
                     boolean covered=b.getBoolean("covered",false);
                     if(covered==lastBackdrop)return true;lastBackdrop=covered;

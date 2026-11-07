@@ -34,6 +34,7 @@ public final class XiaomiApply {
         WallpaperInfo actual=wm.getWallpaperInfo();if(actual==null||!component.equals(actual.getComponent()))throw new IllegalStateException("Wallpaper verification failed");
         if(Build.VERSION.SDK_INT>=34){WallpaperInfo lock=wm.getWallpaperInfo(WallpaperManager.FLAG_LOCK);if(lock==null&&wm.getWallpaperId(WallpaperManager.FLAG_LOCK)<0)lock=actual;if(lock==null||!component.equals(lock.getComponent()))throw new IllegalStateException("Lock wallpaper verification failed");}
         try{AodWallpaperMode.enter(c);}catch(Throwable modeError){modeError.printStackTrace(System.out);}
+        try{ModuleActivation.request(c);}catch(Throwable ignored){}
         System.out.println("XIAOMI_APPLIED");System.exit(0);
     }catch(Throwable e){e.printStackTrace(System.out);System.exit(1);}}
 }

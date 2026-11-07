@@ -143,7 +143,7 @@ public class XiaomiPreviewActivity extends Activity implements SurfaceHolder.Cal
         WallpaperManager m=WallpaperManager.getInstance(this);previousWallpaperId=m.getWallpaperId(WallpaperManager.FLAG_SYSTEM);previousLockId=m.getWallpaperId(WallpaperManager.FLAG_LOCK);awaitingPicker=true;
         pickerResultReliable=WallpaperPicker.open(this,new ComponentName(this,pack.component()),77);
     }catch(RuntimeException e){awaitingPicker=false;cancelApply();failure(e);}}
-    private void applied(){SceneProvider.changed(this);String message="壁纸已应用";
+    private void applied(){ModuleActivation.request(this);SceneProvider.changed(this);String message="壁纸已应用";
         if(getPackageManager().resolveContentProvider("com.oplus.aod.AodMachineHelperProvider",0)!=null)try{message=RootBridge.prepareAod(this);}catch(Exception e){message="壁纸已应用，息屏配置未完成："+e.getMessage();}
         final String done=message;runOnUiThread(()->{Toast.makeText(this,done,Toast.LENGTH_LONG).show();finish();});
     }

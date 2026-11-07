@@ -50,6 +50,7 @@ public final class SceneApply {
             WallpaperInfo actual = manager.getWallpaperInfo();
             if (actual == null || !component.equals(actual.getComponent())) throw new IllegalStateException("Wallpaper verification failed");
             try { AodWallpaperMode.enter(context); } catch (Throwable modeError) { modeError.printStackTrace(System.out); }
+            ModuleActivation.request(context);
             System.out.println("SCENE_APPLIED");
             System.exit(0);
         } catch (Throwable error) {

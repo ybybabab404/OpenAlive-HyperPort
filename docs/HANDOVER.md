@@ -19,7 +19,8 @@ HyperAlive 是 LSPosed API 102 模块，给 HyperOS / Android 17 补「活的壁
 | 项 | 值 |
 |---|---|
 | 当前分支 | `deep-clean-v2` |
-| HEAD | `7118782 fix: defer device-idle no-activity during AOD entry` |
+| 代码基线 | `7118782 fix: defer device-idle no-activity during AOD entry`（tag `save-20261107-idlefix`） |
+| 文档提交 | `2a5f2a6 docs: refresh handover for 0.6.1 animation fixes` |
 | 最新 tag | `save-20261107-idlefix`（指向 `7118782`） |
 | versionCode / versionName | `60` / `0.6.1-preview` |
 | 当前 APK | `dist/HyperAlive-0.6.1-preview-arm64-v8a.apk` |

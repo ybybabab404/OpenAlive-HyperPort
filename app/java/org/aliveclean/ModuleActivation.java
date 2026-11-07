@@ -23,7 +23,7 @@ final class ModuleActivation {
 
     static void request(Context context){
         try{context.sendBroadcast(new Intent(QUERY).setPackage("com.android.systemui"));}
-        catch(RuntimeException unavailable){android.util.Log.w("OpenAliveModule","SystemUI activation query unavailable",unavailable);}
+        catch(RuntimeException unavailable){AliveLog.w("OpenAliveModule","SystemUI activation query unavailable",unavailable);}
     }
     static boolean active(Context context){
         try{

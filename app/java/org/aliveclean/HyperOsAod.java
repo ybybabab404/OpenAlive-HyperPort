@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.content.Context;
 import android.graphics.SurfaceTexture;
-import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -29,7 +28,7 @@ final class HyperOsAod {
                             try {
                                 attach(root);
                             } catch (Throwable error) {
-                                Log.e(TAG, "attach failed", error);
+                                AliveLog.e(TAG, "attach failed", error);
                             }
                         }
                     });
@@ -38,12 +37,12 @@ final class HyperOsAod {
             Trace.log("T01", "hooks installed for " + name);
             installed = true;
         }
-        if (!installed) Log.i(TAG, "no AOD view class in this process");
+        if (!installed) AliveLog.i(TAG, "no AOD view class in this process");
     }
 
     static void installDoze(ClassLoader loader) {
         Class<?> service = Xp.findClassIfExists("com.android.keyguard.doze.MiuiDozeService", loader);
-        if (service == null) { Log.i(TAG, "no MiuiDozeService"); return; }
+        if (service == null) { AliveLog.i(TAG, "no MiuiDozeService"); return; }
         Xp.hookAllMethods(service, "onDreamingStarted", new Xp.MethodHook() {
             @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
@@ -58,7 +57,7 @@ final class HyperOsAod {
                 AodOverlay.hide();
             }
         });
-        Log.i(TAG, "doze service hook installed");
+        AliveLog.i(TAG, "doze service hook installed");
     }
 
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
@@ -97,7 +96,7 @@ final class HyperOsAod {
         ViewGroup target = findInnerAod(root);
         if (target == null) {
 
-            Log.i(TAG, "inner AODView not up yet, waiting");
+            AliveLog.once(TAG, "aod-view-pending", "inner AODView not up yet, waiting");
             root.postDelayed(new Runnable() {
                 @Override public void run() { injectIntoAod(); }
             }, 200);
@@ -109,6 +108,7 @@ final class HyperOsAod {
         target.addView(surface, 0, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         liveSurface = new java.lang.ref.WeakReference<>(surface);
+        AliveLog.reset("aod-view-pending");
         Trace.log("T04", "surface#create id=" + System.identityHashCode(surface)
                 + " host=" + System.identityHashCode(target) + " children=" + target.getChildCount());
 
@@ -128,7 +128,7 @@ final class HyperOsAod {
                             new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT));
                     misses = 0;
-                    Log.i(TAG, "scene re-attached after misses");
+                    AliveLog.i(TAG, "scene re-attached after misses");
                 } else {
                     misses = 0;
                     ViewGroup inner = findInnerAod(root);
@@ -137,7 +137,7 @@ final class HyperOsAod {
                         inner.addView(surface, 0, new ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT));
-                        Log.i(TAG, "scene moved into inner AODView");
+                        AliveLog.i(TAG, "scene moved into inner AODView");
                     }
                 }
                 next();
@@ -145,7 +145,7 @@ final class HyperOsAod {
 
             private void next() {
                 if (++tries < 100) root.postDelayed(this, 300);
-                else Log.i(TAG, "supervise done, parent="
+                else AliveLog.i(TAG, "supervise done, parent="
                         + (surface.getParent() == null ? "null"
                         : surface.getParent().getClass().getName()));
             }
@@ -173,7 +173,7 @@ final class HyperOsAod {
         try {
             return base.createPackageContext("org.aliveclean", 0);
         } catch (Throwable unavailable) {
-            Log.w(TAG, "module context unavailable, using the host context", unavailable);
+            AliveLog.w(TAG, "module context unavailable, using the host context", unavailable);
             return base;
         }
     }
@@ -186,7 +186,7 @@ final class HyperOsAod {
 
             return prefs.getInt("aod", 0) != -1;
         } catch (Throwable unavailable) {
-            Log.w(TAG, "cannot read scene settings", unavailable);
+            AliveLog.w(TAG, "cannot read scene settings", unavailable);
             return false;
         }
     }

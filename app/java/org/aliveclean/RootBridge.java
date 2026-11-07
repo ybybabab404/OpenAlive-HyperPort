@@ -37,7 +37,7 @@ final class RootBridge {
             String detail=json.optString("error","系统拒绝切换息屏模式");
             throw new IOException("系统息屏接口失败（"+stage+"）："+detail);
         }
-        android.util.Log.e("AliveClean","Adapter exit="+process.exitValue()+" output="+result);
+        AliveLog.e("AliveClean","Adapter exit="+process.exitValue()+" output="+result);
         String detail=result.trim();if(detail.length()>600)detail=detail.substring(detail.length()-600);
         throw new IOException("息屏辅助进程未返回结果（退出码 "+process.exitValue()+"）"+(detail.isEmpty()?"，请检查超级用户授权":"："+detail));
     }

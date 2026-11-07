@@ -101,7 +101,7 @@ public final class FrameCropActivity extends Activity {
                 .putFloat("frame_x",c.x).putFloat("frame_y",c.y).putFloat("frame_size",c.size).putFloat("frame_angle",c.angle).commit();
         if(ok){committed=true;setResult(RESULT_OK);finish();}else Toast.makeText(this,"取景保存失败",Toast.LENGTH_LONG).show();
     }
-    private void fail(Exception e){if(isDestroyed())return;android.util.Log.e("AliveClean","Official crop host failed",e);Toast.makeText(this,"取景页面无法打开："+e.getMessage(),Toast.LENGTH_LONG).show();finish();}
+    private void fail(Exception e){if(isDestroyed())return;AliveLog.e("AliveClean","Official crop host failed",e);Toast.makeText(this,"取景页面无法打开："+e.getMessage(),Toast.LENGTH_LONG).show();finish();}
     @Override protected void onSaveInstanceState(Bundle state){FrameCrop c=current();state.putFloat("x",c.x);state.putFloat("y",c.y);state.putFloat("size",c.size);state.putFloat("angle",c.angle);super.onSaveInstanceState(state);}
     @Override protected void onDestroy(){
         if(photo!=null)photo.setImageDrawable(null);if(bitmap!=null)bitmap.recycle();

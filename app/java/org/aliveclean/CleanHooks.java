@@ -1,7 +1,6 @@
 package org.aliveclean;
 
 import android.app.WallpaperInfo;
-import android.util.Log;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -21,7 +20,7 @@ public final class CleanHooks extends XposedModule {
 
     @Override public void onModuleLoaded(ModuleLoadedParam param) {
         Xp.attach(this);
-        Log.i(TAG, "module loaded process=" + param.getProcessName() + " api=" + getApiVersion());
+        AliveLog.i(TAG, "module loaded process=" + param.getProcessName() + " api=" + getApiVersion());
     }
 
     @Override public void onPackageLoaded(PackageLoadedParam param) {
@@ -40,7 +39,7 @@ public final class CleanHooks extends XposedModule {
         boolean miuiAod = "com.miui.aod".equals(packageName);
         boolean themeManager = "com.android.thememanager".equals(packageName);
         boolean system = "android".equals(packageName);
-        Log.i(TAG, "loaded into " + packageName);
+        AliveLog.i(TAG, "loaded into " + packageName + " pid=" + android.os.Process.myPid());
         if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(loader));
         if (themeManager) step("tm wallpaper preview", () -> AodWallpaperPreview.installThemeManager(loader));
         if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
@@ -78,7 +77,7 @@ public final class CleanHooks extends XposedModule {
     private static void hookCheckPermission(String className, ClassLoader loader, String label) {
         Class<?> type = findServerClass(className, loader, label);
         if (type == null) {
-            Log.w(TAG, "ambient permission: " + className + " not found"
+            AliveLog.w(TAG, "ambient permission: " + className + " not found"
                     + " (loader=" + loader + ")");
             return;
         }
@@ -88,7 +87,7 @@ public final class CleanHooks extends XposedModule {
                         if (!isAmbientWallpaperCheck(call.args)) return;
                         call.setResult(android.content.pm.PackageManager.PERMISSION_GRANTED);
                         if (ambientGrantLogged.compareAndSet(false, true))
-                            Log.i(TAG, "ambient permission: granted via " + label);
+                            AliveLog.i(TAG, "ambient permission: granted via " + label);
                     }
                 });
     }
@@ -104,7 +103,7 @@ public final class CleanHooks extends XposedModule {
             if (candidate == null || candidate == loader) continue;
             try {
                 type = Class.forName(className, false, candidate);
-                Log.i(TAG, "ambient permission: " + label + " resolved via " + candidate);
+                AliveLog.i(TAG, "ambient permission: " + label + " resolved via " + candidate);
                 return type;
             } catch (Throwable ignored) {
             }
@@ -125,9 +124,9 @@ public final class CleanHooks extends XposedModule {
     private static void step(String name, Step body) {
         try {
             body.run();
-            Log.i(TAG, name + ": ok");
+            AliveLog.i(TAG, name + ": ok");
         } catch (Throwable error) {
-            Log.e(TAG, name + ": failed", error);
+            AliveLog.e(TAG, name + ": failed", error);
         }
     }
 }

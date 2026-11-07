@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.*;
 import android.opengl.*;
 import android.os.*;
-import android.util.Log;
 import android.view.Surface;
 import android.view.Choreographer;
 import java.io.*;
@@ -59,8 +58,8 @@ final class RenderLoop {
             android.graphics.Color secondaryColor=colors.getSecondaryColor();
             android.graphics.Color tertiaryColor=colors.getTertiaryColor();
             aodPalette=new int[]{primary,secondaryColor!=null?secondaryColor.toArgb():primary,tertiaryColor!=null?tertiaryColor.toArgb():primary};
-            Log.i("AliveClean","wallpaper palette "+Integer.toHexString(primary));
-        }catch(Throwable failure){Log.w("AliveClean","wallpaper palette unavailable",failure);}
+            AliveLog.i("AliveClean","wallpaper palette "+Integer.toHexString(primary));
+        }catch(Throwable failure){AliveLog.w("AliveClean","wallpaper palette unavailable",failure);}
     }
     private boolean backdropCovered;
     private boolean stateReported;
@@ -93,34 +92,34 @@ final class RenderLoop {
     private void redraw(Surface surface,int w,int h,int attempt){
         int generation=++surfaceGeneration;
         handler.post(()->{
-            if(generation!=surfaceGeneration){Log.w("AliveClean","redraw stale generation "+generation+" != "+surfaceGeneration);return;}
+            if(generation!=surfaceGeneration){AliveLog.w("AliveClean","redraw stale generation "+generation+" != "+surfaceGeneration);return;}
 
             if(!surface.isValid()||w<1||h<1){
-                if(attempt<20&&!closed){Log.w("AliveClean","redraw retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->redraw(surface,w,h,attempt+1),50);}
-                else Log.w("AliveClean","redraw skipped "+w+"x"+h+" valid="+surface.isValid());
+                if(attempt<20&&!closed){AliveLog.w("AliveClean","redraw retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->redraw(surface,w,h,attempt+1),50);}
+                else AliveLog.w("AliveClean","redraw skipped "+w+"x"+h+" valid="+surface.isValid());
                 return;
             }
             if(surface==attachedSurface&&w==attachedWidth&&h==attachedHeight&&(scene!=0||cosmic!=null||vivo!=null)){
-                Log.i("AliveClean","redraw poke "+w+"x"+h+" valid="+surface.isValid());
+                AliveLog.i("AliveClean","redraw poke "+w+"x"+h+" valid="+surface.isValid());
                 forceFrame=true;pacer.reset();schedule();return;
             }
-            Log.i("AliveClean","redraw rebuild "+w+"x"+h+" attached="+attachedWidth+"x"+attachedHeight+" valid="+surface.isValid());
+            AliveLog.i("AliveClean","redraw rebuild "+w+"x"+h+" attached="+attachedWidth+"x"+attachedHeight+" valid="+surface.isValid());
             release();
-            try{init(surface,w,h);}catch(Exception e){Log.e("AliveClean","Renderer redraw failed",e);release();return;}
+            try{init(surface,w,h);}catch(Exception e){AliveLog.e("AliveClean","Renderer redraw failed",e);release();return;}
             forceFrame=true;pacer.reset();schedule();
         });
     }
     private void attach(Surface surface,int w,int h,int attempt,boolean fresh,int generation){handler.post(()->{
 
-        if(generation!=surfaceGeneration){Log.w("AliveClean","attach stale generation "+generation+" != "+surfaceGeneration);return;}
+        if(generation!=surfaceGeneration){AliveLog.w("AliveClean","attach stale generation "+generation+" != "+surfaceGeneration);return;}
         if(!surface.isValid()||w<1||h<1){
-            if(attempt<40&&!closed){Log.w("AliveClean","attach retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->attach(surface,w,h,attempt+1,fresh,generation),50);}
-            else Log.w("AliveClean","attach skipped "+w+"x"+h+" valid="+surface.isValid());
+            if(attempt<40&&!closed){AliveLog.w("AliveClean","attach retry "+attempt+" "+w+"x"+h+" valid="+surface.isValid());handler.postDelayed(()->attach(surface,w,h,attempt+1,fresh,generation),50);}
+            else AliveLog.w("AliveClean","attach skipped "+w+"x"+h+" valid="+surface.isValid());
             return;
         }
         if(!fresh&&surface==attachedSurface&&w==attachedWidth&&h==attachedHeight&&(scene!=0||cosmic!=null||vivo!=null)){pacer.reset();schedule();return;}
         release();
-        try{init(surface,w,h);}catch(Exception e){Log.e("AliveClean","Renderer initialization failed",e);release();return;}
+        try{init(surface,w,h);}catch(Exception e){AliveLog.e("AliveClean","Renderer initialization failed",e);release();return;}
 
         forceFrame=true;pacer.reset();schedule();
     });}
@@ -147,14 +146,14 @@ final class RenderLoop {
         synchronized(cropLock){cropQueued=false;p.restore(pendingCropX,pendingCropY,pendingCropZoom);finish=cropFinal;}
         if(vivo==null)return;
         try{vivo.crop(p,finish);schedule();}
-        catch(Exception e){Log.w("AliveClean","Vivo crop failed",e);}
+        catch(Exception e){AliveLog.w("AliveClean","Vivo crop failed",e);}
     }
     void detach(){handler.post(()->{release();attachedSurface=null;});}
     void mode(int next){mode(next,true);}
     void clockTransition(long token){handler.post(()->{if(preview||token==seenClockToken)return;seenClockToken=token;clockToken=token;if(token!=0){if(renderingVisible())schedule();else reportClock(false);}});}
     private void reportClock(boolean submitted){
         long token=clockToken;clockToken=0;
-        if(token!=0&&!preview){if(Diagnostics.TRACE)Log.i("AliveClean","Frame clock token="+token+" submitted="+submitted);SceneChannel.frameReady(token,submitted);}
+        if(token!=0&&!preview){if(Diagnostics.TRACE)AliveLog.i("AliveClean","Frame clock token="+token+" submitted="+submitted);SceneChannel.frameReady(token,submitted);}
     }
     void aodRegion(AodRegion region,int display){
         if(region==null||region.displayId!=display)return;
@@ -176,7 +175,7 @@ final class RenderLoop {
 
         if(vivo!=null&&(mode!=next||lightSnapshot)){vivo.transition(next,animate,vivoDarkWallpaper?.76f:1f,vivoAodMask);vivo.visible(renderingVisible());}
         int previous=mode;boolean visible=renderingVisible();
-        mode=next;updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)Log.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
+        mode=next;updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)AliveLog.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
     });}
     private boolean renderingVisible(){return visible&&!backdropCovered;}
     void backdrop(boolean covered){handler.post(()->{if(preview||backdropCovered==covered)return;backdropCovered=covered;updateRenderActivity();});}
@@ -184,7 +183,7 @@ final class RenderLoop {
     private void updateRenderActivity(){
         boolean active=renderingVisible();
         if(vivo!=null)vivo.visible(active);if(cosmic!=null)cosmic.motion().pause();updateCosmicLifecycle();
-        if(motion!=null){motion.pause(!active);if(active&&motion.pending())Log.i("AliveClean","scene motion start deferred visible=true mode="+mode);}if(frameMotion!=null)frameMotion.pause(!active);stopFrames();
+        if(motion!=null){motion.pause(!active);if(active&&motion.pending())AliveLog.i("AliveClean","scene motion start deferred visible=true mode="+mode);}if(frameMotion!=null)frameMotion.pause(!active);stopFrames();
         if(active){if(mode==0){long now=System.nanoTime();aodMotion.enter(now);cosmicUntil=now+5_000_000_000L;}pacer.reset();schedule();}
         else if(clockToken!=0)reportClock(false);
     }
@@ -207,7 +206,7 @@ final class RenderLoop {
         if((cosmic!=null)!=(options.cosmic!=0)){
             Surface surface=attachedSurface;release();
             if(surface!=null&&surface.isValid()){init(surface,width,height);schedule();}return;
-        }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){Log.e("AliveClean","Scene reload failed",e);release();}}
+        }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){AliveLog.e("AliveClean","Scene reload failed",e);release();}}
     void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
     private void schedule(){if((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)&&choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}}
     private void onVsync(long time){framePosted=false;frameTime=time;handler.post(renderTask);}
@@ -219,7 +218,7 @@ final class RenderLoop {
                 cosmic.visible(renderingVisible());
             }
             if(stereoSensor!=null)stereoSensor.setActive(renderingVisible()&&(mode!=0||stereoAodAnimation));
-        }catch(RuntimeException failure){Log.e("AliveClean","Wallpaper lifecycle failed",failure);release();}
+        }catch(RuntimeException failure){AliveLog.e("AliveClean","Wallpaper lifecycle failed",failure);release();}
     }
     private void closeCosmic(){
         if(stereoSensor!=null){stereoSensor.close();stereoSensor=null;}
@@ -304,15 +303,15 @@ final class RenderLoop {
         int[] eglW=new int[1],eglH=new int[1];
         EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,eglW,0);
         EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,eglH,0);
-        Log.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid());
+        AliveLog.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid());
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}
         catch(Exception missing){
 
-            Log.w("AliveClean","lens decorator unavailable, using blank texture",missing);
+            AliveLog.w("AliveClean","lens decorator unavailable, using blank texture",missing);
             Bitmap blank=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);decorator=upload(blank);blank.recycle();
         }
-        createScene(options);if(Diagnostics.TRACE)Log.i("AliveClean","GLES3 scene ready "+w+"x"+h);
+        createScene(options);if(Diagnostics.TRACE)AliveLog.i("AliveClean","GLES3 scene ready "+w+"x"+h);
     }
     private int loadPhoto(String name,boolean primary){
         File file=new File(context.getFilesDir(),name);
@@ -322,10 +321,10 @@ final class RenderLoop {
                     .openAssetFileDescriptor(AodWallpaperProvider.PHOTO,"r")){
                 if(descriptor!=null){
                     Bitmap fromProvider=BitmapFactory.decodeFileDescriptor(descriptor.getFileDescriptor());
-                    if(fromProvider!=null){Log.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();int id=upload(fromProvider);fromProvider.recycle();return id;}
-                    else Log.w("AliveClean","aod provider returned no bitmap");
+                    if(fromProvider!=null){AliveLog.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();int id=upload(fromProvider);fromProvider.recycle();return id;}
+                    else AliveLog.w("AliveClean","aod provider returned no bitmap");
                 }
-            }catch(Throwable failure){Log.w("AliveClean","aod provider read failed",failure);}
+            }catch(Throwable failure){AliveLog.w("AliveClean","aod provider read failed",failure);}
 
             File external=context.getExternalFilesDir(null);
             File fromExternal=external==null?null:new File(external,SceneOptions.WALLPAPER);
@@ -333,9 +332,9 @@ final class RenderLoop {
             File shared=new File("/data/data/com.android.systemui/files/aod-wallpaper.png");
             if(shared.isFile())file=shared;else if(fromExternal!=null&&fromExternal.isFile())file=fromExternal;else if(internal.isFile())file=internal;
         }
-        Log.i("AliveClean","loadPhoto "+file.getAbsolutePath()+" exists="+file.isFile()+" mode="+mode+" primary="+primary);
+        AliveLog.i("AliveClean","loadPhoto "+file.getAbsolutePath()+" exists="+file.isFile()+" mode="+mode+" primary="+primary);
         Bitmap bitmap=null;
-        if(file.exists())try{android.graphics.ImageDecoder.Source source=android.graphics.ImageDecoder.createSource(file);bitmap=android.graphics.ImageDecoder.decodeBitmap(source,(decoder,info,s)->{int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);});}catch(IOException e){Log.e("AliveClean","Photo decode failed",e);}
+        if(file.exists())try{android.graphics.ImageDecoder.Source source=android.graphics.ImageDecoder.createSource(file);bitmap=android.graphics.ImageDecoder.decodeBitmap(source,(decoder,info,s)->{int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);});}catch(IOException e){AliveLog.e("AliveClean","Photo decode failed",e);}
         if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);p.setShader(new LinearGradient(0,0,720,1440,new int[]{0xff183955,0xffce865c,0xff5b526e},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);p.setColor(0xffe6b282);canvas.drawCircle(490,480,230,p);p.setColor(0xff254452);canvas.drawOval(-220,800,930,1880,p);}
         if(primary)aspect=(float)bitmap.getWidth()/bitmap.getHeight();else{homeWidth=bitmap.getWidth();homeHeight=bitmap.getHeight();}int id=upload(bitmap);bitmap.recycle();return id;
     }
@@ -356,7 +355,7 @@ final class RenderLoop {
 
         boolean forced=forceFrame;forceFrame=false;
         if((!renderingVisible()&&!forced)||(scene==0&&cosmic==null&&vivo==null))return;
-        if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){Log.e("AliveClean","Vivo frame failed",e);release();}return;}
+        if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){AliveLog.e("AliveClean","Vivo frame failed",e);release();}return;}
         if(cosmic!=null){
             try{
                 boolean continuous=preview||(mode==0?cosmicContinuousAod:cosmicContinuousHome);
@@ -369,7 +368,7 @@ final class RenderLoop {
                     if(!swap("cosmic"))throw new IllegalStateException("Cosmic EGL swap failed");
                 }
                 if(moving)schedule();
-            }catch(Exception e){Log.e("AliveClean","Cosmic frame failed",e);release();}
+            }catch(Exception e){AliveLog.e("AliveClean","Cosmic frame failed",e);release();}
             return;
         }
         try{
@@ -382,7 +381,7 @@ final class RenderLoop {
                 if(!masks.upload(frameSample.mask,auxiliary[0])){if(!masks.failed())schedule();else reportClock(false);return;}
                 if(!NativeScene.frame(scene,frameSample.effect))throw new IllegalStateException("Invalid frame effect packet");
             }
-            if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;Log.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
+            if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
             if(forced||pacer.due(time)||!moving){
                 if(!NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures))throw new IllegalStateException("Invalid texture effect packet");
@@ -390,17 +389,17 @@ final class RenderLoop {
                 if(!swap("native"))throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
-                    if(Diagnostics.TRACE){long wait=SystemClock.uptimeMillis()-frameSample.capturedAt;if(wait>80)Log.i("AliveClean","Frame sample mask="+frameSample.mask+" waitMs="+wait);}
+                    if(Diagnostics.TRACE){long wait=SystemClock.uptimeMillis()-frameSample.capturedAt;if(wait>80)AliveLog.i("AliveClean","Frame sample mask="+frameSample.mask+" waitMs="+wait);}
                     frameSample.clear();
                 }
             }
             if(moving||frameSample.pending||resumedSample||forced)schedule();
-        }catch(Exception e){Log.e("AliveClean","Frame failed",e);release();}
+        }catch(Exception e){AliveLog.e("AliveClean","Frame failed",e);release();}
     }
     private void closeFrame(){if(textureMotion!=null){textureMotion.close();textureMotion=null;}if(scene!=0)reportClock(false);frameSample.clear();if(frameMotion!=null){frameMotion.close();frameMotion=null;}if(masks!=null){masks.close();masks=null;}}
     private boolean swap(String tag){
         boolean ok=EGL14.eglSwapBuffers(display,window);
-        if(!ok)Log.e("AliveClean","eglSwapBuffers failed "+tag+" err="+EGL14.eglGetError()+" size="+attachedWidth+"x"+attachedHeight);
+        if(!ok)AliveLog.e("AliveClean","eglSwapBuffers failed "+tag+" err="+EGL14.eglGetError()+" size="+attachedWidth+"x"+attachedHeight);
         return ok;
     }
     private void release(){stopFrames();if(vivo!=null){vivo.close();vivo=null;}closeCosmic();handler.removeCallbacks(reloadTask);closeFrame();if(motion!=null){motion.close();motion=null;}if(display!=EGL14.EGL_NO_DISPLAY){if(scene!=0){NativeScene.destroy(scene);scene=0;}clearAuxiliary();GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);EGL14.eglTerminate(display);EGL14.eglReleaseThread();}display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;window=EGL14.EGL_NO_SURFACE;attachedSurface=null;attachedWidth=attachedHeight=0;}

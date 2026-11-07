@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -18,7 +17,7 @@ public final class AodPreviewHider {
         Class<?> activity = Xp.findClassIfExists(
                 "com.miui.aod.settings.AodStyleCategoriesActivity", loader);
         if (activity == null) {
-            Log.w(TAG, "aod preview hide: activity missing");
+            AliveLog.w(TAG, "aod preview hide: activity missing");
             return;
         }
         try {
@@ -30,9 +29,9 @@ public final class AodPreviewHider {
             };
             Xp.findAndHookMethod(activity, "onCreate", Bundle.class, hook);
             Xp.findAndHookMethod(activity, "onResume", hook);
-            Log.i(TAG, "aod preview hide hook ok");
+            AliveLog.i(TAG, "aod preview hide hook ok");
         } catch (Throwable error) {
-            Log.w(TAG, "aod preview hide hook failed", error);
+            AliveLog.w(TAG, "aod preview hide hook failed", error);
         }
     }
 
@@ -54,7 +53,7 @@ public final class AodPreviewHider {
                         }
                         collapse(block);
                         observer.removeOnPreDrawListener(this);
-                        Log.i(TAG, "aod preview hidden block="
+                        AliveLog.i(TAG, "aod preview hidden block="
                                 + block.getClass().getSimpleName() + " frame=" + frames);
 
                         return false;

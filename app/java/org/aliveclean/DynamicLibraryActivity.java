@@ -47,7 +47,7 @@ public final class DynamicLibraryActivity extends Activity {
                 try(InputStream input=getAssets().open(entry.thumbnail.indexOf('/')>=0?entry.thumbnail:"cosmic/"+entry.thumbnail)){
                     BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=2;Bitmap bitmap=BitmapFactory.decodeStream(input,null,options);
                     runOnUiThread(()->{if(isDestroyed()){if(bitmap!=null)bitmap.recycle();return;}entry.bitmap=bitmap;adapter.notifyDataSetChanged();});
-                }catch(IOException error){android.util.Log.e("AliveClean","Wallpaper thumbnail unavailable",error);}
+                }catch(IOException error){AliveLog.e("AliveClean","Wallpaper thumbnail unavailable",error);}
             });
         }catch(Exception error){SettingsScreen.fail(this,error);}
     }

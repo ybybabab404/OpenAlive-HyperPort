@@ -90,7 +90,7 @@ public class XiaomiWallpaper extends WallpaperService implements DisplayManager.
         int generation=offsetGeneration;float adjusted=XiaomiDesktopMotion.offset(value,desktopAmplitude);
         main.postDelayed(()->{if(generation==offsetGeneration&&!destroyed&&owner==engine&&engine.surface&&engine.visible&&canRun())send("Offset_"+adjusted);},XiaomiDesktopMotion.delay(desktopResponsiveness));
     }
-    private void failure(Throwable e){android.util.Log.e("OpenAliveXiaomi","Wallpaper runtime",e);}
+    private void failure(Throwable e){AliveLog.e("OpenAliveXiaomi","Wallpaper runtime",e);}
     @Override protected void dump(java.io.FileDescriptor fd,java.io.PrintWriter out,String[] args){
         super.dump(fd,out,args);
         out.println("Xiaomi family="+(pack==null?"loading":pack.id)+" ready="+ready+" running="+(player!=null&&player.isRunning())+" mode="+mode+" land="+land+" pendingLock="+(pendingLock!=null));

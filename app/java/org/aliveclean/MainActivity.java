@@ -59,7 +59,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
             },this);
             showScene();
         }catch(Exception e){
-            android.util.Log.e("AliveClean","Official editor initialization failed",e);
+            AliveLog.e("AliveClean","Official editor initialization failed",e);
             new android.app.AlertDialog.Builder(this).setTitle("编辑页面无法打开").setMessage(e.toString())
                 .setPositiveButton("关闭",(dialog,which)->finish()).setOnCancelListener(dialog->finish()).show();
         }
@@ -71,7 +71,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     }
     private void choosePhoto(){
         SceneOptions chosen=new SceneOptions(draft);
-        android.util.Log.i("AliveClean","commit aod="+chosen.aod+" cosmic="+chosen.cosmic
+        AliveLog.i("AliveClean","commit aod="+chosen.aod+" cosmic="+chosen.cosmic
                 +" lock="+chosen.lock+" home="+chosen.home+" vivo="+chosen.vivo);
         importTarget=chosen.pairedFrame()?(mode==0?2:0):(mode==2?1:0);
         String title=chosen.pairedFrame()?(mode==0?"相框照片":"锁屏与桌面照片"):mode==2?"桌面照片":"照片";
@@ -85,7 +85,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         Intent intent=PhotoSources.intent(this,source);
         if(intent==null){toast(source==PhotoSources.MIUI?"未找到可用的小米相册，请选择其他来源":"此照片来源不可用，请选择其他来源");return;}
         try{startActivityForResult(intent,10);}
-        catch(ActivityNotFoundException|SecurityException e){android.util.Log.e("AliveClean","Photo source unavailable",e);toast("无法打开"+PhotoSources.LABELS[source]+"，请选择其他来源");}
+        catch(ActivityNotFoundException|SecurityException e){AliveLog.e("AliveClean","Photo source unavailable",e);toast("无法打开"+PhotoSources.LABELS[source]+"，请选择其他来源");}
     }
 
     private void applyDraft() {
@@ -108,7 +108,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
             }
             awaitingApply=true;
             pickerResultReliable=WallpaperPicker.open(this,new ComponentName(this,CleanWallpaper.class),20);
-        }catch(RuntimeException e){awaitingApply=false;android.util.Log.e("AliveClean","Wallpaper picker failed",e);toast("无法打开壁纸应用页面："+e.getMessage());}
+        }catch(RuntimeException e){awaitingApply=false;AliveLog.e("AliveClean","Wallpaper picker failed",e);toast("无法打开壁纸应用页面："+e.getMessage());}
     }
 
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}

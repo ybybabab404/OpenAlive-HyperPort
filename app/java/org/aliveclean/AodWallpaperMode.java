@@ -5,7 +5,6 @@ import android.app.WallpaperManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.provider.Settings;
-import android.util.Log;
 
 final class AodWallpaperMode {
     static final String KEY_MODE = "full_screen_aod_on";
@@ -26,7 +25,7 @@ final class AodWallpaperMode {
             return info != null && info.getComponent() != null
                     && "org.aliveclean".equals(info.getComponent().getPackageName());
         } catch (Throwable error) {
-            Log.w(TAG, "aod wallpaper lookup failed", error);
+            AliveLog.w(TAG, "aod wallpaper lookup failed", error);
             return false;
         }
     }
@@ -37,11 +36,11 @@ final class AodWallpaperMode {
         try {
             original = Settings.Secure.getInt(resolver, KEY_MODE, UNSET);
         } catch (Throwable error) {
-            Log.w(TAG, "aod mode read failed; left untouched", error);
+            AliveLog.w(TAG, "aod mode read failed; left untouched", error);
             return;
         }
         if (original == UNSET) {
-            Log.w(TAG, "aod mode absent; left untouched");
+            AliveLog.w(TAG, "aod mode absent; left untouched");
             return;
         }
         try {
@@ -50,9 +49,9 @@ final class AodWallpaperMode {
                 Settings.Secure.putInt(resolver, KEY_HAS_RESTORE, 1);
             }
             Settings.Secure.putInt(resolver, KEY_MODE, 1);
-            Log.i(TAG, "aod mode ->1 (original=" + original + ")");
+            AliveLog.i(TAG, "aod mode ->1 (original=" + original + ")");
         } catch (Throwable error) {
-            Log.w(TAG, "aod mode write failed", error);
+            AliveLog.w(TAG, "aod mode write failed", error);
         }
     }
 
@@ -68,9 +67,9 @@ final class AodWallpaperMode {
             }
             Settings.Secure.putString(resolver, KEY_RESTORE, null);
             Settings.Secure.putString(resolver, KEY_HAS_RESTORE, null);
-            Log.i(TAG, "aod mode restored=" + original);
+            AliveLog.i(TAG, "aod mode restored=" + original);
         } catch (Throwable error) {
-            Log.w(TAG, "aod mode restore failed", error);
+            AliveLog.w(TAG, "aod mode restore failed", error);
         }
     }
 }

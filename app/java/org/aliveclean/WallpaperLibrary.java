@@ -63,7 +63,7 @@ final class WallpaperLibrary {
                 Bitmap bitmap;
                 try(InputStream in=activity.getAssets().open("wallpapers/"+entry.thumbnail)){bitmap=BitmapFactory.decodeStream(in,null,options);}
                 activity.runOnUiThread(()->{if(dialog.isShowing()){entry.bitmap=bitmap;adapter.notifyDataSetChanged();}else if(bitmap!=null)bitmap.recycle();});
-            }catch(IOException e){android.util.Log.e("AliveClean","Wallpaper thumbnail failed",e);}
+            }catch(IOException e){AliveLog.e("AliveClean","Wallpaper thumbnail failed",e);}
         });
     }
 

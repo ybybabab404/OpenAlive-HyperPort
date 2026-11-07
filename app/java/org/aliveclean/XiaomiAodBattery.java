@@ -35,7 +35,7 @@ final class XiaomiAodBattery extends LinearLayout {
         }catch(Exception|LinkageError error){
 
             if(container!=null&&container.getParent() instanceof ViewGroup)((ViewGroup)container.getParent()).removeView(container);
-            android.util.Log.w("OpenAliveXiaomi","Original battery layout unavailable",error);return null;
+            AliveLog.w("OpenAliveXiaomi","Original battery layout unavailable",error);return null;
         }
     }
     private XiaomiAodBattery(Context host,View container,LinearLayout source,android.graphics.Typeface font)throws Exception{
@@ -111,7 +111,7 @@ final class XiaomiAodBattery extends LinearLayout {
     private void unavailable(Throwable error){
         if(active){active=false;host.unregisterReceiver(receiver);}
         failed=true;container.setVisibility(GONE);
-        android.util.Log.w("OpenAliveXiaomi","Battery display unavailable",error);
+        AliveLog.w("OpenAliveXiaomi","Battery display unavailable",error);
     }
     static int percentage(int level,int scale){
         return level<0||scale<=0||level>scale?-1:(int)Math.round(100.0*level/scale);

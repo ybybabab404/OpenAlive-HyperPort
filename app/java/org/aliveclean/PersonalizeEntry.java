@@ -11,7 +11,6 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
-import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -35,7 +34,7 @@ public final class PersonalizeEntry {
     public static void install(ClassLoader cl) {
         Class<?> activityClass = Xp.findClassIfExists(ACTIVITY, cl);
         if (activityClass == null) {
-            Log.w(TAG, "personalize: " + ACTIVITY + " not found");
+            AliveLog.w(TAG, "personalize: " + ACTIVITY + " not found");
             return;
         }
         Xp.findAndHookMethod(activityClass, "onResume", new Xp.MethodHook() {
@@ -82,9 +81,9 @@ public final class PersonalizeEntry {
             stack.addView(anchor, anchorParams);
             stack.requestLayout();
             host.requestLayout();
-            Log.i(TAG, "personalize: entry injected");
+            AliveLog.i(TAG, "personalize: entry injected");
         } catch (Throwable t) {
-            Log.w(TAG, "personalize: inject failed", t);
+            AliveLog.w(TAG, "personalize: inject failed", t);
             if (attempt < 12) retry(activity, attempt);
         }
     }
@@ -158,7 +157,7 @@ public final class PersonalizeEntry {
         try {
             return activity.getPackageManager().getApplicationIcon(pkg);
         } catch (Throwable t) {
-            Log.w(TAG, "personalize: icon for " + pkg + " failed: " + t);
+            AliveLog.w(TAG, "personalize: icon for " + pkg + " failed: " + t);
             return null;
         }
     }
@@ -178,7 +177,7 @@ public final class PersonalizeEntry {
             new Canvas(out).drawRoundRect(new RectF(0, 0, size, size), size * 0.16f, size * 0.16f, paint);
             return new android.graphics.drawable.BitmapDrawable(activity.getResources(), out);
         } catch (Throwable t) {
-            Log.w(TAG, "personalize: icon shape failed", t);
+            AliveLog.w(TAG, "personalize: icon shape failed", t);
             return source;
         }
     }
@@ -190,7 +189,7 @@ public final class PersonalizeEntry {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
         } catch (Throwable t) {
-            Log.w(TAG, "personalize: open home failed", t);
+            AliveLog.w(TAG, "personalize: open home failed", t);
         }
     }
 

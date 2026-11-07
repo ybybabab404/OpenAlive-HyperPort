@@ -6,7 +6,6 @@ import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.os.Handler;
-import android.util.Log;
 import android.view.Surface;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -112,12 +111,12 @@ final class FlymeVideoDecoder implements AutoCloseable {
     private void stop(){
         MediaCodec old=codec;codec=null;input.clear();outstanding=0;lastQueuedUs=-1;
         if(old!=null){
-            try{old.stop();}catch(RuntimeException error){Log.w("AliveClean","Flyme video decoder stop failed",error);}
-            try{old.release();}catch(RuntimeException error){Log.w("AliveClean","Flyme video decoder release failed",error);}
+            try{old.stop();}catch(RuntimeException error){AliveLog.w("AliveClean","Flyme video decoder stop failed",error);}
+            try{old.release();}catch(RuntimeException error){AliveLog.w("AliveClean","Flyme video decoder release failed",error);}
         }
     }
     public void close(){
         if(closed)return;closed=true;visible=false;stop();
-        try{extractor.release();}catch(RuntimeException error){Log.w("AliveClean","Flyme video extractor release failed",error);}
+        try{extractor.release();}catch(RuntimeException error){AliveLog.w("AliveClean","Flyme video extractor release failed",error);}
     }
 }

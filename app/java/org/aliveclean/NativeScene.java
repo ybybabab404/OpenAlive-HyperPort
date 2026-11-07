@@ -1,7 +1,13 @@
 package org.aliveclean;
 
 final class NativeScene {
-    static { System.loadLibrary("alive_clean"); }
+    static {
+        try { System.loadLibrary("alive_clean"); }
+        catch (UnsatisfiedLinkError | SecurityException error) {
+            AliveLog.e(AliveLog.TAG, "native library alive_clean failed to load", error);
+            throw error;
+        }
+    }
     static native long create(int width,int height,int mode,int aod,int lock,int home);
     static native void texture(long handle,int slot,int texture,int width,int height);
     static native void tint(long handle,int color);

@@ -59,5 +59,5 @@ public final class XiaomiLibraryActivity extends Activity {
     @Override public void onDestroy(){openRequest++;busy=false;main.removeCallbacksAndMessages(null);dismissPreparing();super.onDestroy();}
     private void launch(XiaomiPacks.Pack p){startActivity(new Intent().setClassName(this,"org.aliveclean.XiaomiPreviewActivity$"+Character.toUpperCase(p.id.charAt(0))+p.id.substring(1)));}
     @Override public boolean onMenuItemSelected(int feature,MenuItem item){if(item.getItemId()==android.R.id.home){finish();return true;}return super.onMenuItemSelected(feature,item);}
-    private void failure(Exception e){String reason=XiaomiFailure.describe(this,"Xiaomi catalog",e);android.util.Log.e("OpenAliveXiaomi","Xiaomi catalog",e);if(!isDestroyed())new AlertDialog.Builder(this).setTitle("小米壁纸暂时无法打开").setMessage(reason).setPositiveButton("确定",null).show();}
+    private void failure(Exception e){String reason=XiaomiFailure.describe(this,"Xiaomi catalog",e);AliveLog.e("OpenAliveXiaomi","Xiaomi catalog",e);if(!isDestroyed())new AlertDialog.Builder(this).setTitle("小米壁纸暂时无法打开").setMessage(reason).setPositiveButton("确定",null).show();}
 }

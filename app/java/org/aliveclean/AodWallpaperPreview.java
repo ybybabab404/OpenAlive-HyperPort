@@ -4,7 +4,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
-import android.util.Log;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,7 +26,7 @@ public final class AodWallpaperPreview {
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
-            Log.w(TAG, "aod wallpaper preview: TemplateApiImpl missing");
+            AliveLog.w(TAG, "aod wallpaper preview: TemplateApiImpl missing");
             return;
         }
         try {
@@ -41,14 +40,14 @@ public final class AodWallpaperPreview {
                     Bitmap preview = preview(context);
                     if (preview == null) return;
                     param.setResult(preview);
-                    Log.i(TAG, "aod wallpaper preview replaced " + preview.getWidth()
+                    AliveLog.i(TAG, "aod wallpaper preview replaced " + preview.getWidth()
                             + "x" + preview.getHeight());
                 }
             };
             int count = Xp.hookAllMethods(api, "getPlaceholderWallpaper", hook).size();
-            Log.i(TAG, "aod wallpaper preview hook count=" + count);
+            AliveLog.i(TAG, "aod wallpaper preview hook count=" + count);
         } catch (Throwable error) {
-            Log.w(TAG, "aod wallpaper preview hook failed", error);
+            AliveLog.w(TAG, "aod wallpaper preview hook failed", error);
         }
     }
 
@@ -60,7 +59,7 @@ public final class AodWallpaperPreview {
         Class<?> helper = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.DeviceScreenshotHelper", loader);
         if (helper == null) {
-            Log.w(TAG, "tm wallpaper preview: DeviceScreenshotHelper missing");
+            AliveLog.w(TAG, "tm wallpaper preview: DeviceScreenshotHelper missing");
             return;
         }
         try {
@@ -76,7 +75,7 @@ public final class AodWallpaperPreview {
                     }
                     int n = TM_CALLS.incrementAndGet();
                     if (n <= 6) {
-                        Log.i(TAG, "tm ni7 call #" + n + " result="
+                        AliveLog.i(TAG, "tm ni7 call #" + n + " result="
                                 + (original == null ? "null"
                                 : original.getWidth() + "x" + original.getHeight())
                                 + " alive=" + alive);
@@ -90,7 +89,7 @@ public final class AodWallpaperPreview {
                             : Bitmap.createScaledBitmap(preview,
                                     original.getWidth(), original.getHeight(), true);
                     param.setResult(replacement);
-                    Log.i(TAG, "tm wallpaper preview replaced " + replacement.getWidth()
+                    AliveLog.i(TAG, "tm wallpaper preview replaced " + replacement.getWidth()
                             + "x" + replacement.getHeight());
                 }
             };
@@ -100,9 +99,9 @@ public final class AodWallpaperPreview {
                 count = Xp.hookAllMethods(helper,
                         "getCurrentHomeWallpaperScreenshot", hook).size();
             }
-            Log.i(TAG, "tm wallpaper preview hook count=" + count);
+            AliveLog.i(TAG, "tm wallpaper preview hook count=" + count);
         } catch (Throwable error) {
-            Log.w(TAG, "tm wallpaper preview hook failed", error);
+            AliveLog.w(TAG, "tm wallpaper preview hook failed", error);
         }
     }
 
@@ -110,7 +109,7 @@ public final class AodWallpaperPreview {
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
-            Log.w(TAG, "tm uf: TemplateApiImpl missing");
+            AliveLog.w(TAG, "tm uf: TemplateApiImpl missing");
             return;
         }
         try {
@@ -127,7 +126,7 @@ public final class AodWallpaperPreview {
                     }
                     int n = UF_CALLS.incrementAndGet();
                     if (n <= 6) {
-                        Log.i(TAG, "tm uf call #" + n + " result="
+                        AliveLog.i(TAG, "tm uf call #" + n + " result="
                                 + original.getWidth() + "x" + original.getHeight()
                                 + " alive=" + alive);
                     }
@@ -138,15 +137,15 @@ public final class AodWallpaperPreview {
                             original.getWidth(), original.getHeight(), true);
                     param.setResult(replacement);
                     if (n <= 6) {
-                        Log.i(TAG, "tm uf replaced " + replacement.getWidth()
+                        AliveLog.i(TAG, "tm uf replaced " + replacement.getWidth()
                                 + "x" + replacement.getHeight());
                     }
                 }
             };
             int count = Xp.hookAllMethods(api, "uf", hook).size();
-            Log.i(TAG, "tm uf hook count=" + count);
+            AliveLog.i(TAG, "tm uf hook count=" + count);
         } catch (Throwable error) {
-            Log.w(TAG, "tm uf hook failed", error);
+            AliveLog.w(TAG, "tm uf hook failed", error);
         }
     }
 
@@ -154,7 +153,7 @@ public final class AodWallpaperPreview {
         Class<?> shots = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.Screenshots", loader);
         if (shots == null) {
-            Log.w(TAG, "tm shots: Screenshots missing");
+            AliveLog.w(TAG, "tm shots: Screenshots missing");
             return;
         }
         try {
@@ -170,7 +169,7 @@ public final class AodWallpaperPreview {
                     }
                     int n = SHOT_CALLS.incrementAndGet();
                     if (n <= 6) {
-                        Log.i(TAG, "tm shots t8r call #" + n + " result="
+                        AliveLog.i(TAG, "tm shots t8r call #" + n + " result="
                                 + (original == null ? "null"
                                 : original.getWidth() + "x" + original.getHeight())
                                 + " alive=" + alive);
@@ -183,15 +182,15 @@ public final class AodWallpaperPreview {
                                     original.getWidth(), original.getHeight(), true);
                     param.setResult(replacement);
                     if (n <= 6) {
-                        Log.i(TAG, "tm shots t8r replaced " + replacement.getWidth()
+                        AliveLog.i(TAG, "tm shots t8r replaced " + replacement.getWidth()
                                 + "x" + replacement.getHeight());
                     }
                 }
             };
             int count = Xp.hookAllMethods(shots, "t8r", hook).size();
-            Log.i(TAG, "tm shots t8r hook count=" + count);
+            AliveLog.i(TAG, "tm shots t8r hook count=" + count);
         } catch (Throwable error) {
-            Log.w(TAG, "tm shots hook failed", error);
+            AliveLog.w(TAG, "tm shots hook failed", error);
         }
     }
 
@@ -214,7 +213,7 @@ public final class AodWallpaperPreview {
             if (pfd == null) return null;
             return BitmapFactory.decodeFileDescriptor(pfd.getFileDescriptor());
         } catch (Throwable error) {
-            Log.w(TAG, "aod wallpaper preview provider failed", error);
+            AliveLog.w(TAG, "aod wallpaper preview provider failed", error);
             return null;
         } finally {
             if (pfd != null) {
@@ -238,7 +237,7 @@ public final class AodWallpaperPreview {
             }
             return bitmap;
         } catch (Throwable error) {
-            Log.w(TAG, "aod wallpaper preview decode failed", error);
+            AliveLog.w(TAG, "aod wallpaper preview decode failed", error);
             return null;
         }
     }

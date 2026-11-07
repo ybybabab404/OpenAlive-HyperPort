@@ -72,7 +72,7 @@ final class WallpaperPicker {
     private static boolean start(Activity activity,Intent intent,int request){
         try{activity.startActivityForResult(intent,request);return true;}
         catch(ActivityNotFoundException|SecurityException e){
-            android.util.Log.w("AliveClean","Wallpaper entry unavailable: "+intent,e);return false;
+            AliveLog.w("AliveClean","Wallpaper entry unavailable: "+intent,e);return false;
         }
     }
 
@@ -82,7 +82,7 @@ final class WallpaperPicker {
         WallpaperInfo home=manager.getWallpaperInfo();
         String homeName=home==null?null:home.getComponent().flattenToShortString();
         int homeId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
-        android.util.Log.i("AliveClean","wallpaper check: result="+result+" reliable="+reliableResult
+        AliveLog.i("AliveClean","wallpaper check: result="+result+" reliable="+reliableResult
                 +" home="+homeName+" homeId="+homeId+" prevHome="+previousHomeId+" expected="+expected.flattenToShortString());
 
         if(home!=null&&expected.equals(home.getComponent()))return true;
@@ -90,7 +90,7 @@ final class WallpaperPicker {
             WallpaperInfo lock=manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
             int lockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
             String lockName=lock==null?null:lock.getComponent().flattenToShortString();
-            android.util.Log.i("AliveClean","wallpaper check lock: "+lockName+" lockId="+lockId+" prevLock="+previousLockId);
+            AliveLog.i("AliveClean","wallpaper check lock: "+lockName+" lockId="+lockId+" prevLock="+previousLockId);
             if(lock!=null&&expected.equals(lock.getComponent()))return true;
         }
         return false;

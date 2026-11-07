@@ -359,7 +359,7 @@ final class OfficialEditor implements AutoCloseable {
         try(InputStream stream=activity.getAssets().open("editor/"+name)){
             Drawable image=Drawable.createFromStream(stream,name);
             if(image!=null&&image.getConstantState()!=null)thumbnails.put(name,image.getConstantState());return image;
-        }catch(Exception e){android.util.Log.e("AliveClean","Editor thumbnail: "+name,e);return null;}
+        }catch(Exception e){AliveLog.e("AliveClean","Editor thumbnail: "+name,e);return null;}
     }
     @Override public void close(){
         if(closed)return;closed=true;clock.scene(false);dialogs.close();thumbnails.clear();ui.close();

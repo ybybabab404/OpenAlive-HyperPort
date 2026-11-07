@@ -1,7 +1,6 @@
 package org.aliveclean;
 
 import android.content.Context;
-import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
@@ -17,7 +16,7 @@ public final class AodSettingsGuard {
     public static void install(ClassLoader loader) {
         Class<?> view = Xp.findClassIfExists(VIEW, loader);
         if (view == null) {
-            Log.w(TAG, "aod SettingsView missing");
+            AliveLog.w(TAG, "aod SettingsView missing");
             return;
         }
         hook(view, "onFinishInflate");
@@ -36,7 +35,7 @@ public final class AodSettingsGuard {
                         }
                     });
         } catch (Throwable error) {
-            Log.w(TAG, "aod setFsAodStyle hook failed", error);
+            AliveLog.w(TAG, "aod setFsAodStyle hook failed", error);
         }
     }
 
@@ -48,12 +47,12 @@ public final class AodSettingsGuard {
                     try {
                         bind((View) param.thisObject);
                     } catch (Throwable error) {
-                        Log.w(TAG, "aod bind failed", error);
+                        AliveLog.w(TAG, "aod bind failed", error);
                     }
                 }
             });
         } catch (Throwable error) {
-            Log.w(TAG, "aod " + method + " hook failed", error);
+            AliveLog.w(TAG, "aod " + method + " hook failed", error);
         }
     }
 

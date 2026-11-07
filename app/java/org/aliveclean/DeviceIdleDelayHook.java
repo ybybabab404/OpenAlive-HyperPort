@@ -3,7 +3,6 @@ package org.aliveclean;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.util.Log;
 
 public final class DeviceIdleDelayHook {
     private static final String TAG = "AliveHSHooks";
@@ -20,7 +19,7 @@ public final class DeviceIdleDelayHook {
     public static void install(ClassLoader loader) throws Throwable {
         Class<?> type = Xp.findClassIfExists("com.android.server.DeviceIdleController", loader);
         if (type == null) {
-            Log.w(TAG, "device idle: DeviceIdleController missing");
+            AliveLog.w(TAG, "device idle: DeviceIdleController missing");
             return;
         }
 
@@ -50,12 +49,12 @@ public final class DeviceIdleDelayHook {
                 param.setResult(null);
                 if (!suppressedLogged) {
                     suppressedLogged = true;
-                    Log.i(TAG, "device idle: first no-activity deferred");
+                    AliveLog.i(TAG, "device idle: first no-activity deferred");
                 }
             }
         });
 
-        Log.i(TAG, "device idle delay hook: ok");
+        AliveLog.i(TAG, "device idle delay hook: ok");
     }
 
     private static void arm(Object controller) {
@@ -73,12 +72,12 @@ public final class DeviceIdleDelayHook {
                 try {
                     Xp.callMethod(controller, "becomeInactiveIfAppropriateLocked");
                 } catch (Throwable error) {
-                    Log.e(TAG, "device idle: deferred transition failed", error);
+                    AliveLog.e(TAG, "device idle: deferred transition failed", error);
                 }
             }
         };
         handler.postDelayed(pending, DEFER_MS);
-        Log.i(TAG, "device idle: no-activity armed for " + DEFER_MS + "ms");
+        AliveLog.i(TAG, "device idle: no-activity armed for " + DEFER_MS + "ms");
     }
 
     private static void cancel() {

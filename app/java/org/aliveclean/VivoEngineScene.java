@@ -42,7 +42,7 @@ final class VivoEngineScene implements AutoCloseable {
     VivoEngineScene(VivoEngineRuntime runtime,VivoOptions options,int width,int height,List<Bitmap> photos,
             Bitmap subject,Bitmap paint,boolean preview,Runnable invalidate)throws Exception{
         api=new VivoCalls(runtime);family=options.family;role=preview?"preview":"wallpaper";this.width=width;this.height=height;this.preview=preview;this.invalidate=invalidate;this.options=VivoOptions.parse(options.json());
-        android.util.Log.i("AliveClean","vivo create id="+id+" "+role+" family="+family+" style="+options.style);
+        AliveLog.i("AliveClean","vivo create id="+id+" "+role+" family="+family+" style="+options.style);
         zoom.enabled(options.wallpaperZoom,mode,System.nanoTime());
         try{
             String renderName=family==VivoOptions.LIQUID?"naturaleffects.NaturalEffectsPreRender":family==VivoOptions.RASTER?"raster.RasterPreRender":"effectscard.EffectsCardPreRender";
@@ -118,7 +118,7 @@ final class VivoEngineScene implements AutoCloseable {
                 controllerSlot=api.type(family==VivoOptions.RASTER?BASE+"plugin.raster.RasterPrePluginManger":BASE+"plugin.effectscard.EffectsCardPrePluginManger").getMethod("getInstance").invoke(null);
                 controllerSlotField=controllerSlot.getClass().getDeclaredField("iEffectPreCtrl");
                 controllerSlotField.setAccessible(true);
-                android.util.Log.i("AliveClean","vivo controller id="+id+" "+role+" instance="+Integer.toHexString(System.identityHashCode(controller))+" shared="+(controllerSlotField.get(controllerSlot)==null?"null":Integer.toHexString(System.identityHashCode(controllerSlotField.get(controllerSlot)))));
+                AliveLog.i("AliveClean","vivo controller id="+id+" "+role+" instance="+Integer.toHexString(System.identityHashCode(controller))+" shared="+(controllerSlotField.get(controllerSlot)==null?"null":Integer.toHexString(System.identityHashCode(controllerSlotField.get(controllerSlot)))));
                 if(family==VivoOptions.FLASH){
                     Object config=api.get(controller,"g");
                     api.call(config,"setCustomDataBean",new Class<?>[]{api.type(BASE+"plugin.effectscard.EffectsCardCustomDataBean")},api.get(plugin,"mCustomDataBean"));
@@ -142,11 +142,11 @@ final class VivoEngineScene implements AutoCloseable {
     void visible(boolean value){
         if(closed)return;
 
-        if(visibilitySet&&visible==value){android.util.Log.i("AliveClean","vivo visible id="+id+" "+role+" value="+value+" same=true mode="+mode+" running="+running);if(value)updateAnimation();return;}
+        if(visibilitySet&&visible==value){AliveLog.i("AliveClean","vivo visible id="+id+" "+role+" value="+value+" same=true mode="+mode+" running="+running);if(value)updateAnimation();return;}
         visibilitySet=true;
         visible=value;
         if(sensorGain!=null){if(value){sensorGain.start();sensorGain.resume();}else sensorGain.stop();}
-        android.util.Log.i("AliveClean","vivo visible id="+id+" "+role+" value="+value+" same=false mode="+mode+" running="+running);
+        AliveLog.i("AliveClean","vivo visible id="+id+" "+role+" value="+value+" same=false mode="+mode+" running="+running);
         if(!value){zoom.pause();dim.pause();resumePending=true;}
         updateAnimation();
         if(value)invalidate.run();
@@ -156,13 +156,13 @@ final class VivoEngineScene implements AutoCloseable {
         if(layer!=null)layer.visible(value);
         if(!value)flashReady=false;
         main.post(()->{if(closed||controller==null)return;try{
-            android.util.Log.i("AliveClean","vivo anim id="+id+" "+role+" family="+family+" value="+value+" running="+running+" mode="+mode);
+            AliveLog.i("AliveClean","vivo anim id="+id+" "+role+" family="+family+" value="+value+" running="+running+" mode="+mode);
             if(value&&resumePending){
                 resumePending=false;
 
                 if(running){
                     running=false;
-                    android.util.Log.i("AliveClean","vivo replay after hidden family="+family);
+                    AliveLog.i("AliveClean","vivo replay after hidden family="+family);
                 }
             }
             if(running==value){
@@ -173,7 +173,7 @@ final class VivoEngineScene implements AutoCloseable {
             if(!value)stop();
             else if(family==VivoOptions.LIQUID){
 
-                try{api.call(controller,"playAnim");}catch(Exception e){android.util.Log.e("AliveClean","vivo playAnim failed id="+id,e);}
+                try{api.call(controller,"playAnim");}catch(Exception e){AliveLog.e("AliveClean","vivo playAnim failed id="+id,e);}
             }
             else if(family==VivoOptions.RASTER){
                 try{
@@ -181,7 +181,7 @@ final class VivoEngineScene implements AutoCloseable {
                     api.set(sensor,"e",0L);
                     api.call(controller,"d",new Class<?>[]{boolean.class},videoRaster());
                     if(sensorGain!=null)sensorGain.reclaim();
-                }catch(Exception e){android.util.Log.e("AliveClean","vivo raster start failed id="+id,e);}
+                }catch(Exception e){AliveLog.e("AliveClean","vivo raster start failed id="+id,e);}
             }
             else {
 
@@ -190,11 +190,11 @@ final class VivoEngineScene implements AutoCloseable {
                     api.set(sensor,"e",0L);api.set(sensor,"f",0f);api.set(sensor,"g",0f);api.set(sensor,"h",0f);
                     api.call(controller,"a");flashReady=true;invalidate.run();
                     if(sensorGain!=null)sensorGain.reclaim();
-                }catch(Exception e){android.util.Log.e("AliveClean","vivo flash start failed id="+id,e);}
+                }catch(Exception e){AliveLog.e("AliveClean","vivo flash start failed id="+id,e);}
             }
             if(value&&sensorGain!=null)sensorGain.start();
             running=value;
-        }catch(Exception e){android.util.Log.e("AliveClean","Vivo lifecycle failed",e);}});
+        }catch(Exception e){AliveLog.e("AliveClean","Vivo lifecycle failed",e);}});
     }
     void mode(int next,boolean animate){transition(next,animate,nightLevel,aodMask);}
     void transition(int next,boolean animate,float night,float mask){
@@ -220,7 +220,7 @@ final class VivoEngineScene implements AutoCloseable {
             Object current=controllerSlotField.get(controllerSlot);
             if(current!=controller){
                 controllerSlotField.set(controllerSlot,controller);
-                android.util.Log.i("AliveClean","vivo pin controller id="+id+" "+role+" previous="+(current==null?"null":Integer.toHexString(System.identityHashCode(current))));
+                AliveLog.i("AliveClean","vivo pin controller id="+id+" "+role+" previous="+(current==null?"null":Integer.toHexString(System.identityHashCode(current))));
             }
         }catch(Throwable ignored){}
     }
@@ -289,7 +289,7 @@ final class VivoEngineScene implements AutoCloseable {
             String json="{\"data\":{\"eventAction\":"+action+",\"x\":"+tx+",\"y\":"+ty+"}}";
             Object touch=bean(BASE+"bean.TouchDataBean",json);
             api.call(controller,"onWallpaperTouchEvent",new Class<?>[]{touch.getClass()},touch);
-        }catch(Exception e){android.util.Log.w("AliveClean","Vivo touch unavailable",e);}});
+        }catch(Exception e){AliveLog.w("AliveClean","Vivo touch unavailable",e);}});
     }
     private void stop()throws Exception{
 
@@ -306,8 +306,8 @@ final class VivoEngineScene implements AutoCloseable {
             field.setAccessible(true);
             Object previous=field.get(manager);
             field.set(manager,null);
-            android.util.Log.i("AliveClean","vivo reset shared controller family="+family+" previous="+(previous==null?"null":Integer.toHexString(System.identityHashCode(previous))));
-        }catch(Throwable error){android.util.Log.w("AliveClean","vivo controller reset unavailable",error);}
+            AliveLog.i("AliveClean","vivo reset shared controller family="+family+" previous="+(previous==null?"null":Integer.toHexString(System.identityHashCode(previous))));
+        }catch(Throwable error){AliveLog.w("AliveClean","vivo controller reset unavailable",error);}
     }
 
     private void clearSharedController(Object controller){
@@ -320,16 +320,16 @@ final class VivoEngineScene implements AutoCloseable {
             field.setAccessible(true);
             if(field.get(manager)==controller){
                 field.set(manager,null);
-                android.util.Log.i("AliveClean","vivo clear shared controller family="+family);
+                AliveLog.i("AliveClean","vivo clear shared controller family="+family);
             }
-        }catch(Throwable error){android.util.Log.w("AliveClean","vivo controller clear unavailable",error);}
+        }catch(Throwable error){AliveLog.w("AliveClean","vivo controller clear unavailable",error);}
     }
     private void drain(){for(Runnable r;(r=glTasks.poll())!=null;)r.run();}
     @Override public void close(){
         if(closed)return;visible=false;
 
         if(sensorGain!=null){sensorGain.close();sensorGain=null;}
-        android.util.Log.i("AliveClean","vivo close id="+id+" "+role+" family="+family);
+        AliveLog.i("AliveClean","vivo close id="+id+" "+role+" family="+family);
 
         FutureTask<Void> shutdown=new FutureTask<>(()->{
             if(controller!=null){stop();if(liquidSensitivity!=null)liquidSensitivity.close();if(family==VivoOptions.LIQUID)api.call(controller,"destroy");
@@ -340,7 +340,7 @@ final class VivoEngineScene implements AutoCloseable {
         try{shutdown.get(3,TimeUnit.SECONDS);if(family==VivoOptions.FLASH){FutureTask<Void> barrier=new FutureTask<>(()->null);main.post(barrier);barrier.get(3,TimeUnit.SECONDS);}drain();
             if(family==VivoOptions.RASTER&&controller!=null){Object res=api.get(controller,"b");api.call(controller,"destroy");if(res!=null&&!videoRaster())((ExecutorService)api.get(res,"h")).shutdownNow();}
             if(family==VivoOptions.RASTER||family==VivoOptions.FLASH)clearSharedController(controller);
-        }catch(Exception e){android.util.Log.w("AliveClean","Vivo renderer release incomplete",e);}
+        }catch(Exception e){AliveLog.w("AliveClean","Vivo renderer release incomplete",e);}
         closed=true;main.removeCallbacksAndMessages(null);glTasks.clear();dimPass.close();if(layer!=null){layer.close();layer=null;}if(liquidMask!=null){liquidMask.recycle();liquidMask=null;}
 
         android.opengl.GLES30.glUseProgram(0);android.opengl.GLES30.glBindVertexArray(0);

@@ -167,7 +167,7 @@ public final class XiaomiPlayer implements AutoCloseable {
         if(closed||ready||!attached||!running)return;
         initChecks++;
         if(android.os.SystemClock.uptimeMillis()-initStarted>30000){initializing=false;mainHandler.removeCallbacks(retry);Exception e=new IOException("小米原版渲染器初始化超时，请重新打开壁纸");initError=e.toString();if(whenFailed!=null)whenFailed.accept(e);return;}
-        try{if(Boolean.TRUE.equals(field(callbackOwner,"mInited"))){ready=true;initializing=false;mainHandler.removeCallbacks(retry);if(whenReady!=null)whenReady.run();return;}}catch(Exception e){android.util.Log.e("OpenAliveXiaomi","Original initialization status",e);return;}
+        try{if(Boolean.TRUE.equals(field(callbackOwner,"mInited"))){ready=true;initializing=false;mainHandler.removeCallbacks(retry);if(whenReady!=null)whenReady.run();return;}}catch(Exception e){AliveLog.e("OpenAliveXiaomi","Original initialization status",e);return;}
         mainHandler.postDelayed(this,100);
     }};
     private final Runnable retry=()->{try{if(!closed&&!ready&&attached&&running&&initializing)bootstrap();}catch(Exception e){if(whenFailed!=null)whenFailed.accept(e);}};

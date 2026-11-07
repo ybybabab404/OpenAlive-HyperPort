@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.content.res.AssetManager;
 import android.os.*;
-import android.util.Log;
 import android.opengl.GLES30;
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -42,7 +41,7 @@ final class MaskFrames implements AutoCloseable {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,texture);value.position(0);
         int side=index==end?720:size;
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D,0,GLES30.GL_RGB,side,side,0,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,value);
-        if(Diagnostics.TRACE){if(index<start)presentedFrames++;if(index==end)Log.i("AliveClean","Frame mask endpoint: decoded="+decodedFrames+" presented="+presentedFrames);}
+        if(Diagnostics.TRACE){if(index<start)presentedFrames++;if(index==end)AliveLog.i("AliveClean","Frame mask endpoint: decoded="+decodedFrames+" presented="+presentedFrames);}
         uploaded=index;return true;
     }
     synchronized boolean failed(){return failures>=3;}
@@ -57,7 +56,7 @@ final class MaskFrames implements AutoCloseable {
             try(InputStream in=assets.open(paths[target])){decoder.decode(in,pixels,side*side*3);}
             synchronized(this){if(!closed){if(Diagnostics.TRACE)decodedFrames++;cache.put(target,pixels);while(cache.size()>capacity)cache.remove(cache.keySet().iterator().next());}}
             if(!closed)owner.post(ready);
-        }catch(IOException|RuntimeException e){synchronized(this){failures++;}Log.e("AliveClean","Mask decode failed",e);}
+        }catch(IOException|RuntimeException e){synchronized(this){failures++;}AliveLog.e("AliveClean","Mask decode failed",e);}
         synchronized(this){queued=false;if(!closed&&failures<3&&desired!=target&&!cache.containsKey(desired)){queued=true;worker.post(decode);}}
     }
     @Override public synchronized void close(){if(closed)return;closed=true;worker.removeCallbacksAndMessages(null);cache.clear();worker.post(decoder::close);thread.quitSafely();}

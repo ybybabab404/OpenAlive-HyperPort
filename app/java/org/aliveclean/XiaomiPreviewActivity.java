@@ -89,7 +89,7 @@ public class XiaomiPreviewActivity extends Activity implements SurfaceHolder.Cal
         player=new XiaomiPlayer(runtime,surface.getHolder(),this);player.whenFailed(this::failure);surface.getHolder().addCallback(this);setContentView(content);
         detail.addOnLayoutChangeListener(new View.OnLayoutChangeListener(){public void onLayoutChange(View v,int l,int t,int r,int b,int ol,int ot,int or,int ob){if(r>l&&b>t){v.removeOnLayoutChangeListener(this);showChoice();}}});
 
-        try{clock=new OfficialHyperOsClockFace(OfficialHyperOsUi.open(this),"classic",0);((FrameLayout)ui.find(detail,"super_wallpaper_preview")).addView(clock,new FrameLayout.LayoutParams(-1,-1));clock.setVisibility(View.INVISIBLE);}catch(Exception e){android.util.Log.w("OpenAliveXiaomi","Original lock preview clock",e);}
+        try{clock=new OfficialHyperOsClockFace(OfficialHyperOsUi.open(this),"classic",0);((FrameLayout)ui.find(detail,"super_wallpaper_preview")).addView(clock,new FrameLayout.LayoutParams(-1,-1));clock.setVisibility(View.INVISIBLE);}catch(Exception e){AliveLog.w("OpenAliveXiaomi","Original lock preview clock",e);}
         aodClock=(ImageView)ui.find(detail,"super_wallpaper_setting_aod_preview");loadAodClock();
     }
     private static Icon icon(Resources r,int id){Bitmap b=BitmapFactory.decodeResource(r,id);if(b==null)throw new IllegalArgumentException("Missing original landing image");return Icon.createWithBitmap(b);}
@@ -100,7 +100,7 @@ public class XiaomiPreviewActivity extends Activity implements SurfaceHolder.Cal
     }catch(Exception e){runOnUiThread(this::offlineAodClock);}},"XiaomiAodPreview").start();}
     private void offlineAodClock(){if(isDestroyed()||detail==null)return;detail.post(()->{if(isDestroyed())return;try{
         aodClock.setImageBitmap(XiaomiAodPreview.render(this,metadata,detail.getWidth(),detail.getHeight()));
-    }catch(Exception|LinkageError e){android.util.Log.w("OpenAliveXiaomi","Original offline AOD preview",e);}});}
+    }catch(Exception|LinkageError e){AliveLog.w("OpenAliveXiaomi","Original offline AOD preview",e);}});}
     private void showChoice(){if(detail==null)return;try{ui.find(detail,"choose_container").setVisibility(choosing?View.VISIBLE:View.GONE);((View)progress).setVisibility(choosing?View.GONE:View.VISIBLE);
         View mask=ui.find(detail,"super_wallpaper_mask");if(mask.isLaidOut())XiaomiUi.call(mask,"toq",new Class<?>[]{boolean.class},choosing);updateLand();updateProgress();
     }catch(Exception e){failure(e);}}
@@ -156,6 +156,6 @@ public class XiaomiPreviewActivity extends Activity implements SurfaceHolder.Cal
     @Override protected void onPause(){resumed=false;updateProgress();try{if(player!=null)player.running(false);}catch(Exception e){failure(e);}super.onPause();}
     @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);send((c.uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES?"Night":"Day");}
     @Override protected void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("scene",scene);b.putInt("land",land);b.putBoolean("choosing",choosing);b.putBoolean("picker",awaitingPicker);b.putBoolean("pickerResultReliable",pickerResultReliable);b.putInt("previousLand",previousLand);b.putInt("previousId",previousWallpaperId);b.putInt("previousLockId",previousLockId);if(pendingPickerResult!=null)b.putInt("pendingPickerResult",pendingPickerResult);}
-    @Override protected void onDestroy(){main.removeCallbacksAndMessages(null);try{if(clock!=null)clock.close();if(player!=null)player.close();}catch(Exception e){android.util.Log.w("OpenAliveXiaomi","Preview cleanup",e);}super.onDestroy();}
-    private void failure(Exception e){String reason=XiaomiFailure.describe(this,"Preview "+getClass().getSimpleName(),e);android.util.Log.e("OpenAliveXiaomi","Preview",e);if(!isDestroyed())new AlertDialog.Builder(this).setTitle("预览暂时无法打开").setMessage(reason).setPositiveButton("确定",(d,w)->finish()).show();}
+    @Override protected void onDestroy(){main.removeCallbacksAndMessages(null);try{if(clock!=null)clock.close();if(player!=null)player.close();}catch(Exception e){AliveLog.w("OpenAliveXiaomi","Preview cleanup",e);}super.onDestroy();}
+    private void failure(Exception e){String reason=XiaomiFailure.describe(this,"Preview "+getClass().getSimpleName(),e);AliveLog.e("OpenAliveXiaomi","Preview",e);if(!isDestroyed())new AlertDialog.Builder(this).setTitle("预览暂时无法打开").setMessage(reason).setPositiveButton("确定",(d,w)->finish()).show();}
 }

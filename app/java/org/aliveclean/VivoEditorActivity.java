@@ -110,7 +110,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
             if(options.family==VivoOptions.RASTER)rasterOptions(body);
             else if(tab==0)areaOptions(body);
             else effectOptions(body);
-        }catch(Exception e){TextView error=ui.text("选项加载失败："+e.getMessage(),14);body.addView(error);android.util.Log.e("AliveClean","Vivo panel failed",e);}
+        }catch(Exception e){TextView error=ui.text("选项加载失败："+e.getMessage(),14);body.addView(error);AliveLog.e("AliveClean","Vivo panel failed",e);}
         sensitivity(body);
         Switch zoom=effectSwitch(body,"息屏与亮屏壁纸缩放",options.wallpaperZoom);
         zoom.setOnCheckedChangeListener((v,on)->{options.wallpaperZoom=on;saveDraft();});
@@ -167,7 +167,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         for(int i=1;i<=4;i++){final int style=i;View tile=ui.inflate("raster_trans_list_item_layout",row);row.addView(tile);tile.findViewById(ui.id("id","iv_selected")).setVisibility(options.style==i?View.VISIBLE:View.GONE);
             Object pag=tile.findViewById(ui.id("id","iv_style_img"));Object composition=api.type("org.libpag.PAGFile").getMethod("Load",android.content.res.AssetManager.class,String.class).invoke(null,runtime.getAssets(),"vivo/ui/raster/icon_"+i+".pag");
             api.call(pag,"setComposition",new Class<?>[]{api.type("org.libpag.PAGComposition")},composition);api.call(pag,"setScaleMode",new Class<?>[]{int.class},3);api.call(pag,"setRepeatCount",new Class<?>[]{int.class},1);
-            ((View)pag).post(()->{try{api.call(pag,"setCurrentFrame",new Class<?>[]{int.class},0);api.call(pag,"flush");}catch(Exception e){android.util.Log.w("AliveClean","Vivo option preview failed",e);}});
+            ((View)pag).post(()->{try{api.call(pag,"setCurrentFrame",new Class<?>[]{int.class},0);api.call(pag,"flush");}catch(Exception e){AliveLog.w("AliveClean","Vivo option preview failed",e);}});
             tile.setContentDescription("光栅效果 "+i);tile.setOnClickListener(v->{options.style=style;saveDraft();showPanel(0);});}
     }
     private void sensitivity(LinearLayout parent){
@@ -260,12 +260,12 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
             if(PlatformProfile.isHyperOs(this)){
 
                 awaitingApply=true;
-                android.util.Log.i("AliveClean","vivo apply via SceneApply family="+options.family);
+                AliveLog.i("AliveClean","vivo apply via SceneApply family="+options.family);
                 new Thread(()->{
                     String failure=null;
                     try{SceneApply.apply(this);}catch(Exception error){failure=error.getMessage();}
                     final String message=failure;
-                    runOnUiThread(()->{awaitingApply=false;if(isDestroyed())return;if(message==null){android.util.Log.i("AliveClean","vivo SceneApply ok");commit();}else{android.util.Log.e("AliveClean","vivo SceneApply failed: "+message);toast("壁纸应用失败："+message);}});
+                    runOnUiThread(()->{awaitingApply=false;if(isDestroyed())return;if(message==null){AliveLog.i("AliveClean","vivo SceneApply ok");commit();}else{AliveLog.e("AliveClean","vivo SceneApply failed: "+message);toast("壁纸应用失败："+message);}});
                 },"VivoSceneApply").start();
                 return;
             }

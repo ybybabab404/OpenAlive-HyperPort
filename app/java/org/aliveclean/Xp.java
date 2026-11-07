@@ -25,6 +25,16 @@ public final class Xp {
         api = value;
     }
 
+    public static void log(int level, String tag, String message, Throwable error) {
+        XposedInterface value = api;
+        if (value == null) return;
+        try {
+            if (error == null) value.log(level, tag, message);
+            else value.log(level, tag, message, error);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private static XposedInterface api() {
         XposedInterface value = api;
         if (value == null) throw new IllegalStateException("Xposed API is not attached");
@@ -92,7 +102,12 @@ public final class Xp {
                 param.method = chain.getExecutable();
                 List<Object> values = chain.getArgs();
                 param.args = values == null ? new Object[0] : values.toArray(new Object[0]);
-                callback.beforeHookedMethod(param);
+                try {
+                    callback.beforeHookedMethod(param);
+                } catch (Throwable error) {
+                    AliveLog.e(AliveLog.TAG, describe(param.method) + " before failed", error);
+                    param.throwable = null;
+                }
                 if (param.throwable != null) throw param.throwable;
                 if (!param.returnEarly) {
                     try {
@@ -102,12 +117,22 @@ public final class Xp {
                         param.throwable = error;
                     }
                 }
-                callback.afterHookedMethod(param);
+                try {
+                    callback.afterHookedMethod(param);
+                } catch (Throwable error) {
+                    AliveLog.e(AliveLog.TAG, describe(param.method) + " after failed", error);
+                    param.throwable = null;
+                }
                 if (param.throwable != null) throw param.throwable;
                 return param.result;
             }
         });
         return new Unhook(handle);
+    }
+
+    static String describe(java.lang.reflect.Member member) {
+        if (member == null) return "unknown hook";
+        return member.getDeclaringClass().getName() + "#" + member.getName();
     }
 
     public static Class<?> findClass(String name, ClassLoader loader) throws ClassNotFoundException {

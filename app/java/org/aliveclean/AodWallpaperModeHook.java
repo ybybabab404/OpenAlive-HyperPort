@@ -4,7 +4,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 
 final class AodWallpaperModeHook {
     private static final String TAG = "AliveHSHooks";
@@ -15,7 +14,7 @@ final class AodWallpaperModeHook {
         Class<?> service = Xp.findClassIfExists(
                 "com.android.server.wallpaper.WallpaperManagerService", loader);
         if (service == null) {
-            Log.w(TAG, "WallpaperManagerService missing");
+            AliveLog.w(TAG, "WallpaperManagerService missing");
             return;
         }
         try {
@@ -38,15 +37,15 @@ final class AodWallpaperModeHook {
                                             AodWallpaperMode.restore(context);
                                         }
                                     } catch (Throwable error) {
-                                        Log.w(TAG, "aod restore check failed", error);
+                                        AliveLog.w(TAG, "aod restore check failed", error);
                                     }
                                 }
                             }, 800);
                         }
                     });
-            Log.i(TAG, "aod wallpaper restore hook: ok");
+            AliveLog.i(TAG, "aod wallpaper restore hook: ok");
         } catch (Throwable error) {
-            Log.e(TAG, "aod wallpaper restore hook failed", error);
+            AliveLog.e(TAG, "aod wallpaper restore hook failed", error);
         }
     }
 }

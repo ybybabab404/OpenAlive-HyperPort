@@ -5,7 +5,6 @@ import android.hardware.*;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.util.Log;
 
 import java.util.WeakHashMap;
 
@@ -34,7 +33,7 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
             long idle=SystemClock.uptimeMillis()-lastEvent;
             if(gyro!=null&&(!registered||idle>3000L)){
 
-                Log.i(TAG,"sensor gain watchdog rearm idle="+idle+" registered="+registered);
+                AliveLog.i(TAG,"sensor gain watchdog rearm idle="+idle+" registered="+registered);
                 if(registered){manager.unregisterListener(VivoSensorGain.this);registered=false;}
                 reclaim();
             }
@@ -49,7 +48,7 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
             if(existing!=null&&existing!=this&&existing.clients>0)peer=existing;
             else OWNERS.put(original,this);
         }
-        Log.i(TAG,"sensor gain create listener="+System.identityHashCode(original)+" peer="+(peer!=null));
+        AliveLog.i(TAG,"sensor gain create listener="+System.identityHashCode(original)+" peer="+(peer!=null));
     }
     static float multiplier(int relative){
         int value=Math.max(-50,Math.min(50,relative));
@@ -69,7 +68,7 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
         if(clients==0||gyro==null)return;
         if(registered){manager.unregisterListener(this);registered=false;}
         reclaim();
-        Log.i(TAG,"sensor gain resume registered="+registered);
+        AliveLog.i(TAG,"sensor gain resume registered="+registered);
     }
 
     void stop(){
@@ -85,15 +84,15 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
             reclaim();
             handler.removeCallbacks(watchdog);handler.postDelayed(watchdog,WATCHDOG_MS);
         }
-        Log.i(TAG,"sensor gain start clients="+clients+" registered="+registered);
+        AliveLog.i(TAG,"sensor gain start clients="+clients+" registered="+registered);
     }
     private void drop(){
         clients=Math.max(0,clients-1);
-        if(clients>0){Log.i(TAG,"sensor gain release clients="+clients);return;}
+        if(clients>0){AliveLog.i(TAG,"sensor gain release clients="+clients);return;}
         handler.removeCallbacks(watchdog);
         if(registered){manager.unregisterListener(this);registered=false;}
         if(gyro!=null)manager.unregisterListener(original,gyro);
-        Log.i(TAG,"sensor gain stop clients=0 registered=false");
+        AliveLog.i(TAG,"sensor gain stop clients=0 registered=false");
     }
 
     void reclaim(){
@@ -102,7 +101,7 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
         manager.unregisterListener(original,gyro);
         if(!registered){
             registered=manager.registerListener(this,gyro,sampling);
-            Log.i(TAG,"sensor gain owner=proxy registered="+registered);
+            AliveLog.i(TAG,"sensor gain owner=proxy registered="+registered);
         }
     }
 
@@ -119,7 +118,7 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
 
         if(samples<=3||now-lastSampleLog>=3000){
             lastSampleLog=now;
-            Log.i(TAG,"sensor gain sample n="+samples+" gain="+gain+" values="+event.values[0]+","+event.values[1]+","+event.values[2]);
+            AliveLog.i(TAG,"sensor gain sample n="+samples+" gain="+gain+" values="+event.values[0]+","+event.values[1]+","+event.values[2]);
         }
         if(gain==1f){original.onSensorChanged(event);return;}
         float x=event.values[0],y=event.values[1],z=event.values[2];
@@ -131,6 +130,6 @@ final class VivoSensorGain implements SensorEventListener,AutoCloseable {
         stop();
         peer=null;
         synchronized(OWNERS){if(OWNERS.get(original)==this)OWNERS.remove(original);}
-        Log.i(TAG,"sensor gain closed clients="+clients);
+        AliveLog.i(TAG,"sensor gain closed clients="+clients);
     }
 }

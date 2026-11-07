@@ -10,6 +10,7 @@ import java.lang.reflect.InvocationTargetException;
 public final class SceneApply {
     static void apply(Context context) throws Exception {
         if (android.os.Process.myUid() / 100000 != 0) throw new java.io.IOException("目前仅支持主用户");
+        AliveLog.i(AliveLog.APPLY, "scene apply start");
         String path = context.getApplicationInfo().sourceDir;
         String command = "CLASSPATH='" + path.replace("'", "'\"'\"'") + "' /system/bin/app_process /system/bin org.aliveclean.SceneApply";
         Process process = new ProcessBuilder("su", "1000", "-c", command).redirectErrorStream(true).start();
@@ -23,13 +24,17 @@ public final class SceneApply {
         if (!process.waitFor(25, java.util.concurrent.TimeUnit.SECONDS)) { process.destroyForcibly(); throw new java.io.IOException("壁纸应用超时，请检查 Root 授权"); }
         reader.join(1000);
         String output; synchronized (result) { output = result.toString(); }
-        if (process.exitValue() != 0 || !output.contains("SCENE_APPLIED")) throw new java.io.IOException("系统未完成壁纸应用：" + output.trim());
+        if (process.exitValue() != 0 || !output.contains("SCENE_APPLIED")) {
+            AliveLog.e(AliveLog.APPLY, "scene apply rejected exit=" + process.exitValue() + " output=" + output.trim());
+            throw new java.io.IOException("系统未完成壁纸应用：" + output.trim());
+        }
 
     }
 
     public static void main(String[] args) {
         try {
             if (android.os.Process.myUid() != 1000) throw new SecurityException("System UID required");
+            AliveLog.i(AliveLog.APPLY, "scene apply subprocess start uid=" + android.os.Process.myUid());
             Looper.prepareMainLooper();
             Class<?> thread = Class.forName("android.app.ActivityThread");
             Object instance = thread.getMethod("systemMain").invoke(null);
@@ -45,11 +50,13 @@ public final class SceneApply {
             }
             WallpaperInfo actual = manager.getWallpaperInfo();
             if (actual == null || !component.equals(actual.getComponent())) throw new IllegalStateException("Wallpaper verification failed");
-            try { AodWallpaperMode.enter(context); } catch (Throwable modeError) { modeError.printStackTrace(System.out); }
+            try { AodWallpaperMode.enter(context); } catch (Throwable modeError) { AliveLog.w(AliveLog.APPLY, "aod mode enter failed", modeError); modeError.printStackTrace(System.out); }
             ModuleActivation.request(context);
+            AliveLog.i(AliveLog.APPLY, "scene applied " + component.flattenToShortString());
             System.out.println("SCENE_APPLIED");
             System.exit(0);
         } catch (Throwable error) {
+            AliveLog.e(AliveLog.APPLY, "scene apply failed", error);
             error.printStackTrace(System.out);
             System.out.println("SCENE_FAILED " + error);
             System.exit(1);

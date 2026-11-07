@@ -5,7 +5,10 @@ import android.view.Surface;
 public final class XiaomiSurfaceLease {
     static { System.loadLibrary("alive_clean"); }
     private long handle;
-    public XiaomiSurfaceLease(String frameworkPath) { handle=open(frameworkPath); }
+    public XiaomiSurfaceLease(String frameworkPath) {
+        handle=open(frameworkPath);
+        if(handle==0)AliveLog.w(AliveLog.TAG,"surface lease open failed path="+frameworkPath);
+    }
     public void retain(Surface surface) { retain(handle,surface); }
     public void replaced() { replaced(handle); }
     public void destroyed() { if(handle!=0){destroyed(handle);handle=0;} }

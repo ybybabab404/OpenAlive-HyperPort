@@ -7,7 +7,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 
@@ -33,7 +32,7 @@ final class KeyguardDepthHider {
         Class<?> panel = Xp.findClassIfExists(
                 "com.android.keyguard.panel.KeyguardPanelViewController", loader);
         if (panel == null) {
-            Log.w(TAG, "KeyguardPanelViewController missing");
+            AliveLog.w(TAG, "KeyguardPanelViewController missing");
             return;
         }
         Xp.hookAllConstructors(panel, new Xp.MethodHook() {
@@ -49,7 +48,7 @@ final class KeyguardDepthHider {
         Class<?> depth = Xp.findClassIfExists(
                 "com.android.keyguard.depth.KeyguardDepthInteractor", loader);
         if (depth == null) {
-            Log.w(TAG, "KeyguardDepthInteractor missing");
+            AliveLog.w(TAG, "KeyguardDepthInteractor missing");
         } else {
             Xp.findAndHookMethod(depth, "updateDeductedImageView", new Xp.MethodHook() {
                 @Override protected void beforeHookedMethod(Xp.MethodHookParam call) {
@@ -57,7 +56,7 @@ final class KeyguardDepthHider {
                     cancelParse(call.thisObject);
                     setField(call.thisObject, "isDepthFileParsing", Boolean.FALSE);
                     clear(call.thisObject);
-                    Log.i(TAG, "depth parse skipped: AliveHS wallpaper");
+                    AliveLog.i(TAG, "depth parse skipped: AliveHS wallpaper");
                     call.setResult(null);
                 }
             });
@@ -73,7 +72,7 @@ final class KeyguardDepthHider {
                 try {
                     Xp.callMethod(call.thisObject, "updateKeyguardElementsVisibility");
                 } catch (Throwable error) {
-                    Log.w(TAG, "refresh keyguard visibility failed", error);
+                    AliveLog.w(TAG, "refresh keyguard visibility failed", error);
                 }
             }
         });
@@ -85,7 +84,7 @@ final class KeyguardDepthHider {
                 if (depth != null) clear(depth);
             }
         });
-        Log.i(TAG, "installed");
+        AliveLog.i(TAG, "installed");
     }
 
     static void onActivation(Context context) {
@@ -115,7 +114,7 @@ final class KeyguardDepthHider {
             try {
                 apply(panel);
             } catch (Throwable error) {
-                Log.w(TAG, "panel refresh failed", error);
+                AliveLog.w(TAG, "panel refresh failed", error);
             }
         }
     }
@@ -131,12 +130,12 @@ final class KeyguardDepthHider {
         try {
             Xp.callMethod(panel, "updateShowDepthState");
         } catch (Throwable error) {
-            Log.w(TAG, "updateShowDepthState failed", error);
+            AliveLog.w(TAG, "updateShowDepthState failed", error);
         }
         try {
             Xp.callMethod(depth, "updateDeductedImageView");
         } catch (Throwable error) {
-            Log.w(TAG, "updateDeductedImageView failed", error);
+            AliveLog.w(TAG, "updateDeductedImageView failed", error);
         }
         if (ours) clear(depth);
     }
@@ -160,7 +159,7 @@ final class KeyguardDepthHider {
             if (info == null) info = manager.getWallpaperInfo();
             ours = info != null && "org.aliveclean".equals(info.getPackageName());
         } catch (Throwable error) {
-            Log.w(TAG, "wallpaper lookup failed", error);
+            AliveLog.w(TAG, "wallpaper lookup failed", error);
         }
         ourWallpaper = ours;
         wallpaperCheckedAt = now;
@@ -211,7 +210,7 @@ final class KeyguardDepthHider {
                 return;
             } catch (NoSuchFieldException ignored) {
             } catch (Throwable error) {
-                Log.w(TAG, "cannot set " + name, error);
+                AliveLog.w(TAG, "cannot set " + name, error);
                 return;
             }
         }

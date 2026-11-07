@@ -44,7 +44,7 @@ final class XiaomiHomePreview {
                 options.inSampleSize=1;while(options.outWidth/options.inSampleSize>640)options.inSampleSize*=2;
                 options.inJustDecodeBounds=false;card.image=BitmapFactory.decodeResource(resources.get(pack.id),id,options);
                 if(card.image==null)throw new IOException("Original stage thumbnail unreadable");
-            }catch(Exception error){android.util.Log.w("OpenAliveXiaomi","Home preview "+pack.id+"/"+mode,error);}
+            }catch(Exception error){AliveLog.w("OpenAliveXiaomi","Home preview "+pack.id+"/"+mode,error);}
         }
         return cards;
     }
@@ -56,7 +56,7 @@ final class XiaomiHomePreview {
             super(c);android.util.DisplayMetrics metrics=new android.util.DisplayMetrics();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealMetrics(metrics);
             width=metrics.widthPixels;height=metrics.heightPixels;renderer=new XiaomiAodPreview.Renderer(c,metadata);
             renderer.whenBatteryChanged(this::invalidate);
-            updates=new ClockUpdates(c,true,time->{try{renderer.update();invalidate();}catch(Exception error){android.util.Log.w("OpenAliveXiaomi","Home clock refresh",error);}});
+            updates=new ClockUpdates(c,true,time->{try{renderer.update();invalidate();}catch(Exception error){AliveLog.w("OpenAliveXiaomi","Home clock refresh",error);}});
         }
         void active(boolean value){renderer.active(value);if(value)updates.start();else updates.stop();}
         @Override protected void onDraw(Canvas canvas){

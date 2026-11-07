@@ -36,14 +36,14 @@ final class VivoVideoTexture implements AutoCloseable {
             stream.setOnFrameAvailableListener(s->{if(!closed){pending=true;invalidate.run();}});
             surface=new Surface(stream);player.setSurface(surface);player.setVolume(0,0);player.setLooping(true);
             player.setDataSource(file.getPath());player.prepare();
-            player.setOnErrorListener((p,what,extra)->{android.util.Log.e("AliveClean","Vivo clip failed: "+what+"/"+extra);return true;});
+            player.setOnErrorListener((p,what,extra)->{AliveLog.e("AliveClean","Vivo clip failed: "+what+"/"+extra);return true;});
         }catch(Exception error){close();throw error;}
         finally{GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER,prior[0]);GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,prior[1]);}
     }
     synchronized void visible(boolean visible){
         if(closed||playing==visible)return;
         try{if(visible)player.start();else player.pause();playing=visible;}
-        catch(IllegalStateException error){android.util.Log.w("AliveClean","Vivo video lifecycle",error);}
+        catch(IllegalStateException error){AliveLog.w("AliveClean","Vivo video lifecycle",error);}
     }
     void update(){
         if(closed||!pending)return;pending=false;

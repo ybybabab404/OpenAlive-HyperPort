@@ -31,7 +31,7 @@ final class SceneChannel {
                     long time=b.getLong("time",0);
                     if(lastScene!=null&&time<lastScene.getLong("time",0))return true;
                     lastScene=new Bundle(b);
-                    if(Diagnostics.TRACE)android.util.Log.i("AliveClean","Scene transport=binder mode="+mode+" delayMs="+(SystemClock.uptimeMillis()-time));
+                    if(Diagnostics.TRACE)AliveLog.i("AliveClean","Scene transport=binder mode="+mode+" delayMs="+(SystemClock.uptimeMillis()-time));
                     for(Listener l:listeners)l.scene(mode,b.getBoolean("animate",true),time,b.getInt("phase",0),b.getLong("clock_wake",0),b.getFloat("vivo_night_level",Float.NaN),b.getFloat("vivo_aod_mask",Float.NaN));
                 }else if(message.what==2){
                     AodRegion area=decode(b);if(area==null)return true;lastArea=area;
@@ -40,19 +40,19 @@ final class SceneChannel {
                     int action=b.getInt("action",-1);
                     float x=b.getFloat("x",-1f),y=b.getFloat("y",-1f);
                     if(action<0||x<0f||y<0f)return true;
-                    if(touchTrace>0){touchTrace--;android.util.Log.i("AliveClean","lock touch relayed action="+action+" x="+x+" y="+y);}
+                    if(touchTrace>0){touchTrace--;AliveLog.i("AliveClean","lock touch relayed action="+action+" x="+x+" y="+y);}
                     for(Listener l:listeners)l.touch(action,x,y);
                 }else if(message.what==5){
                     long time=b.getLong("time",0);
                     if(time<=0||time<lastFingerprint)return true;
                     lastFingerprint=time;
-                    android.util.Log.i("AliveClean","fingerprint signal t="+time+" listeners="+listeners.size());
+                    AliveLog.i("AliveClean","fingerprint signal t="+time+" listeners="+listeners.size());
                     for(Listener l:listeners)l.fingerprint(time);
                 }else if(message.what==6){
                     long time=b.getLong("time",0);
                     if(time<=0||time<lastKeyguardHiding)return true;
                     lastKeyguardHiding=time;
-                    android.util.Log.i("AliveClean","keyguard hiding signal t="+time+" listeners="+listeners.size());
+                    AliveLog.i("AliveClean","keyguard hiding signal t="+time+" listeners="+listeners.size());
                     for(Listener l:listeners)l.keyguardHiding(time);
                 }else if(message.what==3){
                     boolean covered=b.getBoolean("covered",false);
@@ -78,7 +78,7 @@ final class SceneChannel {
     static void frameReady(long token,boolean submitted){
         Messenger target=clockFeedback;if(target==null||token==0)return;
         Message message=Message.obtain();message.what=1;Bundle b=new Bundle();b.putLong("token",token);b.putBoolean("submitted",submitted);message.setData(b);
-        try{target.send(message);}catch(RemoteException error){android.util.Log.w("AliveClean","Frame completion channel unavailable",error);}
+        try{target.send(message);}catch(RemoteException error){AliveLog.w("AliveClean","Frame completion channel unavailable",error);}
     }
     static void add(Listener listener){
         listeners.add(listener);

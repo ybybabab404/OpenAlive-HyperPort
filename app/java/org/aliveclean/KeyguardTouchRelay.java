@@ -7,7 +7,6 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.SystemClock;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -59,20 +58,20 @@ final class KeyguardTouchRelay {
                         if (liquid()&&locked()) pinClock(param.thisObject);
         if (event.getActionMasked()==MotionEvent.ACTION_DOWN&&probe<3) {
                             probe++;
-                            Log.i(TAG,"lock probe liquid="+liquid()+" locked="+locked());
+                            AliveLog.i(TAG,"lock probe liquid="+liquid()+" locked="+locked());
                         }
                         if (liquid()) gate(param,event);
                         forward(param.thisObject,event);
                     } catch (Throwable error) {
-                        Log.w(TAG,"lock touch relay failed",error);
+                        AliveLog.w(TAG,"lock touch relay failed",error);
                     }
                 }
             });
             int count=set==null?0:set.size();
             hooked+=count;
-            Log.i(TAG,"lock touch hook "+name+" count="+count);
+            AliveLog.i(TAG,"lock touch hook "+name+" count="+count);
         }
-        Log.i(TAG,"lock touch relay installed methods="+hooked);
+        AliveLog.i(TAG,"lock touch relay installed methods="+hooked);
     }
 
     private static void hookClockViews(ClassLoader loader) {
@@ -88,13 +87,13 @@ final class KeyguardTouchRelay {
                         if (!Boolean.TRUE.equals(param.getResult()))return;
                         if (consumers>=12)return;
                         consumers++;
-                        Log.i(TAG,"keyguard consumer "+param.thisObject.getClass().getName());
+                        AliveLog.i(TAG,"keyguard consumer "+param.thisObject.getClass().getName());
                     } catch (Throwable ignored) {}
                 }
             });
-            Log.i(TAG,"keyguard consumer probe installed");
+            AliveLog.i(TAG,"keyguard consumer probe installed");
         } catch (Throwable error) {
-            Log.w(TAG,"keyguard consumer probe unavailable",error);
+            AliveLog.w(TAG,"keyguard consumer probe unavailable",error);
         }
     }
 
@@ -114,7 +113,7 @@ final class KeyguardTouchRelay {
                                 boolean shade=insideShade(target);
                                 String simple=target.getClass().getName();
                                 simple=simple.substring(simple.lastIndexOf('.')+1);
-                                if (propSeen.add(simple)) Log.i(TAG,"animated "+simple+" shade="+shade+" via "+param.method.getName());
+                                if (propSeen.add(simple)) AliveLog.i(TAG,"animated "+simple+" shade="+shade+" via "+param.method.getName());
                                 if (!shade)return;
                                 param.setResult(null);
                             } catch (Throwable ignored) {}
@@ -122,9 +121,9 @@ final class KeyguardTouchRelay {
                     });
                 }
             }
-            Log.i(TAG,"property write guard installed");
+            AliveLog.i(TAG,"property write guard installed");
         } catch (Throwable error) {
-            Log.w(TAG,"property write guard unavailable",error);
+            AliveLog.w(TAG,"property write guard unavailable",error);
         }
     }
 
@@ -143,7 +142,7 @@ final class KeyguardTouchRelay {
         try {
             Class<?> callback=Xp.findClassIfExists(
                     "com.android.keyguard.injector.KeyguardPanelViewInjector$bindView$2",loader);
-            if (callback==null) {Log.w(TAG,"lock deform: callback class not found");return;}
+            if (callback==null) {AliveLog.w(TAG,"lock deform: callback class not found");return;}
             Xp.hookAllMethods(callback,"onHorizontalMove",new Xp.MethodHook(){
                 @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
                     try {
@@ -154,16 +153,16 @@ final class KeyguardTouchRelay {
                         param.args[0]=distance*DEFORM_GAIN;
                         if (!deformLogged&&distance!=0f) {
                             deformLogged=true;
-                            Log.i(TAG,"lock deform intercepted distance="+distance+" gain="+DEFORM_GAIN);
+                            AliveLog.i(TAG,"lock deform intercepted distance="+distance+" gain="+DEFORM_GAIN);
                         }
                     } catch (Throwable error) {
-                        Log.w(TAG,"lock deform hook failed",error);
+                        AliveLog.w(TAG,"lock deform hook failed",error);
                     }
                 }
             });
-            Log.i(TAG,"lock deform hook installed");
+            AliveLog.i(TAG,"lock deform hook installed");
         } catch (Throwable error) {
-            Log.w(TAG,"lock deform hook unavailable",error);
+            AliveLog.w(TAG,"lock deform hook unavailable",error);
         }
     }
 
@@ -198,10 +197,10 @@ final class KeyguardTouchRelay {
         message.setData(data);
         try {
             target.send(message);
-            if (forwarded<8) {forwarded++;Log.i(TAG,"lock touch sent action="+action+" x="+x+" y="+y);}
+            if (forwarded<8) {forwarded++;AliveLog.i(TAG,"lock touch sent action="+action+" x="+x+" y="+y);}
         } catch (Throwable dead) {
             channel=null;
-            Log.w(TAG,"lock touch channel dropped",dead);
+            AliveLog.w(TAG,"lock touch channel dropped",dead);
         }
     }
 
@@ -241,9 +240,9 @@ final class KeyguardTouchRelay {
         try {
             java.util.ArrayList<String> names=new java.util.ArrayList<>();
             collect(root.getRootView(),names,0);
-            Log.i(TAG,"keyguard views: "+android.text.TextUtils.join(",",names));
+            AliveLog.i(TAG,"keyguard views: "+android.text.TextUtils.join(",",names));
         } catch (Throwable error) {
-            Log.w(TAG,"keyguard view dump failed",error);
+            AliveLog.w(TAG,"keyguard view dump failed",error);
         }
     }
 
@@ -291,7 +290,7 @@ final class KeyguardTouchRelay {
                         ||n.contains("scale")||n.contains("Scale")||n.contains("update")||n.contains("Update"))
                     sb.append(' ').append(n);
             }
-            Log.i(TAG,"clock probe: "+sb);
+            AliveLog.i(TAG,"clock probe: "+sb);
         }
         clock.setTranslationX(0f);
         clock.setTranslationY(0f);
@@ -303,7 +302,7 @@ final class KeyguardTouchRelay {
     private static void note(String kind,float rawY) {
         if (captures>=6)return;
         captures++;
-        Log.i(TAG,"lock drag captured "+kind+" rawY="+rawY);
+        AliveLog.i(TAG,"lock drag captured "+kind+" rawY="+rawY);
     }
 
     private static MotionEvent cancelOf(MotionEvent source) {
@@ -361,7 +360,7 @@ final class KeyguardTouchRelay {
     private static void hookFingerprint(ClassLoader loader) {
         try {
             Class<?> monitor=Xp.findClassIfExists("com.android.keyguard.KeyguardUpdateMonitor",loader);
-            if (monitor==null) {Log.w(TAG,"fingerprint hook: KeyguardUpdateMonitor missing");return;}
+            if (monitor==null) {AliveLog.w(TAG,"fingerprint hook: KeyguardUpdateMonitor missing");return;}
             java.util.Set<Xp.Unhook> set=Xp.hookAllMethods(monitor,"onFingerprintAuthenticated",new Xp.MethodHook(){
                 @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     int user=-1;
@@ -373,21 +372,21 @@ final class KeyguardTouchRelay {
                     reportFingerprint(user,strong);
                 }
             });
-            Log.i(TAG,"fingerprint hook installed methods="+(set==null?0:set.size()));
-        } catch (Throwable error) {Log.w(TAG,"fingerprint hook unavailable",error);}
+            AliveLog.i(TAG,"fingerprint hook installed methods="+(set==null?0:set.size()));
+        } catch (Throwable error) {AliveLog.w(TAG,"fingerprint hook unavailable",error);}
     }
 
     private static void hookKeyguardHide(ClassLoader loader) {
         try {
             Class<?> mediator=Xp.findClassIfExists("com.android.systemui.keyguard.KeyguardViewMediator",loader);
-            if (mediator==null) {Log.w(TAG,"keyguard hide hook: KeyguardViewMediator missing");return;}
+            if (mediator==null) {AliveLog.w(TAG,"keyguard hide hook: KeyguardViewMediator missing");return;}
             java.util.Set<Xp.Unhook> set=Xp.hookAllMethods(mediator,"handleHide",new Xp.MethodHook(){
                 @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
                     reportKeyguardHiding();
                 }
             });
-            Log.i(TAG,"keyguard hide hook installed methods="+(set==null?0:set.size()));
-        } catch (Throwable error) {Log.w(TAG,"keyguard hide hook unavailable",error);}
+            AliveLog.i(TAG,"keyguard hide hook installed methods="+(set==null?0:set.size()));
+        } catch (Throwable error) {AliveLog.w(TAG,"keyguard hide hook unavailable",error);}
     }
 
     private static void reportKeyguardHiding() {
@@ -401,12 +400,12 @@ final class KeyguardTouchRelay {
         message.setData(data);
         try {
             target.send(message);
-            Log.i(TAG,"keyguard hiding t="+now);
-        } catch (Throwable dead) {channel=null;Log.w(TAG,"keyguard channel dropped",dead);}
+            AliveLog.i(TAG,"keyguard hiding t="+now);
+        } catch (Throwable dead) {channel=null;AliveLog.w(TAG,"keyguard channel dropped",dead);}
     }
     private static void reportFingerprint(int user,boolean strong) {
         long now=SystemClock.uptimeMillis();
-        Log.i(TAG,"fingerprint authenticated user="+user+" strong="+strong+" t="+now);
+        AliveLog.i(TAG,"fingerprint authenticated user="+user+" strong="+strong+" t="+now);
         Messenger target=signalChannel();
         if (target==null) return;
         Message message=Message.obtain();
@@ -415,7 +414,7 @@ final class KeyguardTouchRelay {
         data.putLong("time",now);
         message.setData(data);
         try {target.send(message);}
-        catch (Throwable dead) {channel=null;Log.w(TAG,"fingerprint channel dropped",dead);}
+        catch (Throwable dead) {channel=null;AliveLog.w(TAG,"fingerprint channel dropped",dead);}
     }
 
     private static Messenger signalChannel() {
@@ -438,7 +437,7 @@ final class KeyguardTouchRelay {
             return channel;
         } catch (Throwable error) {
             channelFailed=true;
-            Log.w(TAG,"lock touch channel unavailable",error);
+            AliveLog.w(TAG,"lock touch channel unavailable",error);
             return null;
         }
     }

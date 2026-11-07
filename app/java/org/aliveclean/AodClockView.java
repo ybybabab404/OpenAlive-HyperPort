@@ -26,7 +26,7 @@ final class AodClockView extends AodClockFace {
             Context assets=context;
             if(!context.getPackageName().startsWith("org.aliveclean"))assets=context.createPackageContext("org.aliveclean",0);
             digits=Typeface.createFromAsset(assets.getAssets(),"clock/horizontal.otf");
-        }catch(Exception error){android.util.Log.w("AliveClean","Original AOD font unavailable",error);digits=Typeface.create("sans-serif-condensed",Typeface.NORMAL);}
+        }catch(Exception error){AliveLog.w("AliveClean","Original AOD font unavailable",error);digits=Typeface.create("sans-serif-condensed",Typeface.NORMAL);}
         return digits;
     }
     AodClockView(Context context,boolean preview){

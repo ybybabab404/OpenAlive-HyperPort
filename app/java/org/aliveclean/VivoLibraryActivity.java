@@ -26,7 +26,7 @@ public final class VivoLibraryActivity extends Activity {
             final int family=i+1;LinearLayout item=new LinearLayout(this);item.setOrientation(1);item.setGravity(Gravity.CENTER);
             row.addView(item,new LinearLayout.LayoutParams(0,-2,1));
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setBackground(ui.capsule());image.setClipToOutline(true);
-            try{image.setImageBitmap(VivoImages.asset(runtime,assets[i]));}catch(Exception e){android.util.Log.w("AliveClean","Vivo category preview failed",e);}
+            try{image.setImageBitmap(VivoImages.asset(runtime,assets[i]));}catch(Exception e){AliveLog.w("AliveClean","Vivo category preview failed",e);}
             item.addView(image,new LinearLayout.LayoutParams(ui.dp(88),ui.dp(88)));
             TextView label=ui.text(names[i],16);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,ui.dp(44));item.addView(label,lp);
             item.setOnClickListener(v->startActivity(new Intent(this,VivoEditorActivity.class).putExtra("family",family)));

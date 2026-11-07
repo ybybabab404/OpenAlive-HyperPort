@@ -108,7 +108,7 @@ public class HomeActivity extends Activity {
         if(activation!=null)activation.start();
         new Thread(()->{
             XiaomiHomePreview.Card[] cards;
-            try{cards=XiaomiHomePreview.load(this);}catch(Exception error){android.util.Log.w("OpenAliveXiaomi","Home wallpaper selection",error);cards=new XiaomiHomePreview.Card[3];}
+            try{cards=XiaomiHomePreview.load(this);}catch(Exception error){AliveLog.w("OpenAliveXiaomi","Home wallpaper selection",error);cards=new XiaomiHomePreview.Card[3];}
             XiaomiHomePreview.Card[] selected=cards;runOnUiThread(()->{if(isDestroyed()||request!=previewLoad)return;for(int i=0;i<previews.size();i++)previews.get(i).start(selected[i]);});
         },"HomeWallpaperPreviews").start();
     }

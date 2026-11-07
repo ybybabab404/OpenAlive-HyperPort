@@ -22,7 +22,7 @@ final class XiaomiAodDensity {
             }
             if(dpi>=120&&dpi<=1000)return dpi;
         }catch(Exception|LinkageError unavailable){
-            android.util.Log.w("OpenAliveXiaomi","Original auto-density unavailable; using phone policy",unavailable);
+            AliveLog.w("OpenAliveXiaomi","Original auto-density unavailable; using phone policy",unavailable);
         }
 
         int baseline=platformBaseline>0?platformBaseline:

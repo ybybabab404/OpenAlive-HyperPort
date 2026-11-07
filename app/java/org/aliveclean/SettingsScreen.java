@@ -31,7 +31,7 @@ final class SettingsScreen {
         activity.setContentView(screen);return screen;
     }
     static void fail(Activity activity,Exception error){
-        android.util.Log.e("AliveClean","Official settings UI failed",error);
+        AliveLog.e("AliveClean","Official settings UI failed",error);
         new android.app.AlertDialog.Builder(activity).setTitle("页面无法打开").setMessage(error.toString())
             .setPositiveButton("关闭",(d,w)->activity.finish()).setOnCancelListener(d->activity.finish()).show();
     }

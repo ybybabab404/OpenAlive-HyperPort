@@ -29,7 +29,7 @@ final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceT
         texture.setVisibility(card==null?VISIBLE:GONE);thumbnail.setVisibility(card==null?GONE:VISIBLE);thumbnail.setImageBitmap(card==null?null:card.image);
         if(clock!=null)clock.scene(card==null&&new SceneOptions(getContext().getSharedPreferences(SceneOptions.APPLIED,0)).aod==1);
         if(card!=null&&mode==0)try{xiaomiClock=new XiaomiHomePreview.Clock(getContext(),card.pack.clock);addView(xiaomiClock,new LayoutParams(-1,-1));xiaomiClock.active(true);}
-        catch(Exception|LinkageError error){android.util.Log.w("OpenAliveXiaomi","Home AOD clock",error);}
+        catch(Exception|LinkageError error){AliveLog.w("OpenAliveXiaomi","Home AOD clock",error);}
         if(card==null&&texture.isAvailable())attach(texture.getSurfaceTexture(),texture.getWidth(),texture.getHeight());
     }
     boolean openXiaomi(){if(card==null)return false;getContext().startActivity(XiaomiPreviewActivity.intent(getContext(),card.pack,mode));return true;}

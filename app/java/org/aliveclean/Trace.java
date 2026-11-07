@@ -2,7 +2,6 @@ package org.aliveclean;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Log;
 
 final class Trace {
     static final String TAG = "AliveHSAod";
@@ -13,12 +12,12 @@ final class Trace {
 
     static void log(String id, String message) {
         if (!enabled()) return;
-        Log.i(TAG, "[HA][" + id + "] " + message);
+        AliveLog.i(TAG, "[HA][" + id + "] " + message);
     }
 
     static void log(String id, String message, Throwable error) {
         if (!enabled()) return;
-        Log.w(TAG, "[HA][" + id + "] " + message, error);
+        AliveLog.w(TAG, "[HA][" + id + "] " + message, error);
     }
 
     private static boolean enabled() {

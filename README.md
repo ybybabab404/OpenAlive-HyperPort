@@ -1,5 +1,6 @@
 # OpenAlive HyperPort
 
+基于 OpenAlive 项目二次开发
 把 Flyme Alive 那套的连贯过渡，带到HyperOS上。
 
 本项目以 Vibe Coding 方式开发：代码、文档和调试大量由 AI 生成。

@@ -67,4 +67,4 @@ ALIVEHS_NATIVE_SO=path/to/libalive_clean.so python3 tools/build_release.py
 
 ## 反馈
 
-带上机型、系统版本、用的样式、复现步骤。
+带上机型、系统版本、复现步骤。

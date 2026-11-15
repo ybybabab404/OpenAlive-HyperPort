@@ -759,8 +759,48 @@ I/AliveHSAod: alpha watchdog fired, alpha=0.0
 3. **待做：冷启动回归**——重启 → 锁屏态下 AODView 先构造一次（会走 `SCENE_UNKNOWN` 重试链）
    → 解锁 → 应用壁纸 → 锁屏看球。这次的所有验证都是 `killall com.android.systemui` 后的热路径。
 4. 待做：把 `03-*` §1.4 的 H1–H6 按 §9 的证据重新标级（H1/H2 已修，H5 未涉及）。
-5. 待做：B（全屏 AOD 不生效）本身还没"修"——现在球是靠注入 AODView 显示的，
-   壁纸在普通 AOD 下仍会被系统淡掉。若要"和锁屏样式一致"的真全屏 AOD，
-   需要另开一题查 `MiuiClockController` 的 `wallpaperInfo.isSupportFullScreenAod=false`。
+5. ~~待做：B（全屏 AOD 不生效）~~ —— 已在 §11 修（按用户选择补足能力）。
+
+## 11. 2026-11-16 00:0x Bug B/C 的重新定义与修法（设计变更）
+
+### 11.1 现象（用户 00:01 重新描述）
+
+- **B**：系统壁纸下，AOD 样式无论选哪一项，效果都一样是「自定义」。
+- **C**：系统壁纸 ↔ 项目壁纸互切要能恢复「息屏显示模式」——例如应用项目壁纸前是「自定义」，恢复系统壁纸后还是「自定义」。
+
+### 11.2 实测到的事实
+
+| 观察 | 结论 |
+|---|---|
+| AOD 样式下拉只有两项：`自定义` / `和锁屏样式一致` | 选项是 MIUI 原生的，不是我们造的 |
+| 选 `自定义` → `full_screen_aod_on=0`；选 `和锁屏样式一致` → `=1` | 键值映射正确，两种都能选中 |
+| 本机 `full aod flags initializer alive=false: SUPPORT_FULL_AOD=false` | **这台设备原生就不支持全屏 AOD**（MiuiConfigs 静态字段是 false） |
+| 旧代码只在"我们的壁纸活着"时才补足 `SUPPORT_FULL_AOD` | 所以系统壁纸下选「和锁屏样式一致」也只是空选项 → 永远渲染成「自定义」 |
+
+**关键推论**：B 不是"我们抢了设置"，而是"我们只在自家壁纸下补能力"。
+用户要的是"这个选项在哪都算数"。
+
+### 11.3 新设计（本次改动）
+
+1. **模块不再改写 `full_screen_aod_on`**（`AodWallpaperMode.enter/ensureEnabled` 变成只读 + 日志）。
+   → C 从结构上解决：没有任何代码会碰这个键，互切壁纸自然保持用户设置。
+2. `controlsFullAod(context)` 改为按**用户选择**判断：
+   `full_screen_aod_on==1 && doze_always_on==1`（不再要求壁纸是我们的）。
+   → B 解决：选了「和锁屏样式一致」就补 `MiuiConfigs.SUPPORT_FULL_AOD` 与 manager/doze host 字段。
+3. 选「自定义」时 `reconcileNative()` + `restoreDoze()`，把能力交回 MIUI。
+4. `AodSettingsGuard` 不再 `lock(row, spinner)`：我们壁纸下也允许用户切回「自定义」。
+5. `hookAliveTrue(isSupportFsAod)` 同样改成按用户选择返回 true，让设置页与效果一致。
+
+### 11.4 验证
+
+- 装机 `3d1dd48` 后，系统壁纸 + `full_screen_aod_on=1`：
+  `full aod flags updateSettings alive=true: SUPPORT_FULL_AOD=true`，
+  用户肉眼确认「**现在就是正常的全屏 AOD（和锁屏一致）**」（00:12）。
+- marker 已无残留：`alive_aod_restore_value/set/active` 全 null，日志 `aod mode left to the user (full)`。
+
+### 11.5 仍需验证
+
+- C 的端到端：设成「自定义」→ 应用项目壁纸 → 切回系统壁纸 → 应仍是「自定义」（理论上必然成立，因为已无人写这个键，但要跑一遍确认）。
+- 冷启动回归（仍欠）。
 
 

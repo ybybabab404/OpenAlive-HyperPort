@@ -40,7 +40,11 @@ final class HyperOsAod {
             if (view == null || !ViewGroup.class.isAssignableFrom(view)) continue;
             Xp.hookAllConstructors(view, new Xp.MethodHook() {
                 @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    scheduleAttach((ViewGroup) param.thisObject);
+                    ViewGroup instance = (ViewGroup) param.thisObject;
+                    // 先记下来：attach() 可能因为用户未解锁等原因中止，但实例仍然可用。
+                    cachedRoot = new java.lang.ref.WeakReference<>(instance);
+                    aodRoot = cachedRoot;
+                    scheduleAttach(instance);
                 }
             });
             Trace.log("T01", "hooks installed for " + name);
@@ -71,6 +75,31 @@ final class HyperOsAod {
     }
 
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
+    /**
+     * AODView 实例缓存在这里。它在开机时就会构造一次（此时用户可能还没解锁），
+     * 而 attach() 会因为读不到凭证加密存储的 SharedPreferences 而中止。
+     * 以前 detach() 会把 aodRoot 清空，且 AODView 不会重建 —— 于是整台机器
+     * 再也不会注入任何东西（2026-11-15 实测就是这个形态）。
+     */
+    private static java.lang.ref.WeakReference<ViewGroup> cachedRoot;
+    private static int sceneRetries;
+    private static final int SCENE_RETRIES = 15;
+    private static final long SCENE_RETRY_MS = 2000;
+    private static final int SCENE_UNKNOWN = -1;
+    private static final int SCENE_ON = 1;
+    private static final int SCENE_OFF = 0;
+
+    /** 当前可用的 AODView；优先用已挂上的，退回到开机时缓存的实例。 */
+    private static ViewGroup rootView() {
+        ViewGroup current = aodRoot == null ? null : aodRoot.get();
+        if (current != null && current.isAttachedToWindow()) return current;
+        ViewGroup cached = cachedRoot == null ? null : cachedRoot.get();
+        if (cached != null && cached.isAttachedToWindow()) {
+            aodRoot = cachedRoot;
+            return cached;
+        }
+        return current != null ? current : cached;
+    }
 
     static boolean hasInjectedView() {
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
@@ -78,7 +107,7 @@ final class HyperOsAod {
     }
 
     static boolean injectIntoAod() {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
+        ViewGroup root = rootView();
         if (root == null) {
             // 以前这里直接 return false，而 AodOverlay 只在 950ms 后试一次；
             // AODView 若晚于这个窗口 inflate，整轮息屏就再也没有注入机会。
@@ -139,8 +168,10 @@ final class HyperOsAod {
     static void detach() {
         attachGeneration++;
         scheduledRoot = null;
-        aodRoot = null;
+        // 注意：不要清 aodRoot / cachedRoot。AODView 实例往往整机只构造一次，
+        // 清掉以后就再也没有重挂的机会（2026-11-15 实测踩过）。
         injectAttempt = INJECT_RETRIES;
+        sceneRetries = 0;
         AodSurface surface = liveSurface == null ? null : liveSurface.get();
         liveSurface = null;
         if (surface == null) return;
@@ -163,7 +194,26 @@ final class HyperOsAod {
             AliveLog.once(TAG, "aod-disabled", "AOD scene skipped: AOD is disabled");
             return;
         }
-        if (!aodSceneEnabled(context)) {
+        int scene = aodSceneState(context);
+        if (scene == SCENE_UNKNOWN) {
+            // 用户还没解锁：凭证加密存储不可用，读不到场景设置。这不是"关掉了场景"，
+            // 过一会儿再试；绝不能像以前那样直接 detach 把注入机会丢掉。
+            if (++sceneRetries <= SCENE_RETRIES) {
+                AliveLog.once(TAG, "aod-scene-locked",
+                        "AOD scene settings unavailable (user locked?), retrying");
+                root.postDelayed(new Runnable() {
+                    @Override public void run() {
+                        if (generation != attachGeneration) return;
+                        attach(root);
+                    }
+                }, SCENE_RETRY_MS);
+            } else {
+                AliveLog.once(TAG, "aod-scene-giveup",
+                        "AOD scene settings still unavailable after " + SCENE_RETRIES + " retries");
+            }
+            return;
+        }
+        if (scene == SCENE_OFF) {
             detach();
             return;
         }
@@ -216,12 +266,33 @@ final class HyperOsAod {
         // R.layout.aod_mode_layout has an opaque black View at index 0.  Sit
         // directly above it, but below the clock/content container, otherwise
         // the ball is painted behind the AOD background.
-        target.addView(surface, Math.min(1, target.getChildCount()), new ViewGroup.LayoutParams(
+        int index = Math.min(1, target.getChildCount());
+        target.addView(surface, index, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (Diagnostics.TRACE) {
+            StringBuilder order = new StringBuilder();
+            for (int i = 0; i < target.getChildCount(); i++) {
+                View child = target.getChildAt(i);
+                order.append(i).append(':').append(child.getClass().getSimpleName())
+                        .append(child == surface ? "(ours)" : "").append(' ');
+            }
+            Trace.log("T12", "aod children of " + target.getClass().getSimpleName()
+                    + " count=" + target.getChildCount() + " [" + order + "]"
+                    + " hostAlpha=" + target.getAlpha() + " hostShown=" + target.isShown());
+        }
         liveSurface = new java.lang.ref.WeakReference<>(surface);
         AliveLog.reset("aod-view-pending");
         Trace.log("T04", "surface#create id=" + System.identityHashCode(surface)
                 + " host=" + System.identityHashCode(target) + " children=" + target.getChildCount());
+        surface.postDelayed(new Runnable() {
+            @Override public void run() {
+                Trace.log("T13", "surface state alpha=" + surface.getAlpha()
+                        + " shown=" + surface.isShown()
+                        + " size=" + surface.getWidth() + "x" + surface.getHeight()
+                        + " parent=" + (surface.getParent() == null ? "null"
+                        : surface.getParent().getClass().getSimpleName()));
+            }
+        }, 900);
         // 以前 supervise() 是死代码：surface 一旦被 AODView 移除/换宿主就永久丢失，
         // 表现就是"转场有球、稳定后只剩时钟"。
         supervise(root, surface);
@@ -312,16 +383,21 @@ final class HyperOsAod {
         }
     }
 
-    private static boolean aodSceneEnabled(Context base) {
+    /**
+     * @return {@link #SCENE_ON} / {@link #SCENE_OFF} / {@link #SCENE_UNKNOWN}
+     *         （UNKNOWN = 用户未解锁导致凭证加密存储不可用，属临时状态）
+     */
+    private static int aodSceneState(Context base) {
         try {
             Context app = moduleContext(base);
             android.content.SharedPreferences prefs =
                     app.getSharedPreferences(SceneOptions.APPLIED, 0);
-
-            return prefs.getInt("aod", 0) != -1;
+            return prefs.getInt("aod", 0) != -1 ? SCENE_ON : SCENE_OFF;
+        } catch (IllegalStateException locked) {
+            return SCENE_UNKNOWN;
         } catch (Throwable unavailable) {
             AliveLog.w(TAG, "cannot read scene settings", unavailable);
-            return false;
+            return SCENE_OFF;
         }
     }
 

@@ -21,6 +21,9 @@ final class Trace {
     }
 
     private static boolean enabled() {
+        // 诊断构建（Diagnostics.TRACE=true）时强制打开：以前只看 SharedPreferences，
+        // 导致"打开了 TRACE 却一条 T0x 都没有"（2026-11-15 踩过）。
+        if (Diagnostics.TRACE) return true;
         int current = state;
         if (current >= 0) return current == 1;
         boolean on = false;

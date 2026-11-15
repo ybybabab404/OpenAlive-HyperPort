@@ -41,6 +41,15 @@ final class AodFullScreen {
     private static final Object DOZE_LOCK = new Object();
     private static volatile ClassLoader loaderRef;
     private static volatile boolean settingsProcess;
+    /**
+     * 我们自己调用 MIUI 的 onWallpaperChanged()/updateSettings() 时置位，
+     * 让本类的 hook 直接放行，否则会递归。
+     */
+    private static final ThreadLocal<Boolean> RECONCILING = new ThreadLocal<>();
+    private static long lastReconcileAt;
+    private static final long RECONCILE_MIN_GAP_MS = 1500L;
+    private static final android.os.Handler MAIN =
+            new android.os.Handler(android.os.Looper.getMainLooper());
     private static WeakReference<Object> lastManager = new WeakReference<>(null);
     private static WeakReference<Object> lastDozeHost = new WeakReference<>(null);
     private static boolean flagsCaptured;
@@ -70,7 +79,25 @@ final class AodFullScreen {
         AliveLog.i(TAG, "full aod hooks=" + hooks + " process=" + (settingsProcess ? "aod" : "systemui"));
         // The settings process only needs Utils predicates.  Writing MiuiConfigs there
         // would mutate system_server-owned state without having the manager to restore it.
-        if (!settingsProcess) syncFlags("install");
+        if (!settingsProcess) {
+            syncFlags("install");
+            // 开机/重启后补一次核对：上一次会话可能停在"我们的壁纸 + 已改标志"的状态，
+            // 现在壁纸已经不是我们就必须交还给 MIUI 自己算。
+            MAIN.postDelayed(new Runnable() {
+                @Override public void run() {
+                    try {
+                        Context context = Xp.currentApplication();
+                        if (controlsFullAod(context)) {
+                            forceManager(lastManager.get(), context);
+                        } else {
+                            reconcileNative(lastManager.get(), context);
+                        }
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "full aod boot reconcile failed", error);
+                    }
+                }
+            }, 2500);
+        }
     }
 
     static void onActivation(Context context) {
@@ -90,7 +117,50 @@ final class AodFullScreen {
                 AodWallpaperMode.restoreWhenForeign(context);
             }
             syncFlags("activation", context);
-            forceManager(lastManager.get(), context);
+            if (controlsFullAod(context)) {
+                forceManager(lastManager.get(), context);
+            } else {
+                reconcileNative(lastManager.get(), context);
+            }
+        }
+    }
+
+    /**
+     * 把 MiuiFullAodManager 交还给 MIUI 自己算，而不是把我们捕获的旧值写回去。
+     *
+     * <p>历史缺陷（2026-11-15 由反编译源码确认）：壁纸切回系统壁纸时只做
+     * {@code restoreManager()}，把当年在"我们的壁纸"下捕获的
+     * {@code isWallpaperTypeSupport=true} 又写了回去。MIUI 的
+     * {@code updateSettings()} 用这个字段算出
+     * {@code r4 = isLockScreenTemplateSupport && isWallpaperTypeSupport && isDeviceSupport}
+     * = 1，于是把 {@code full_screen_aod_support=1} 写进 Secure，并且永远不会写
+     * {@code full_screen_aod_on=0}。结果：全屏 AOD 在系统壁纸下也"永远受支持"，
+     * AOD 样式页被按全屏 AOD 渲染 —— 用户看到的就是"怎么设都是自定义"。</p>
+     */
+    private static void reconcileNative(Object manager, Context context) {
+        if (manager == null) return;
+        if (Boolean.TRUE.equals(RECONCILING.get())) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        synchronized (MANAGER_LOCK) {
+            if (now - lastReconcileAt < RECONCILE_MIN_GAP_MS) return;
+            lastReconcileAt = now;
+        }
+        RECONCILING.set(Boolean.TRUE);
+        try {
+            restoreManager(manager);
+            // 让 MIUI 按"当前真实绑定的壁纸"重算 isWallpaperTypeSupport 与两个 Secure 键。
+            // 临时压掉 mAodFullScreenEnable，避免 updateSettings 里弹
+            // "该壁纸不支持全屏 AOD" 的 toast 打扰用户；算完马上还原。
+            boolean aodFullScreen = readBool(manager, "mAodFullScreenEnable");
+            setBool(manager, "mAodFullScreenEnable", false);
+            Xp.callMethod(manager, "onWallpaperChanged");
+            Xp.callMethod(manager, "updateSettings");
+            setBool(manager, "mAodFullScreenEnable", aodFullScreen);
+            AliveLog.once(TAG, "full aod reconcile", "full aod: handed back to MIUI (native recompute)");
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "full aod reconcile failed", error);
+        } finally {
+            RECONCILING.remove();
         }
     }
 
@@ -141,11 +211,13 @@ final class AodFullScreen {
             Xp.hookAllConstructors(clazz, new Xp.MethodHook() {
                 @Override
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                    if (Boolean.TRUE.equals(RECONCILING.get())) return;
                     syncFlags("manager", firstContext(param.args));
                 }
 
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    if (Boolean.TRUE.equals(RECONCILING.get())) return;
                     lastManager = new WeakReference<>(param.thisObject);
                     forceManager(param.thisObject, firstContext(param.args));
                 }
@@ -167,6 +239,7 @@ final class AodFullScreen {
             Xp.findAndHookMethod(clazz, "init", boolean.class, new Xp.MethodHook() {
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    if (Boolean.TRUE.equals(RECONCILING.get())) return;
                     syncFlags("initializer", Xp.currentApplication());
                     forceManager(lastManager.get(), Xp.currentApplication());
                 }
@@ -238,6 +311,8 @@ final class AodFullScreen {
             return Xp.hookAllMethods(clazz, name, new Xp.MethodHook() {
                 @Override
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                    // reconcileNative() 自己调这两个方法时必须放行，否则递归。
+                    if (Boolean.TRUE.equals(RECONCILING.get())) return;
                     Context context = contextOf(param.thisObject);
                     syncFlags(name, context);
                     forceManager(param.thisObject, context);
@@ -245,6 +320,7 @@ final class AodFullScreen {
 
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    if (Boolean.TRUE.equals(RECONCILING.get())) return;
                     Context context = contextOf(param.thisObject);
                     if (controlsFullAod(context)) {
                         forceManager(param.thisObject, context);
@@ -255,7 +331,10 @@ final class AodFullScreen {
                             AodWallpaperMode.ensureEnabled(context);
                         }
                     } else {
-                        restoreManager(param.thisObject);
+                        // 不要 restoreManager()：那会把"我们的壁纸"时期的
+                        // isWallpaperTypeSupport=true 写回去，MIUI 随后就会把
+                        // full_screen_aod_support 重新算成 1（见 reconcileNative 注释）。
+                        reconcileNative(param.thisObject, context);
                     }
                 }
             }).size();

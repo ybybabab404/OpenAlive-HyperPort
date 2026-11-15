@@ -18,6 +18,14 @@ final class HyperOsAod {
     private static long scheduledAt;
     private static final long ATTACH_DELAY_MS = 950;
     private static final long FADE_MS = 180;
+    /** AODView 在 HyperOS 上晚于 dreaming 才 inflate，注入必须有界重试而不是一次放弃。 */
+    private static final long INJECT_RETRY_MS = 200;
+    private static final int INJECT_RETRIES = 25;
+    /** 首帧没打出来时（EGL/纹理异常）不能永远停在 alpha=0，否则等于"什么都没有"。 */
+    private static final long ALPHA_WATCHDOG_MS = 1500;
+    private static final android.os.Handler MAIN =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private static int injectAttempt;
     private static final float BALL_CENTER_Y = 0.165f;
     private static final float BALL_RADIUS = 0.22f;
     private static final String[] VIEWS = {
@@ -48,13 +56,14 @@ final class HyperOsAod {
             @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
                 Trace.log("T07", "dreaming started");
-
+                injectAttempt = 0;
                 AodOverlay.show(svc);
             }
         });
         Xp.hookAllMethods(service, "onDreamingStopped", new Xp.MethodHook() {
             @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 Trace.log("T08", "dreaming stopped");
+                injectAttempt = INJECT_RETRIES;
                 AodOverlay.hide();
             }
         });
@@ -70,7 +79,26 @@ final class HyperOsAod {
 
     static boolean injectIntoAod() {
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        if (root == null) return false;
+        if (root == null) {
+            // 以前这里直接 return false，而 AodOverlay 只在 950ms 后试一次；
+            // AODView 若晚于这个窗口 inflate，整轮息屏就再也没有注入机会。
+            if (injectAttempt < INJECT_RETRIES) {
+                injectAttempt++;
+                Trace.log("T06", "inject waiting for AODView try=" + injectAttempt);
+                MAIN.postDelayed(new Runnable() {
+                    @Override public void run() {
+                        if (injectAttempt <= 0) return;
+                        injectIntoAod();
+                    }
+                }, INJECT_RETRY_MS);
+            } else {
+                AliveLog.once(TAG, "inject-giveup",
+                        "AOD injection gave up: no AODView after " + INJECT_RETRIES + " tries");
+                Trace.log("T06", "inject gave up");
+            }
+            return false;
+        }
+        injectAttempt = 0;
         AodSurface existing = liveSurface == null ? null : liveSurface.get();
         if (root.findViewWithTag(TAG) == null || existing == null
                 || !existing.isAttachedToWindow() || !existing.isShown()) {
@@ -112,6 +140,7 @@ final class HyperOsAod {
         attachGeneration++;
         scheduledRoot = null;
         aodRoot = null;
+        injectAttempt = INJECT_RETRIES;
         AodSurface surface = liveSurface == null ? null : liveSurface.get();
         liveSurface = null;
         if (surface == null) return;
@@ -193,16 +222,27 @@ final class HyperOsAod {
         AliveLog.reset("aod-view-pending");
         Trace.log("T04", "surface#create id=" + System.identityHashCode(surface)
                 + " host=" + System.identityHashCode(target) + " children=" + target.getChildCount());
+        // 以前 supervise() 是死代码：surface 一旦被 AODView 移除/换宿主就永久丢失，
+        // 表现就是"转场有球、稳定后只剩时钟"。
+        supervise(root, surface);
 
     }
 
     private static void supervise(final ViewGroup root, final AodSurface surface) {
+        final long generation = attachGeneration;
+        Trace.log("T09", "supervise start id=" + System.identityHashCode(surface));
         root.postDelayed(new Runnable() {
             int tries;
             int misses;
 
             @Override public void run() {
 
+                // detach() 或新一轮 attach 之后这个 surface 已作废，不能再塞回旧层级。
+                if (generation != attachGeneration
+                        || liveSurface == null || liveSurface.get() != surface) {
+                    Trace.log("T09", "supervise stop (replaced) tries=" + tries);
+                    return;
+                }
                 if (surface.getParent() == null) {
                     if (++misses < 8) { next(); return; }
                     ViewGroup host = findInnerAod(root);
@@ -324,6 +364,16 @@ final class HyperOsAod {
             loop.mode(0);
             loop.attach(surface, width, height);
             Trace.log("T05", "texture#available id=" + System.identityHashCode(this) + " " + width + "x" + height);
+            // 首帧回调若因 EGL/纹理异常没来，alpha 会永远停在 0，肉眼就是"息屏没有球"。
+            // 看门狗只保证内容可见，不掩盖真实失败（仍会打日志）。
+            postDelayed(new Runnable() {
+                @Override public void run() {
+                    if (getAlpha() >= 1f) return;
+                    AliveLog.i(TAG, "alpha watchdog fired, alpha=" + getAlpha());
+                    Trace.log("T05", "alpha watchdog forced");
+                    animate().alpha(1f).setDuration(FADE_MS).start();
+                }
+            }, ALPHA_WATCHDOG_MS);
         }
 
         @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {

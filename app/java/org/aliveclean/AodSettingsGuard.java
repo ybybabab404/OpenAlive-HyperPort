@@ -181,7 +181,9 @@ public final class AodSettingsGuard {
             SAVED.put(root, saved);
         }
         applyLabel(context, spinner, saved);
-        lock(row, spinner);
+        // 2026-11-16：不再 lock(row, spinner)。
+        // 旧的锁死是为了"我们的壁纸必须全屏 AOD"，但那样用户在我们壁纸下也改不了样式，
+        // 与"用户设置为准"的原则冲突（见 Bug B）。现在允许用户随时切回「自定义」。
     }
 
     private static int id(Context context, String name) {

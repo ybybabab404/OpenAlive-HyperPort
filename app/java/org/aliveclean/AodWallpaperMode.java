@@ -203,42 +203,27 @@ final class AodWallpaperMode {
         }
     }
 
+    /**
+     * 用户选的息屏样式：`full_screen_aod_on==1` 表示「和锁屏样式一致」（全屏 AOD），
+     * 否则是「自定义」。模块**不再改写**这个键，只按它决定要不要补足全屏 AOD 能力。
+     */
+    static boolean wantsFullAod(Context context) {
+        if (context == null) return false;
+        try {
+            return getInt(context, KEY_MODE, 0) == 1;
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "cannot read full_screen_aod_on", error);
+            return false;
+        }
+    }
+
     static void enter(Context context) {
-        if (context == null) return;
-        // The user-facing AOD switch wins.  Applying our wallpaper while AOD is
-        // off must not silently write full_screen_aod_on=1; the setting is
-        // repaired later by ensureEnabled() after the user turns AOD back on.
-        if (!HyperOsAod.aodEnabled(context) || !aodSwitchFromShell()) {
-            AliveLog.i(TAG, "aod mode enter skipped: AOD is disabled");
-            return;
-        }
-        int original;
-        try {
-            original = getInt(context, KEY_MODE, UNSET);
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "aod mode read failed; left untouched", error);
-            return;
-        }
-        // Old builds could leave an out-of-range value behind; never persist it.
-        if (original > 1) original = 1;
-        try {
-            if (getInt(context, KEY_HAS_RESTORE, 0) != 1) {
-                // KEY_MODE may be absent on a fresh device. In that case the restore
-                // marker still has to exist, otherwise the mode becomes non-reversible
-                // and the next restore cannot remove the key we are about to create.
-                if (original == UNSET) {
-                    putString(context, KEY_RESTORE, null);
-                } else {
-                    putInt(context, KEY_RESTORE, original);
-                }
-                putInt(context, KEY_HAS_RESTORE, 1);
-            }
-            putInt(context, KEY_MODE, 1);
-            putInt(context, KEY_ACTIVE, 1);
-            AliveLog.i(TAG, "aod mode ->1 (original=" + original + ")");
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "aod mode write failed", error);
-        }
+        // 2026-11-16：不再写 full_screen_aod_on。
+        // 旧设计在应用壁纸时把它强写成 1，导致「用户选自定义 → 切壁纸后又变回全屏 AOD」，
+        // 而且一旦 marker 被误清就无法还原用户原值。现在模块完全尊重用户的选择，
+        // 需要全屏 AOD 时由 AodFullScreen 去补足设备能力（本机 MiuiConfigs 原生是 false）。
+        AliveLog.i(TAG, "aod mode enter skipped: user setting is authoritative ("
+                + (wantsFullAod(context) ? "full" : "custom") + ")");
     }
 
     /**
@@ -300,26 +285,16 @@ final class AodWallpaperMode {
         }
     }
 
-    /** 壁纸是我们的，但开关不是 1：说明被别的路径打回去了，重新写回。只在「我们本来开着」时动手。 */
+    /**
+     * 2026-11-16 起不再改写 `full_screen_aod_on`：这个键完全属于用户。
+     * 旧实现会把它"修回 1"，于是用户手动选「自定义」后又被改回「和锁屏样式一致」，
+     * 这正是 Bug B 的表象之一。保留方法只为兼容旧调用点。
+     */
     static void ensureEnabled(Context context) {
         if (context == null) return;
-        try {
-            if (!alive(context)) return;
-            // The user-facing AOD switch wins.  Repairing full_screen_aod_on while
-            // doze_always_on is off would silently turn the option back on.
-            if (!HyperOsAod.aodEnabled(context) || !aodSwitchFromShell()) return;
-            if (getInt(context, KEY_HAS_RESTORE, 0) != 1) {
-                // The wallpaper may have been selected from MIUI's own picker, so
-                // SceneApply.enter() never ran.  Establish the restore marker now.
-                enter(context);
-                return;
-            }
-            if (getInt(context, KEY_MODE, UNSET) == 1) return;
-            putInt(context, KEY_MODE, 1);
-            AliveLog.i(TAG, "aod mode repaired ->1");
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "aod mode repair failed", error);
-        }
+        // 不做任何写入；只把当前状态记一笔，便于排查。
+        AliveLog.once(TAG, "aod mode untouched",
+                "aod mode left to the user (" + (wantsFullAod(context) ? "full" : "custom") + ")");
     }
 
     static void restore(Context context) {

@@ -121,6 +121,8 @@ final class AodFullScreen {
                 forceManager(lastManager.get(), context);
             } else {
                 reconcileNative(lastManager.get(), context);
+                Object dozeHost = lastDozeHost.get();
+                if (dozeHost != null) restoreDoze(dozeHost);
             }
         }
     }
@@ -188,7 +190,7 @@ final class AodFullScreen {
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
                     Context context = Xp.currentApplication();
                     if (context != null
-                            && AodWallpaperMode.alive(context)
+                            && AodWallpaperMode.wantsFullAod(context)
                             && HyperOsAod.aodEnabled(context)) {
                         param.setResult(Boolean.TRUE);
                     }
@@ -335,6 +337,8 @@ final class AodFullScreen {
                         // isWallpaperTypeSupport=true 写回去，MIUI 随后就会把
                         // full_screen_aod_support 重新算成 1（见 reconcileNative 注释）。
                         reconcileNative(param.thisObject, context);
+                        Object host = lastDozeHost.get();
+                        if (host != null) restoreDoze(host);
                     }
                 }
             }).size();
@@ -455,9 +459,16 @@ final class AodFullScreen {
         syncFlags(reason, Xp.currentApplication());
     }
 
+    /**
+     * 「要不要由模块补足全屏 AOD 能力」——只看两件事：
+     * 用户开着 AOD（doze_always_on=1），并且用户选的是「和锁屏样式一致」
+     * （full_screen_aod_on=1）。本机 MiuiConfigs.SUPPORT_FULL_AOD 原生是 false，
+     * 所以选了这一项就必须由我们补，否则 MIUI 永远渲染成「自定义」（Bug B）。
+     * 选「自定义」时一律放行给 MIUI，模块不参与。
+     */
     private static boolean controlsFullAod(Context context) {
         return context != null
-                && AodWallpaperMode.alive(context)
+                && AodWallpaperMode.wantsFullAod(context)
                 && HyperOsAod.aodEnabled(context);
     }
 

@@ -548,10 +548,76 @@ grep -E 'AliveHSAod|AliveClean|AliveHSHooks|AndroidRuntime|FATAL' .tmp/logs/full
 【结论】已验证/高置信推断/待验证：
 ```
 
-## 8. 当前排查优先级
+## 8. 当前排查优先级（2026-11-15 23:0x 更新）
 
-1. **先补 Bug A 的稳态证据**：2/6/12/18 秒截图 + logcat；确认是 surface 被移除、alpha 0，还是纹理黑。
-2. **再决定是否调用 `supervise`/加首帧看门狗**；不要先调延迟。
-3. **Bug B 先确认 MIUI 原生限制**：禁用模块对照，查 `isWallpaperTypeSupport` 原值；再决定是否产品限制。
-4. **Bug C 单独回归**：切系统→切项目→重启→切系统，记录每一步 `full_screen_aod_on`/wallpaper 组件/日志。
-5. 最后做真实指纹和系统壁纸人工回归；不要用 adb 虚拟指纹代替。
+1. **Bug A 取证**：装诊断构建 `4591c24`（`Diagnostics.TRACE=true`）→ 重启 → 应用项目壁纸 → 息屏 2/6/12/18s 截图 + `logcat -s AliveHS*`。判据见 §1.5 与 §9.3。
+2. **Bug B/C 验证**：本次已按反编译源码改掉"把旧 support 标志写回"的缺陷（§9.2），需要实测确认 `full_screen_aod_support`/`full_screen_aod_on` 在切回系统壁纸后回到原生值。
+3. **不要**再先调延迟/先改外观参数——A 的静态缺陷（supervise 死代码、alpha 无兜底、注入只试一次）已经在 `4591c24` 里修掉，剩下的是"到底哪一环在真机上没走通"，只能靠日志。
+4. 真实指纹与系统壁纸人工回归最后做；不要用 adb 虚拟指纹代替。
+
+## 9. 2026-11-15 23:0x 现场取证与 B/C 根因（反编译 + 实机）
+
+### 9.1 现场快照（实机只读，设备 `9eb96e8a`，HyperOS 4.0.0.33 / Android 17）
+
+| 项 | 值 | 说明 |
+|---|---|---|
+| 装的 APK | b1c（设备上 `base.apk` sha256 = `b1c98f74…`） | 与 `dist/save/b1c98f7.apk` 一致 |
+| 当前壁纸 | `com.miui.miwallpaper/…ImageWallpaper`（**系统静态壁纸**） | `dumpsys wallpaper` 的 `mWallpaperComponent` |
+| `doze_always_on` | 1 | |
+| `full_screen_aod_on` | **1** | 系统壁纸下仍是 1 |
+| `full_screen_aod_support` | **1** | 同上 |
+| `full_screen_aod_disable_reason` | **0** | MIUI 认为"没有任何不支持原因" |
+| `alive_aod_restore_value/set/active` | 全 `null` | 说明模块 `restore()` 跑过并清掉了自己的标记（logcat 有 `aod foreign confirmed x5`，22:33:11） |
+| AOD 设置页 | 息屏样式显示 **「和锁屏样式一致」**，预览是"壁纸 + 时钟" | 截图 `.tmp/screenshots/bugfix-20261115/b1-aodstyle-system-wallpaper.png` |
+
+**这张截图就是用户说的"效果始终是自定义模式"**：系统壁纸下 AOD 仍按"全屏 AOD / 和锁屏样式一致"渲染，而不是普通 AOD 样式。
+
+### 9.2 B/C 根因：我们把自己的旧标志写回去了（【已验证（源码级）】）
+
+反编译 SystemUI（`.tmp/research/decompiled/jadx-systemui`）确认：
+
+```java
+// MiuiFullAodManager.onWallpaperChanged()
+isWallpaperTypeSupport = isDefaultLockScreenTheme() && isMiuiWallpaperComponentUsing()
+                         && !"super_wallpaper".equals(mKeyguardWallpaperType);
+
+// MiuiFullAodManager.updateSettings()
+r4 = isLockScreenTemplateSupport && isWallpaperTypeSupport && isDeviceSupport
+     && (!isVideoDepthEnable || isSupportPlayBack);
+if (isFullAodSupport == r4 && mNotSupportReason == i2) return;   // 相等就不写
+isFullAodSupport = r4;
+putIntForUser("full_screen_aod_support", r4);                    // ← 就是它被写成 1
+if (r4 == 0) putIntForUser("full_screen_aod_on", 0);
+
+// fullAodEnable()
+isDeviceSupport && mAodEnable && mAodFullScreenEnable && isFullAodSupport
+```
+
+而 b1c 的 `AodFullScreen.restoreManager()` 会把**在"我们的壁纸"期间捕获的** `MANAGER_ORIGINAL` 原样写回，其中 `isWallpaperTypeSupport = true`。于是：
+
+1. 壁纸切回系统静态壁纸 → native `onWallpaperChanged()` 算出 `isWallpaperTypeSupport=false`；
+2. 我们的 after-hook 立刻 `restoreManager()` 把它改回 `true`（捕获值）；
+3. native `updateSettings()` 用 `true` 算出 `r4=1` → 写 `full_screen_aod_support=1`，且**永远不会**写 `full_screen_aod_on=0`；
+4. 全屏 AOD 在系统壁纸下"永远受支持" → AOD 样式页按全屏 AOD 渲染 = 用户看到的"始终自定义"。
+
+- 【支持】B2（模块恢复逻辑把 support 标志还原了）
+- 【不支持】"`full_screen_aod_support=1` 是 MIUI 对静态壁纸的原生值"——它确实是 native 会写 1 的分支，但**前提是我们没把 `isWallpaperTypeSupport` 改回 true**；两者需要实测区分（禁用模块对照）。
+- 【同一根因】B 与 C 是同一处代码：C 的"互切不恢复"就是第 2、3 步的后果。
+
+**已修（诊断构建 `4591c24`）**：`AodFullScreen.reconcileNative()` —— 外来壁纸时不再写回旧标志，而是先 `restoreManager()`，再**在我们自己的 hook 被屏蔽（`RECONCILING`）的情况下**调用 native 的 `onWallpaperChanged()` + `updateSettings()`，让 MIUI 按当前真实壁纸重算两个 Secure 键；另外开机 2.5s 补一次 reconcile，堵住"上次会话留下的标志"。`reconcileNative` 有 1.5s 防抖。
+
+### 9.3 Bug A 本次修掉的静态缺陷（都是"确定性缺陷"，不是猜）
+
+| # | 缺陷 | 后果 | 修法 |
+|---|---|---|---|
+| A-1 | `supervise()` 从未被调用（死代码） | surface 一旦被 AODView 移除/换宿主就永久丢失 = "稳定后只剩时钟" | `attach()` 成功后启动 supervise，带 generation/liveSurface 校验 |
+| A-2 | `AodSurface` alpha 只在首帧回调里置 1，没有兜底 | 首帧不来则 alpha 永远 0 = "没有球" | 1500ms 看门狗：alpha 仍 < 1 就强制动画到 1，并打 `alpha watchdog fired` |
+| A-3 | `injectIntoAod()` 在 `aodRoot == null` 时直接返回 false，`AodOverlay` 只试一次（950ms） | AODView 晚于该窗口 inflate 就整轮没有注入 | 200ms × 25 次有界重试，`onDreamingStopped` 取消，耗尽打 `AOD injection gave up` |
+| A-4 | 注入成功与否只看 `aodRoot != null` | 日志 `injected into the AOD view` 会骗人 | 保留但用 `T04/T05/T06/T09` 区分真实阶段 |
+
+**仍未判定**：真机上是"没注入"（看 `T06 gave up`）、"注入了但被移除"（`T09 supervise stop` / `T04` 后无 `T05`）还是"注入了但内容黑"（有 `T05`+`alpha watchdog fired`）。这三条只能靠 `4591c24` 的日志区分，不要在没有日志的情况下继续改代码。
+
+### 9.4 下一步（就是 §8 第 1、2 条）
+
+装 `4591c24` → `adb reboot` → 应用项目壁纸 → 息屏 20s（2/6/12/18s 截图）→ 抓 `logcat -s AliveHS*`：按 §1.5 判定树走。设备侧操作已在 `09-*` §3.7 登记。
+

@@ -82,7 +82,7 @@ dist/                            构建输出
 cd "<repo>" && \
 ANDROID_HOME="$ANDROID_HOME" \
 JAVA_HOME="$JAVA_HOME" \
-HYPERALIVE_NATIVE_SO=".tmp/build/libalive_clean.so" \
+ALIVEHS_NATIVE_SO=".tmp/build/libalive_clean.so" \
 USERPROFILE="$HOME" \
 PYTHONIOENCODING=utf-8 \
 C:/Python314/python.exe tools/build_release.py --no-checks

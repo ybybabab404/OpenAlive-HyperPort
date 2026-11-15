@@ -108,7 +108,10 @@ public final class CleanWallpaper extends WallpaperService {
         }
         @Override public void scene(int next,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask){
             boolean changed=scenesState.accept(next,time,phase);
-            if(changed||(next==1&&lastSentMode!=1)){ambient=next==0;lastSentMode=next;renderer.mode(next,animate,nightLevel,aodMask);}
+            if(changed||(next==1&&lastSentMode!=1)){
+                ambient=next==0;
+                if(!skipAodMode(next)){lastSentMode=next;renderer.mode(next,animate,nightLevel,aodMask);}
+            }
             refreshVisibility();
             if(scenesState.mode()==next&&engineDisplayId()==android.view.Display.DEFAULT_DISPLAY)renderer.clockTransition(clockToken);
             AliveLog.i(TAG,"scene push mode="+next+" changed="+changed+" animate="+animate+" phase="+phase+" delayMs="+(android.os.SystemClock.uptimeMillis()-time));
@@ -254,8 +257,26 @@ public final class CleanWallpaper extends WallpaperService {
             if(mode!=lastSentMode)send(mode,true);
         }
         private void cancelLockGrace(){lockGraceActive=false;lockGraceToken++;}
+        private boolean aodDisabled(){
+            if(isPreview())return false;
+            try{
+                return android.provider.Settings.Secure.getInt(getContentResolver(),"doze_always_on",0)!=1;
+            }catch(Exception error){
+                AliveLog.w(TAG,"AOD setting unavailable",error);
+                return false;
+            }
+        }
+        private boolean skipAodMode(int mode){
+            if(mode!=0||!aodDisabled())return false;
+            lastSentMode=0;
+            panelDark=true;
+            if(renderer!=null)renderer.visible(false);
+            AliveLog.once(TAG,"aod-off-wallpaper","scene AOD skipped: AOD is disabled");
+            return true;
+        }
         private void send(int mode,boolean animate){
             cancelLockGrace();
+            if(skipAodMode(mode))return;
             int from=lastSentMode;
             boolean wasDark=panelDark;
             lastSentMode=mode;
@@ -284,8 +305,8 @@ public final class CleanWallpaper extends WallpaperService {
                     +" valid="+h.getSurface().isValid()+" display="+engineDisplayId());
 
             renderer.attachFresh(h.getSurface(),w,height);
-            if(!isPreview()&&panelDark)renderer.mode(0,false);
             lastSentMode=-1;
+            if(!isPreview()&&panelDark&&!skipAodMode(0))renderer.mode(0,false);
             update("surface");
             readOfficialRegion();
         }
@@ -300,7 +321,9 @@ public final class CleanWallpaper extends WallpaperService {
         private void refreshVisibility(){
             android.view.Display display=engineDisplay();
             int state=display==null?android.view.Display.STATE_UNKNOWN:display.getState();
-            boolean next=wallpaperVisible&&state!=android.view.Display.STATE_UNKNOWN&&state!=android.view.Display.STATE_OFF;
+            boolean dozing=state==android.view.Display.STATE_DOZE||state==android.view.Display.STATE_DOZE_SUSPEND;
+            boolean next=wallpaperVisible&&state!=android.view.Display.STATE_UNKNOWN&&state!=android.view.Display.STATE_OFF
+                    &&!(dozing&&aodDisabled());
 
             if(!next&&state==android.view.Display.STATE_ON&&screenOn&&!ambient
                     &&android.os.SystemClock.uptimeMillis()<wakeUntil)next=true;
@@ -327,6 +350,11 @@ public final class CleanWallpaper extends WallpaperService {
             AliveLog.i(TAG,"wallpaper command="+action+" authority="+scenesState.authoritative()+" mode="+scenesState.mode());
             if(scenesState.authoritative())return super.onCommand(action,x,y,z,extras,resultRequested);
             boolean animate=extras==null||!extras.getBoolean("action_alive_animator_end",false);
+            if("android.wallpaper.goingtosleep".equals(action)){
+                // 系统在灭屏动画开始前就发这条命令：抢在 SCREEN_OFF/ambient 之前起 2->0 过渡，避免退化成瞬时跳变
+                ambient=true;
+                if(lastSentMode!=0)send(0,true);
+            }
             if("action_alive_aod".equals(action)){ambient=true;send(0,animate);}
             else if("android.wallpaper.wakingup".equals(action)){
 

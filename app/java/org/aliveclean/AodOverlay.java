@@ -12,12 +12,33 @@ final class AodOverlay {
     private static final String TAG = "AliveHSAod";
     private static SurfaceView view;
     private static RenderLoop loop;
+    private static int showToken;
+    private static final long ATTACH_DELAY_MS = 950;
 
     static void show(Service service) {
         Trace.log("T10", "overlay#show enter");
+        if (!HyperOsAod.aodEnabled(service)) {
+            AliveLog.i(TAG, "overlay skipped: AOD is disabled");
+            hide();
+            return;
+        }
+        if (!ownsWallpaper(service)) {
+            AliveLog.i(TAG, "overlay skipped: wallpaper is not ours");
+            hide();
+            return;
+        }
         if (view != null) { Trace.log("T10", "overlay#show already"); return; }
-        if (!ownsWallpaper(service)) { AliveLog.i(TAG, "overlay skipped: wallpaper is not ours"); return; }
         if (HyperOsAod.injectIntoAod()) { AliveLog.i(TAG, "injected into the AOD view"); return; }
+        final int token = ++showToken;
+        new android.os.Handler(service.getMainLooper()).postDelayed(new Runnable() {
+            @Override public void run() {
+                if (token != showToken || view != null) return;
+                add(service);
+            }
+        }, ATTACH_DELAY_MS);
+    }
+
+    private static void add(Service service) {
         try {
             view = new AodView(service);
             WindowManager.LayoutParams params = new WindowManager.LayoutParams(
@@ -39,6 +60,8 @@ final class AodOverlay {
 
     static void hide() {
         Trace.log("T11", "overlay#hide");
+        showToken++;
+        HyperOsAod.detach();
         if (view == null) {
             if (loop != null) { loop.close(); loop = null; }
             return;
@@ -50,13 +73,10 @@ final class AodOverlay {
     }
 
     private static boolean ownsWallpaper(Context context) {
-        try {
-            android.app.WallpaperManager manager = android.app.WallpaperManager.getInstance(context);
-            android.app.WallpaperInfo home = manager.getWallpaperInfo();
-            if (home != null && "org.aliveclean".equals(home.getPackageName())) return true;
-            android.app.WallpaperInfo lock = manager.getWallpaperInfo(android.app.WallpaperManager.FLAG_LOCK);
-            return lock != null && "org.aliveclean".equals(lock.getPackageName());
-        } catch (Throwable unavailable) { return false; }
+        // The system (home) wallpaper is authoritative.  A live wallpaper left on
+        // the lock slot must not keep the AOD overlay alive after the user switched
+        // the home wallpaper back to MIUI.
+        return AodWallpaperMode.alive(context);
     }
 
     private static final class AodView extends SurfaceView implements SurfaceHolder.Callback {
@@ -64,10 +84,20 @@ final class AodOverlay {
             super(context);
             getHolder().addCallback(this);
             getHolder().setFormat(PixelFormat.TRANSLUCENT);
-            setAlpha(0.9f);
+            setAlpha(0f);
         }
         @Override public void surfaceCreated(SurfaceHolder holder) {
             loop = new RenderLoop(getContext());
+            final RenderLoop current = loop;
+            loop.onFirstFrame(new Runnable() {
+                @Override public void run() {
+                    post(new Runnable() {
+                        @Override public void run() {
+                            if (loop == current) animate().alpha(0.9f).setDuration(180).start();
+                        }
+                    });
+                }
+            });
             loop.mode(0);
             loop.attach(holder.getSurface(), getWidth(), getHeight());
             AliveLog.i(TAG, "overlay surface " + getWidth() + "x" + getHeight());

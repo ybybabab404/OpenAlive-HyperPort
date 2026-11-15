@@ -45,6 +45,9 @@ final class RenderLoop {
     private int homeWidth,homeHeight;
     private float aspect=1;
     private boolean visible=true;
+    private long probeUntil,probeLast,probeVsyncLast,probeDrawLast;
+    private Runnable firstFrame;
+    private boolean firstFrameReported;
 
     private int[] aodPalette;
 
@@ -80,6 +83,7 @@ final class RenderLoop {
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener changes=(p,key)->reload();
     RenderLoop(Context context){this(context,SceneOptions.APPLIED);}
     RenderLoop(Context context,String name){Context app=context.getApplicationContext();this.context=app!=null?app:context;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
+    void onFirstFrame(Runnable listener){firstFrame=listener;}
     void attach(Surface surface,int w,int h){queueAttach(surface,w,h,false);}
 
     void attachFresh(Surface surface,int w,int h){queueAttach(surface,w,h,true);}
@@ -175,7 +179,7 @@ final class RenderLoop {
 
         if(vivo!=null&&(mode!=next||lightSnapshot)){vivo.transition(next,animate,vivoDarkWallpaper?.76f:1f,vivoAodMask);vivo.visible(renderingVisible());}
         int previous=mode;boolean visible=renderingVisible();
-        mode=next;updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)AliveLog.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
+        mode=next;pacer.doze(next==0);if(next==0){probeUntil=SystemClock.uptimeMillis()+1500;probeLast=0;probeDrawLast=0;}updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)AliveLog.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
     });}
     private boolean renderingVisible(){return visible&&!backdropCovered;}
     void backdrop(boolean covered){handler.post(()->{if(preview||backdropCovered==covered)return;backdropCovered=covered;updateRenderActivity();});}
@@ -209,7 +213,7 @@ final class RenderLoop {
         }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){AliveLog.e("AliveClean","Scene reload failed",e);release();}}
     void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
     private void schedule(){if((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)&&choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}}
-    private void onVsync(long time){framePosted=false;frameTime=time;handler.post(renderTask);}
+    private void onVsync(long time){framePosted=false;if(probeUntil!=0){long ms=time/1_000_000L;if(probeVsyncLast!=0&&ms-probeVsyncLast>25)AliveLog.i("AliveClean","probe vsync gap="+(ms-probeVsyncLast)+" mode="+mode+" v0="+(motion!=null?motion.values[0]:-1));probeVsyncLast=ms;}frameTime=time;handler.post(renderTask);}
     private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);}
     private void updateCosmicLifecycle(){
         try{
@@ -249,12 +253,13 @@ final class RenderLoop {
             });
             updateCosmicLifecycle();
             cosmicUntil=System.nanoTime()+5_000_000_000L;
-            applyAodRegion();choreographer=Choreographer.getInstance();pacer.reset();return;
+            applyAodRegion();choreographer=Choreographer.getInstance();pacer.doze(mode==0);pacer.reset();return;
         }
         int lock=options.lock,home=options.home;
         if(mode==0)readWallpaperPalette();
         scene=NativeScene.create(width,height,mode,options.aod,lock,home);
         if(scene==0)throw new IllegalStateException("Native scene creation failed; see shader log");
+        pacer.doze(mode==0);
         motion=new SceneMotion(width,height,mode,PhotoStyle.supported(options.aod)?-1:options.aod,lock,home,false);
         textureMotion=new TextureMotion(width,height,mode,lock,home);
         if(PhotoStyle.supported(options.aod)){
@@ -329,8 +334,10 @@ final class RenderLoop {
             File external=context.getExternalFilesDir(null);
             File fromExternal=external==null?null:new File(external,SceneOptions.WALLPAPER);
             File internal=new File(context.getFilesDir(),SceneOptions.WALLPAPER);
-            File shared=new File("/data/data/com.android.systemui/files/aod-wallpaper.png");
-            if(shared.isFile())file=shared;else if(fromExternal!=null&&fromExternal.isFile())file=fromExternal;else if(internal.isFile())file=internal;
+            // Never fall back to the old SystemUI debug cache: it is a black-and-white
+            // moon image unrelated to the user's wallpaper.  Missing files use the
+            // gradient placeholder below.
+            if(fromExternal!=null&&fromExternal.isFile())file=fromExternal;else if(internal.isFile())file=internal;
         }
         AliveLog.i("AliveClean","loadPhoto "+file.getAbsolutePath()+" exists="+file.isFile()+" mode="+mode+" primary="+primary);
         Bitmap bitmap=null;
@@ -354,6 +361,7 @@ final class RenderLoop {
     private void render(long time){
 
         boolean forced=forceFrame;forceFrame=false;
+        long probeNow=SystemClock.uptimeMillis();if(probeNow<probeUntil){AliveLog.i("AliveClean","probe frame dt="+(probeLast==0?-1:probeNow-probeLast)+" mode="+mode+" forced="+forced+" vis="+renderingVisible()+(motion!=null?" v0="+motion.values[0]:""));probeLast=probeNow;}else probeLast=0;
         if((!renderingVisible()&&!forced)||(scene==0&&cosmic==null&&vivo==null))return;
         if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){AliveLog.e("AliveClean","Vivo frame failed",e);release();}return;}
         if(cosmic!=null){
@@ -374,6 +382,7 @@ final class RenderLoop {
         try{
             boolean resumedSample=frameMotion!=null&&frameSample.pending;
             motion.advance(time,preview||mode!=0||sailContinuousAod?1f:aodMotion.speed(time));
+            if(textureMotion!=null)textureMotion.advance(time);
             if(frameMotion!=null){
 
                 if(!frameSample.pending)frameSample.captureTextures(textureMotion);
@@ -384,9 +393,20 @@ final class RenderLoop {
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
             if(forced||pacer.due(time)||!moving){
-                if(!NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures))throw new IllegalStateException("Invalid texture effect packet");
-                if(!NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base))throw new IllegalStateException("Invalid native frame packet");
-                if(!swap("native"))throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
+                long tEf=SystemClock.uptimeMillis();
+                boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
+                long tDraw=SystemClock.uptimeMillis();
+                if(!okEff)throw new IllegalStateException("Invalid texture effect packet");
+                boolean okRen=NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base);
+                long tSw=SystemClock.uptimeMillis();
+                if(!okRen)throw new IllegalStateException("Invalid native frame packet");
+                boolean okSw=swap("native");
+                long tEn=SystemClock.uptimeMillis();
+                if(!okSw)throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
+                if(probeUntil!=0){
+                    AliveLog.i("AliveClean","probe draw gap="+(probeDrawLast==0?-1:tEf-probeDrawLast)+" eff="+(tDraw-tEf)+" ren="+(tSw-tDraw)+" sw="+(tEn-tSw)+" mode="+mode+" v0="+(motion!=null?motion.values[0]:-1));
+                    probeDrawLast=tEf;
+                }
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
                     if(Diagnostics.TRACE){long wait=SystemClock.uptimeMillis()-frameSample.capturedAt;if(wait>80)AliveLog.i("AliveClean","Frame sample mask="+frameSample.mask+" waitMs="+wait);}
@@ -400,6 +420,12 @@ final class RenderLoop {
     private boolean swap(String tag){
         boolean ok=EGL14.eglSwapBuffers(display,window);
         if(!ok)AliveLog.e("AliveClean","eglSwapBuffers failed "+tag+" err="+EGL14.eglGetError()+" size="+attachedWidth+"x"+attachedHeight);
+        if(ok&&!firstFrameReported){
+            firstFrameReported=true;
+            final Runnable listener=firstFrame;
+            firstFrame=null;
+            if(listener!=null)handler.post(listener);
+        }
         return ok;
     }
     private void release(){stopFrames();if(vivo!=null){vivo.close();vivo=null;}closeCosmic();handler.removeCallbacks(reloadTask);closeFrame();if(motion!=null){motion.close();motion=null;}if(display!=EGL14.EGL_NO_DISPLAY){if(scene!=0){NativeScene.destroy(scene);scene=0;}clearAuxiliary();GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);EGL14.eglTerminate(display);EGL14.eglReleaseThread();}display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;window=EGL14.EGL_NO_SURFACE;attachedSurface=null;attachedWidth=attachedHeight=0;}

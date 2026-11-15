@@ -78,10 +78,28 @@ final class KeyguardDepthHider {
         });
 
         Xp.findAndHookMethod(panel, "updateKeyguardElementsVisibility", new Xp.MethodHook() {
+            @Override protected void beforeHookedMethod(Xp.MethodHookParam call) {
+                if (!isOurWallpaper(contextOf(call.thisObject))) return;
+                Object depth = Xp.getObjectField(call.thisObject, "keyguardDepthInteractor");
+                if (depth == null) return;
+                // Native recomputes isActualDisplayDepth=true for a depth wallpaper
+                // during this visibility pass.  Reset before the pass so the clock and
+                // foreground layer are never laid out as the depth layer for a frame.
+                setField(depth, "isActualDisplayDepth", Boolean.FALSE);
+                clear(depth);
+            }
             @Override protected void afterHookedMethod(Xp.MethodHookParam call) {
                 if (!isOurWallpaper(contextOf(call.thisObject))) return;
                 Object depth = Xp.getObjectField(call.thisObject, "keyguardDepthInteractor");
                 if (depth != null) clear(depth);
+            }
+        });
+        Xp.findAndHookMethod(panel, "isNeedPreHideDepth", new Xp.MethodHook() {
+            @Override protected void beforeHookedMethod(Xp.MethodHookParam call) {
+                if (!isOurWallpaper(contextOf(call.thisObject))) return;
+                // MIUI hides keyguardForegroundLayer (including the clock) while the
+                // fingerprint unlock animation is going away; ours must stay visible.
+                call.setResult(Boolean.FALSE);
             }
         });
         AliveLog.i(TAG, "installed");
@@ -122,11 +140,14 @@ final class KeyguardDepthHider {
     private static void apply(Object panel) {
         Object depth = Xp.getObjectField(panel, "keyguardDepthInteractor");
         if (depth == null) return;
-        boolean ours = isOurWallpaper(contextOf(panel));
-        if (ours) {
-            setField(depth, "isActualDisplayDepth", Boolean.FALSE);
-            clear(depth);
+        if (!isOurWallpaper(contextOf(panel))) {
+            // Do not call MIUI's depth update methods when the system wallpaper is
+            // not ours: those calls are what re-add the second depth layer and make
+            // the clock flicker while the fingerprint sensor is pressed.
+            return;
         }
+        setField(depth, "isActualDisplayDepth", Boolean.FALSE);
+        clear(depth);
         try {
             Xp.callMethod(panel, "updateShowDepthState");
         } catch (Throwable error) {
@@ -137,7 +158,7 @@ final class KeyguardDepthHider {
         } catch (Throwable error) {
             AliveLog.w(TAG, "updateDeductedImageView failed", error);
         }
-        if (ours) clear(depth);
+        clear(depth);
     }
 
     private static boolean isOurWallpaper(Context context) {
@@ -145,22 +166,11 @@ final class KeyguardDepthHider {
         if (wallpaperCheckedAt != 0L && now - wallpaperCheckedAt < 500L) return ourWallpaper;
         if (context == null) context = appContext;
         if (context == null) return false;
-        boolean ours = false;
-        try {
-            WallpaperManager manager = WallpaperManager.getInstance(context);
-            WallpaperInfo info = null;
-            if (Build.VERSION.SDK_INT >= 34) {
-                try {
-                    info = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
-                } catch (Throwable ignored) {
-
-                }
-            }
-            if (info == null) info = manager.getWallpaperInfo();
-            ours = info != null && "org.aliveclean".equals(info.getPackageName());
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "wallpaper lookup failed", error);
-        }
+        // System/home wallpaper is authoritative.  Checking the lock slot first
+        // made a stale live lock wallpaper keep depth hiding active after the user
+        // switched the home wallpaper back to MIUI, which produced duplicated
+        // depth layers and the fingerprint/clock flicker.
+        boolean ours = AodWallpaperMode.alive(context);
         ourWallpaper = ours;
         wallpaperCheckedAt = now;
         return ours;

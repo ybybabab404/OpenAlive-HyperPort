@@ -1,8 +1,32 @@
 package org.aliveclean;
 
+import android.content.Context;
+
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.WeakHashMap;
 
+/**
+ * Makes MIUI's full-AOD path usable while our wallpaper is active, without permanently
+ * changing global support flags.
+ *
+ * <p>There are two independent consumers:</p>
+ * <ul>
+ *   <li>system_server's {@code MiuiFullAodManager}: it needs {@code isDeviceSupport} and
+ *       {@code isWallpaperTypeSupport} to be true, and it reads {@code MiuiConfigs}
+ *       directly in its constructor and in a few other places.</li>
+ *   <li>{@code com.miui.aod}'s settings app: it needs {@code Utils.isSupportFsAod()} to
+ *       be true, otherwise MIUI hides the style row and never creates the spinner that
+ *       {@link AodSettingsGuard} decorates.</li>
+ * </ul>
+ *
+ * <p>All writes are conditional on the current wallpaper being ours.  The original
+ * {@code MiuiConfigs} values are captured once and restored when the wallpaper is not
+ * ours, so another full-AOD module and the native settings page see their own values
+ * again after the user switches back to a system wallpaper.</p>
+ */
 final class AodFullScreen {
     private static final String TAG = AliveLog.TAG;
     private static final String UTILS = "com.miui.aod.Utils";
@@ -11,49 +35,98 @@ final class AodFullScreen {
     private static final String FULL_AOD = "com.android.keyguard.fullaod.MiuiFullAodManager";
     private static final String[] FLAGS = {"SUPPORT_FULL_AOD", "INNER_SCREEN_SUPPORT_FULL_AOD"};
     private static final long[] UNSAFE_SLOT = {0L};
+    private static final Object MANAGER_LOCK = new Object();
+    private static final Map<Object, ManagerOriginal> MANAGER_ORIGINAL = new WeakHashMap<>();
+    private static final Map<Object, Boolean> DOZE_ORIGINAL = new WeakHashMap<>();
+    private static final Object DOZE_LOCK = new Object();
     private static volatile ClassLoader loaderRef;
+    private static volatile boolean settingsProcess;
+    private static WeakReference<Object> lastManager = new WeakReference<>(null);
+    private static WeakReference<Object> lastDozeHost = new WeakReference<>(null);
+    private static boolean flagsCaptured;
+    private static boolean[] originalFlags;
     private static String lastFlags = "";
 
     private AodFullScreen() {
     }
 
-    static void install(ClassLoader loader) {
+    /**
+     * @param settingsProcess true when called from com.miui.aod.  The settings app only
+     *                        needs the two Utils predicates; it must never touch
+     *                        MiuiConfigs or MiuiFullAodManager.
+     */
+    static void install(ClassLoader loader, boolean settingsProcess) {
         loaderRef = loader;
+        AodFullScreen.settingsProcess = settingsProcess;
         int hooks = 0;
-        hooks += hookSupport(loader);
-        hooks += hookManager(loader);
-        hooks += hookInitializer(loader);
-        AliveLog.i(TAG, "force full aod: hooks=" + hooks);
-        writeFlags("install");
+        if (settingsProcess) {
+            hooks += hookSupport(loader);
+        } else {
+            hooks += hookManager(loader);
+            hooks += hookInitializer(loader);
+            hooks += hookWallpaperType(loader);
+            hooks += hookDoze(loader);
+        }
+        AliveLog.i(TAG, "full aod hooks=" + hooks + " process=" + (settingsProcess ? "aod" : "systemui"));
+        // The settings process only needs Utils predicates.  Writing MiuiConfigs there
+        // would mutate system_server-owned state without having the manager to restore it.
+        if (!settingsProcess) syncFlags("install");
     }
 
-    static void onActivation(android.content.Context context) {
-        writeFlags("activation");
+    static void onActivation(Context context) {
+        if (!settingsProcess) {
+            if (context != null) {
+                if (!HyperOsAod.aodEnabled(context)) {
+                    // The user turned AOD off.  Do not let activation repair
+                    // full_screen_aod_on back to 1; restore our captured value.
+                    AodWallpaperMode.restore(context);
+                    syncFlags("activation-aod-off", context);
+                    forceManager(lastManager.get(), context);
+                    Object dozeHost = lastDozeHost.get();
+                    if (dozeHost != null) restoreDoze(dozeHost);
+                    return;
+                }
+                AodWallpaperMode.ensureEnabled(context);
+                AodWallpaperMode.restoreWhenForeign(context);
+            }
+            syncFlags("activation", context);
+            forceManager(lastManager.get(), context);
+        }
     }
 
     private static int hookSupport(ClassLoader loader) {
         Class<?> clazz = Xp.findClassIfExists(UTILS, loader);
         if (clazz == null) {
-            AliveLog.warnOnce(TAG, "full aod support", "force full aod: com.miui.aod.Utils missing", null);
+            AliveLog.warnOnce(TAG, "full aod support", "full aod: com.miui.aod.Utils missing", null);
             return 0;
         }
         int count = 0;
-        count += hookTrue(clazz, "isSupportFsAod");
-        count += hookTrue(clazz, "isInnerScreenSupportFsAod");
+        count += hookAliveTrue(clazz, "isSupportFsAod");
+        count += hookAliveTrue(clazz, "isInnerScreenSupportFsAod");
         return count;
     }
 
-    private static int hookTrue(Class<?> clazz, String name) {
+    /**
+     * Only lies while our wallpaper is active.  When the user switches to a system
+     * wallpaper the original method result is used again, so MIUI's own settings page
+     * and a third-party full-AOD module keep their own visibility rules.
+     */
+    private static int hookAliveTrue(Class<?> clazz, String name) {
         try {
             Xp.findAndHookMethod(clazz, name, new Xp.MethodHook() {
                 @Override
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
-                    param.setResult(Boolean.TRUE);
+                    Context context = Xp.currentApplication();
+                    if (context != null
+                            && AodWallpaperMode.alive(context)
+                            && HyperOsAod.aodEnabled(context)) {
+                        param.setResult(Boolean.TRUE);
+                    }
                 }
             });
             return 1;
         } catch (Throwable error) {
-            AliveLog.warnOnce(TAG, "full aod hook " + name, "force full aod hook failed: " + name, error);
+            AliveLog.warnOnce(TAG, "full aod hook " + name, "full aod hook failed: " + name, error);
             return 0;
         }
     }
@@ -61,79 +134,283 @@ final class AodFullScreen {
     private static int hookManager(ClassLoader loader) {
         Class<?> clazz = Xp.findClassIfExists(FULL_AOD, loader);
         if (clazz == null) {
-            AliveLog.warnOnce(TAG, "full aod manager", "force full aod: MiuiFullAodManager missing", null);
+            AliveLog.warnOnce(TAG, "full aod manager", "full aod: MiuiFullAodManager missing", null);
             return 0;
         }
         try {
             Xp.hookAllConstructors(clazz, new Xp.MethodHook() {
                 @Override
                 protected void beforeHookedMethod(Xp.MethodHookParam param) {
-                    writeFlags("manager");
+                    syncFlags("manager", firstContext(param.args));
                 }
 
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    try {
-                        Xp.setField(param.thisObject, "isDeviceSupport", Boolean.TRUE);
-                        AliveLog.once(TAG, "full aod manager", "force full aod: manager device support");
-                    } catch (Throwable error) {
-                        AliveLog.warnOnce(TAG, "full aod manager field", "force full aod: manager field failed", error);
-                    }
+                    lastManager = new WeakReference<>(param.thisObject);
+                    forceManager(param.thisObject, firstContext(param.args));
                 }
             });
+            return 1;
         } catch (Throwable error) {
-            AliveLog.warnOnce(TAG, "full aod manager hook", "force full aod: manager hook failed", error);
+            AliveLog.warnOnce(TAG, "full aod manager hook", "full aod: manager hook failed", error);
             return 0;
         }
-        return 1;
     }
 
     private static int hookInitializer(ClassLoader loader) {
         Class<?> clazz = Xp.findClassIfExists(INITIALIZER, loader);
         if (clazz == null) {
-            AliveLog.warnOnce(TAG, "full aod initializer", "force full aod: SystemUIInitializer missing", null);
+            AliveLog.warnOnce(TAG, "full aod initializer", "full aod: SystemUIInitializer missing", null);
             return 0;
         }
         try {
             Xp.findAndHookMethod(clazz, "init", boolean.class, new Xp.MethodHook() {
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    writeFlags("initializer");
+                    syncFlags("initializer", Xp.currentApplication());
+                    forceManager(lastManager.get(), Xp.currentApplication());
                 }
             });
             return 1;
         } catch (Throwable error) {
-            AliveLog.warnOnce(TAG, "full aod initializer hook", "force full aod: initializer hook failed", error);
+            AliveLog.warnOnce(TAG, "full aod initializer hook", "full aod: initializer hook failed", error);
             return 0;
         }
     }
 
-    private static void writeFlags(String reason) {
-        ClassLoader loader = loaderRef;
-        if (loader == null) return;
-        Class<?> clazz = Xp.findClassIfExists(CONFIGS, loader);
+    /**
+     * The manager's cached mFullAodEnable can remain false on the first screen-off
+     * after a boot where MiuiConfigs.SUPPORT_FULL_AOD was false.  MiuiDozeService
+     * reads DozeServiceHostInjector.mFullAodEnable directly, so re-assert it at the
+     * last possible moment as well.  This is intentionally conditional on our
+     * wallpaper; foreign wallpapers keep the native value.
+     */
+    private static int hookDoze(ClassLoader loader) {
+        Class<?> clazz = Xp.findClassIfExists("com.android.keyguard.doze.MiuiDozeService", loader);
         if (clazz == null) {
-            AliveLog.warnOnce(TAG, "full aod configs", "force full aod: MiuiConfigs missing", null);
+            AliveLog.warnOnce(TAG, "full aod doze", "full aod: MiuiDozeService missing", null);
+            return 0;
+        }
+        try {
+            Xp.findAndHookMethod(clazz, "onDreamingStarted", new Xp.MethodHook() {
+                @Override
+                protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                    Context context = contextOf(param.thisObject);
+                    Object host = Xp.getObjectField(param.thisObject, "mDozeServiceHostInjector");
+                    if (host == null) return;
+                    lastDozeHost = new WeakReference<>(host);
+                    if (!controlsFullAod(context)) {
+                        restoreDoze(host);
+                        return;
+                    }
+                    synchronized (DOZE_LOCK) {
+                        if (!DOZE_ORIGINAL.containsKey(host)) {
+                            DOZE_ORIGINAL.put(host, readBool(host, "mFullAodEnable"));
+                        }
+                    }
+                    setBool(host, "mFullAodEnable", true);
+                }
+            });
+            return 1;
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod doze hook", "full aod doze hook failed", error);
+            return 0;
+        }
+    }
+
+    private static int hookWallpaperType(ClassLoader loader) {
+        Class<?> clazz = Xp.findClassIfExists(FULL_AOD, loader);
+        if (clazz == null) return 0;
+        int count = 0;
+        count += hookManagerMethod(clazz, "onWallpaperChanged");
+        count += hookManagerMethod(clazz, "updateSettings");
+        return count;
+    }
+
+    /**
+     * onWallpaperChanged computes isWallpaperTypeSupport from the wallpaper component;
+     * updateSettings turns that into full_screen_aod_support and may write
+     * full_screen_aod_on=0.  Re-assert our values after both, and restore the native
+     * values when the wallpaper is no longer ours.
+     */
+    private static int hookManagerMethod(Class<?> clazz, String name) {
+        try {
+            return Xp.hookAllMethods(clazz, name, new Xp.MethodHook() {
+                @Override
+                protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                    Context context = contextOf(param.thisObject);
+                    syncFlags(name, context);
+                    forceManager(param.thisObject, context);
+                }
+
+                @Override
+                protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    Context context = contextOf(param.thisObject);
+                    if (controlsFullAod(context)) {
+                        forceManager(param.thisObject, context);
+                        // Native updateSettings writes full_screen_aod_on=0 when its
+                        // support calculation fails (doodle lock screen, video depth).
+                        // Repair the key right after the native write.
+                        if ("updateSettings".equals(name)) {
+                            AodWallpaperMode.ensureEnabled(context);
+                        }
+                    } else {
+                        restoreManager(param.thisObject);
+                    }
+                }
+            }).size();
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod manager hook " + name, "full aod hook failed: " + name, error);
+            return 0;
+        }
+    }
+
+    private static void forceManager(Object manager, Context context) {
+        if (manager == null) return;
+        if (context == null) context = Xp.currentApplication();
+        if (!controlsFullAod(context)) {
+            restoreManager(manager);
             return;
         }
+        synchronized (MANAGER_LOCK) {
+            if (!MANAGER_ORIGINAL.containsKey(manager)) {
+                MANAGER_ORIGINAL.put(manager, new ManagerOriginal(manager));
+            }
+        }
+        setBool(manager, "isDeviceSupport", true);
+        setBool(manager, "isWallpaperTypeSupport", true);
+        setBool(manager, "isFullAodSupport", true);
+        // A boot-time manager can be constructed while MiuiConfigs.SUPPORT_FULL_AOD is
+        // false.  In that case its setting observers for doze_always_on are not
+        // registered, so mAodEnable stays false even after full_screen_aod_on becomes 1.
+        // Force both fields so the first screen-off does not fall back to the
+        // custom AOD.  Do not call updateFullAodEnable() from the manager
+        // constructor: it re-enters SystemUI's Dagger graph and can deadlock.
+        setBool(manager, "mAodEnable", true);
+        setBool(manager, "mAodFullScreenEnable", true);
+        AliveLog.once(TAG, "full aod manager", "full aod: manager support forced while ours");
+    }
+
+    private static void restoreManager(Object manager) {
+        if (manager == null) return;
+        ManagerOriginal original;
+        synchronized (MANAGER_LOCK) {
+            original = MANAGER_ORIGINAL.remove(manager);
+        }
+        if (original != null) original.restore(manager);
+    }
+
+    private static void restoreDoze(Object host) {
+        Boolean original;
+        synchronized (DOZE_LOCK) {
+            original = DOZE_ORIGINAL.remove(host);
+        }
+        if (original != null) setBool(host, "mFullAodEnable", original);
+    }
+
+    private static final class ManagerOriginal {
+        final boolean deviceSupport;
+        final boolean wallpaperTypeSupport;
+        final boolean fullAodSupport;
+        final boolean aodEnable;
+        final boolean aodFullScreenEnable;
+
+        ManagerOriginal(Object manager) {
+            deviceSupport = readBool(manager, "isDeviceSupport");
+            wallpaperTypeSupport = readBool(manager, "isWallpaperTypeSupport");
+            fullAodSupport = readBool(manager, "isFullAodSupport");
+            aodEnable = readBool(manager, "mAodEnable");
+            aodFullScreenEnable = readBool(manager, "mAodFullScreenEnable");
+        }
+
+        void restore(Object manager) {
+            setBool(manager, "isDeviceSupport", deviceSupport);
+            setBool(manager, "isWallpaperTypeSupport", wallpaperTypeSupport);
+            setBool(manager, "isFullAodSupport", fullAodSupport);
+            setBool(manager, "mAodEnable", aodEnable);
+            setBool(manager, "mAodFullScreenEnable", aodFullScreenEnable);
+        }
+    }
+
+    private static void setBool(Object target, String field, boolean value) {
+        try {
+            Xp.setField(target, field, value);
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod field " + field, "full aod field failed: " + field, error);
+        }
+    }
+
+    private static boolean readBool(Object target, String field) {
+        try {
+            Object value = Xp.getObjectField(target, field);
+            return Boolean.TRUE.equals(value);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static Context contextOf(Object manager) {
+        try {
+            Object value = Xp.getObjectField(manager, "mContext");
+            if (value instanceof Context) return (Context) value;
+        } catch (Throwable ignored) {
+        }
+        return Xp.currentApplication();
+    }
+
+    private static Context firstContext(Object[] args) {
+        if (args != null) {
+            for (Object arg : args) {
+                if (arg instanceof Context) return (Context) arg;
+            }
+        }
+        return Xp.currentApplication();
+    }
+
+    /**
+     * Capture MiuiConfigs once, then drive it to true only while our wallpaper is alive.
+     * The settings process never gets here (it has no MiuiConfigs dependency), which is
+     * intentional: it must not mutate flags that belong to system_server.
+     */
+    private static void syncFlags(String reason) {
+        syncFlags(reason, Xp.currentApplication());
+    }
+
+    private static boolean controlsFullAod(Context context) {
+        return context != null
+                && AodWallpaperMode.alive(context)
+                && HyperOsAod.aodEnabled(context);
+    }
+
+    private static void syncFlags(String reason, Context context) {
+        ClassLoader loader = loaderRef;
+        if (loader == null || context == null) return;
+        boolean alive = controlsFullAod(context);
+        Class<?> clazz = Xp.findClassIfExists(CONFIGS, loader);
+        if (clazz == null) return;
+        if (!flagsCaptured) {
+            originalFlags = new boolean[FLAGS.length];
+            for (int i = 0; i < FLAGS.length; i++) {
+                Field field = findField(clazz, FLAGS[i]);
+                originalFlags[i] = field != null && read(field);
+            }
+            flagsCaptured = true;
+        }
         StringBuilder report = new StringBuilder();
-        boolean ok = true;
-        for (String name : FLAGS) {
-            Field field = findField(clazz, name);
+        for (int i = 0; i < FLAGS.length; i++) {
+            Field field = findField(clazz, FLAGS[i]);
             if (field == null) {
-                ok = false;
-                report.append(' ').append(name).append("=missing");
+                report.append(' ').append(FLAGS[i]).append("=missing");
                 continue;
             }
-            boolean applied = force(clazz, field, true);
-            ok &= applied;
-            report.append(' ').append(name).append('=').append(applied ? Boolean.TRUE.toString() : "failed");
+            boolean desired = alive || originalFlags[i];
+            boolean applied = force(clazz, field, desired);
+            report.append(' ').append(FLAGS[i]).append('=').append(applied ? desired : "failed");
         }
-        String line = "force full aod flags " + reason + ":" + report;
+        String line = "full aod flags " + reason + " alive=" + alive + ":" + report;
         if (!line.equals(lastFlags)) {
             lastFlags = line;
-            if (ok) AliveLog.i(TAG, line);
-            else AliveLog.w(TAG, line);
+            AliveLog.i(TAG, line);
         }
     }
 
@@ -148,7 +425,7 @@ final class AodFullScreen {
         try {
             viaUnsafe(field, value);
         } catch (Throwable error) {
-            AliveLog.warnOnce(TAG, "full aod unsafe", "force full aod unsafe write failed: " + field.getName(), error);
+            AliveLog.warnOnce(TAG, "full aod unsafe", "full aod unsafe write failed: " + field.getName(), error);
         }
         return read(field) == value;
     }

@@ -21,6 +21,7 @@ final class SceneMotion {
 
     static final int COUNT=60, LENS=3, GLASS=13, GROUND=19, FULL=21, MASK=23,
             PHOTO_MATRIX=25, DECOR_MATRIX=41;
+    private static final long STALL_STEP=24;
 
     final float[] values=new float[COUNT];
     private final ByteBuffer packet=ByteBuffer.allocateDirect(COUNT*4).order(ByteOrder.nativeOrder());
@@ -30,10 +31,15 @@ final class SceneMotion {
     private final boolean textureTracks;
     private final float expandedScale;
     private final Random random=new Random();
-    private AnimatorSet animation;
-    private ObjectAnimator positionX,positionY;
+    private final ArrayList<Track> tracks=new ArrayList<>();
+    private Track positionX,positionY;
     private float positionStartX,positionStartY;
-    private long lastFrame;
+    private long lastFrame,clock,playDelay,duration;
+    private boolean running,paused,groundMask;
+    private float[] blendFrom=new float[]{0,0,0};
+    private int blendNext;
+    private long blendDuration;
+    private Interpolator blendCurve;
     private float aodX,aodY=.335f;
     private int mode;
     private boolean pending;
@@ -94,11 +100,10 @@ final class SceneMotion {
         float distance=Math.floorMod((int)(target-current),360);
         return target+(distance>=180?360-distance:-distance);
     }
-    private ObjectAnimator track(int slot,float target,long duration,Interpolator curve) {
-        ObjectAnimator animator=ObjectAnimator.ofFloat(this,PROPERTIES[slot],values[slot],target);
-        animator.setDuration(duration);animator.setInterpolator(curve);return animator;
+    private Track track(int slot,float target,long duration,Interpolator curve) {
+        return new Track(slot,values[slot],target,0,duration,curve);
     }
-    private void lens(ArrayList<Animator> tracks,int tr,int next) {
+    private void lens(int tr,int next) {
         float[] target=lensState(next);
         long[] ms={1000,1000,1000,1000,1000,1000,1000,1000,1000,1000};
         Interpolator[] curves={DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT};
@@ -129,17 +134,15 @@ final class SceneMotion {
         }
 
         for(int i:new int[]{0,1,2,8,3,4,5,6,7,9}) {
-            if(Float.isNaN(target[i])) {tracks.add(ValueAnimator.ofFloat(0,1));continue;}
-            ObjectAnimator animator;
-            if(i==9){animator=ObjectAnimator.ofFloat(this,PROPERTIES[LENS+9],angleStart,target[9]);animator.setDuration(ms[i]);animator.setInterpolator(curves[i]);}
-            else animator=track(LENS+i,target[i],ms[i],curves[i]);
+            if(Float.isNaN(target[i])) continue;
+            Track animator=i==9?new Track(LENS+9,angleStart,target[9],0,ms[i],curves[i]):track(LENS+i,target[i],ms[i],curves[i]);
+            if(i==8)animator.delay=rippleDelay;
             if(i==5){positionX=animator;positionStartX=values[LENS+5];}
             if(i==6){positionY=animator;positionStartY=values[LENS+6];}
-            if(i==8)animator.setStartDelay(rippleDelay);
             tracks.add(animator);
         }
     }
-    private void glass(ArrayList<Animator> tracks,int tr,int next) {
+    private void glass(int tr,int next) {
         float[] target=glassState(next);
         for(int i=0;i<6;i++) {
             long ms;Interpolator curve;
@@ -151,17 +154,14 @@ final class SceneMotion {
             tracks.add(track(GLASS+i,target[i],ms,curve));
         }
     }
-    private void ground(ArrayList<Animator> tracks,int tr,int next) {
+    private void ground(int tr,int next) {
         final float first=values[GROUND],second=values[GROUND+1],target=next==1?0:1;
-        ValueAnimator animator=ValueAnimator.ofFloat(0,1);
-        animator.setDuration(tr==0||tr==5?1500:200);animator.setInterpolator(LINEAR);
-        animator.addUpdateListener(a->{float t=(float)a.getAnimatedValue();values[GROUND]=first+(target-first)*t;values[GROUND+1]=second+(target-second)*t;});
-        if(tr==1||tr==4)animator.addListener(new AnimatorListenerAdapter(){
-            @Override public void onAnimationEnd(Animator a){if(values[GROUND+1]>.999){values[MASK]=random.nextFloat()*100;values[MASK+1]=random.nextFloat()*100;}}
-        });
-        tracks.add(animator);
+        long ms=tr==0||tr==5?1500:200;
+        tracks.add(new Track(GROUND,first,target,0,ms,LINEAR));
+        tracks.add(new Track(GROUND+1,second,target,0,ms,LINEAR));
+        if(tr==1||tr==4)groundMask=true;
     }
-    private void full(ArrayList<Animator> tracks,int tr,int next) {
+    private void full(int tr,int next) {
         if(tr>3)return;
         for(int i=0;i<2;i++) {
             long ms;Interpolator curve;
@@ -182,71 +182,105 @@ final class SceneMotion {
         return tr<2?Math.max(a[tr],l[tr]):tr<4?Math.max(a[tr],h[tr]):Math.max(l[tr],h[tr]);
     }
 
-    AnimatorSet prepare(int next) {
+    void prepare(int next) {
         if(next<0||next>2)throw new IllegalArgumentException("scene "+next);
-        boolean interrupted=animation!=null&&animation.isStarted();
+        boolean interrupted=running;
         if(!active())lastFrame=0;
-        if(animation!=null)animation.cancel();
+        tracks.clear();groundMask=false;
         int previous=mode,tr=transition(previous,next);
-        ArrayList<Animator> tracks=new ArrayList<>();
-        if(aod==0)lens(tracks,tr,next);else if(aod==101)full(tracks,tr,next);
-        if(textureTracks){if(lock==1||lock==2)glass(tracks,tr,next);else if(lock==3)ground(tracks,tr,next);}
-        final float[] source={values[0],values[1],values[2]};
-        ValueAnimator blend=ValueAnimator.ofFloat(0,1);
-        blend.setDuration(blendDuration(tr));blend.setInterpolator(tr==2||tr==3?EASE:LINEAR);
-        blend.addUpdateListener(a->{float t=(float)a.getAnimatedValue();for(int i=0;i<3;i++)values[i]=source[i]+((next==i?1:0)-source[i])*t;});
-        tracks.add(blend);
-        animation=new AnimatorSet();animation.playTogether(tracks);
-        if(previous==0&&!interrupted)animation.setStartDelay(150);
-        mode=next;return animation;
+        if(aod==0&&previous==0&&next==2){tr=0;AliveLog.i("AliveClean","scene sail lock animation 0->2 tr=0");}
+        if(aod==0)lens(tr,next);else if(aod==101)full(tr,next);
+        if(textureTracks){if(lock==1||lock==2)glass(tr,next);else if(lock==3)ground(tr,next);}
+        blendFrom=new float[]{values[0],values[1],values[2]};blendNext=next;
+        blendDuration=blendDuration(tr);blendCurve=tr==2||tr==3?EASE:LINEAR;
+        playDelay=previous==0&&!interrupted?150:0;
+        long end=blendDuration;
+        for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);long e=k.delay+k.duration;if(e>end)end=e;}
+        duration=end;clock=0;running=false;paused=false;
+        mode=next;
     }
     void change(int next){change(next,true);}
 
     void change(int next,boolean start){
         if(mode==next)return;
         prepare(next);
-        if(start)animation.start();else pending=true;
+        if(start)begin();else pending=true;
     }
+    private void begin(){running=true;paused=false;clock=0;seek(0);}
     void startPending(){
         if(!pending)return;
         pending=false;
-        if(animation!=null&&!animation.isStarted())animation.start();
+        begin();
     }
     boolean pending(){return pending;}
 
     void preserveMode(int next){mode=next;}
     void finish(){
-        if(animation!=null){
-
-            if(!animation.isStarted())animation.start();
-            animation.end();
-        }
+        complete();
         pending=false;
     }
-    boolean active(){return animation!=null&&animation.isStarted()||aod==0&&mode==0;}
-    boolean transitionActive(){return animation!=null&&animation.isStarted();}
+    private void complete(){
+        if(blendCurve!=null)seek(duration);
+        running=false;paused=false;clock=duration;
+        if(groundMask){groundMask=false;if(values[GROUND+1]>.999){values[MASK]=random.nextFloat()*100;values[MASK+1]=random.nextFloat()*100;}}
+    }
+    boolean active(){return running||aod==0&&mode==0;}
+    boolean transitionActive(){return running;}
     void pause(boolean paused){
         lastFrame=0;
+        this.paused=paused;
         if(pending){if(!paused)startPending();return;}
-        if(animation!=null){if(paused)animation.pause();else animation.resume();}
     }
-    void close(){pending=false;if(animation!=null)animation.cancel();lastFrame=0;}
+    void close(){pending=false;running=false;paused=false;tracks.clear();blendCurve=null;lastFrame=0;}
     void advance(long frameNanos) {
         advance(frameNanos,1f);
     }
     void advance(long frameNanos,float speed) {
+        long delta=lastFrame==0||frameNanos<lastFrame?0:(frameNanos-lastFrame)/1_000_000L;
         if(lastFrame!=0&&frameNanos>=lastFrame&&aod==0&&values[LENS+7]>0)
             values[LENS+9]=(values[LENS+9]-((frameNanos-lastFrame)/1_000_000_000f*40f)*values[LENS+7]*speed)%360f;
         lastFrame=frameNanos;
-        if(mode==0&&(animation==null||!animation.isStarted())){values[LENS+5]=aodX;values[LENS+6]=aodY;}
+        if(running){
+            if(paused)return;
+            if(delta>STALL_STEP)delta=STALL_STEP;
+            clock+=delta;
+            if(clock>=duration){complete();return;}
+            seek(clock);
+            return;
+        }
+        if(mode==0){values[LENS+5]=aodX;values[LENS+6]=aodY;}
     }
-    void aodPosition(float x,float y){aodX=x;aodY=y;if(mode==0&&(animation==null||!animation.isStarted())){values[LENS+5]=x;values[LENS+6]=y;}}
+    void aodPosition(float x,float y){aodX=x;aodY=y;if(mode==0&&!running){values[LENS+5]=x;values[LENS+6]=y;}}
     void followClock(float x,float y){
         aodPosition(x,y);
-        if(mode==0&&animation!=null&&animation.isStarted()){
-
-            if(positionX!=null){positionX.setFloatValues(positionStartX,x);if(animation.getCurrentPlayTime()>=positionX.getTotalDuration())values[LENS+5]=x;}
-            if(positionY!=null){positionY.setFloatValues(positionStartY,y);if(animation.getCurrentPlayTime()>=positionY.getTotalDuration())values[LENS+6]=y;}
+        if(mode==0&&running){
+            if(positionX!=null){positionX.to=x;if(clock>=positionX.delay+positionX.duration)values[LENS+5]=x;}
+            if(positionY!=null){positionY.to=y;if(clock>=positionY.delay+positionY.duration)values[LENS+6]=y;}
+        }
+    }
+    private void seek(long t){
+        long local=t-playDelay;
+        for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);values[k.slot]=k.valueAt(local);}
+        if(blendCurve!=null){
+            float f=blendDuration<=0?1f:(local<=0?0f:(local>=blendDuration?1f:blendCurve.getInterpolation((float)local/blendDuration)));
+            for(int i=0;i<3;i++)values[i]=blendFrom[i]+((blendNext==i?1:0)-blendFrom[i])*f;
+        }
+    }
+    private static final class Track {
+        final int slot;
+        final float from;
+        float to;
+        long delay,duration;
+        final Interpolator curve;
+        Track(int slot,float from,float to,long delay,long duration,Interpolator curve){
+            this.slot=slot;this.from=from;this.to=to;this.delay=delay;this.duration=duration;this.curve=curve;
+        }
+        float valueAt(long t){
+            long local=t-delay;
+            if(local<=0)return from;
+            if(duration<=0)return to;
+            if(local>=duration)return to;
+            return from+(to-from)*curve.getInterpolation((float)local/duration);
         }
     }
     ByteBuffer packet() {

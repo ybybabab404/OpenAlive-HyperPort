@@ -18,10 +18,7 @@ public final class DeviceIdleDelayHook {
 
     public static void install(ClassLoader loader) throws Throwable {
         Class<?> type = Xp.findClassIfExists("com.android.server.DeviceIdleController", loader);
-        if (type == null) {
-            AliveLog.w(TAG, "device idle: DeviceIdleController missing");
-            return;
-        }
+        if (type == null) throw new IllegalStateException("DeviceIdleController missing");
 
         Xp.findAndHookMethod(type, "updateInteractivityLocked", new Xp.MethodHook() {
             @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {

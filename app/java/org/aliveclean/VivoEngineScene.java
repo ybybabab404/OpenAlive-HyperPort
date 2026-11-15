@@ -29,6 +29,15 @@ final class VivoEngineScene implements AutoCloseable {
     private volatile boolean flashReady;
     private boolean preview,visibilitySet,running,resumePending;
 
+    private static final List<VivoEngineScene> LIVE=new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final long bornAt=SystemClock.uptimeMillis();
+    private final java.util.concurrent.atomic.AtomicInteger frames=new java.util.concurrent.atomic.AtomicInteger();
+    private volatile long frameAt=SystemClock.uptimeMillis();
+    private int seenFrames=-1;
+    private final Runnable health=this::checkHealth;
+    private final Runnable prune=this::prune;
+    private final Runnable pump=this::pumpFrames;
+    private boolean pumping;
     private Object controllerSlot;
     private java.lang.reflect.Field controllerSlotField;
     private int mode=1;
@@ -52,7 +61,7 @@ final class VivoEngineScene implements AutoCloseable {
             Class<?> callback=api.type(R+"f");
             Object host=Proxy.newProxyInstance(callback.getClassLoader(),new Class<?>[]{callback},(o,m,args)->{
                 switch(m.getName()){
-                    case "queueEvent":if(!closed){glTasks.add((Runnable)args[0]);invalidate.run();}return null;
+                    case "queueEvent":if(!closed){while(glTasks.size()>48)glTasks.poll();glTasks.add((Runnable)args[0]);invalidate.run();}return null;
                     case "requestRending":case "resume":if(!closed&&visible)invalidate.run();return null;
                     case "hashCode":return System.identityHashCode(o);
                     case "equals":return o==args[0];
@@ -98,6 +107,14 @@ final class VivoEngineScene implements AutoCloseable {
             }else{
                 Object data=bean(BASE+"PageContext$Data","{}");
                 Object wrap=api.make(BASE+"ThemeEditInterfaceWrap",new Class<?>[]{api.type(BASE+"PageManager")},(Object)null);
+                Class<?> editorType=api.type("com.android.systemui.plugins.IEditorInterface");
+                Object editor=Proxy.newProxyInstance(editorType.getClassLoader(),new Class<?>[]{editorType},(proxy,method,argv)->{
+                    if("callMethod".equals(method.getName())&&argv!=null&&argv.length>0&&Integer.valueOf(103).equals(argv[0]))invalidate.run();
+                    return null;
+                });
+                HashMap<Integer,Object> editorMap=new HashMap<>();
+                editorMap.put(103,editor);
+                api.call(wrap,"setInterface",new Class<?>[]{Map.class},editorMap);
 
                 if(family==VivoOptions.RASTER||family==VivoOptions.FLASH)clearSharedController();
                 if(family==VivoOptions.RASTER){
@@ -132,6 +149,9 @@ final class VivoEngineScene implements AutoCloseable {
                 sensorGain=new VivoSensorGain(runtime,api,sensor(),options.sensitivity);
 
                 sensorGain.start();
+                LIVE.add(this);
+                main.postDelayed(health,2000L);
+                main.postDelayed(prune,1000L);
             }
         }catch(Exception e){close();throw e;}
     }
@@ -170,7 +190,7 @@ final class VivoEngineScene implements AutoCloseable {
                 if(value&&sensorGain!=null)sensorGain.start();
                 return;
             }
-            if(!value)stop();
+            if(!value){glTasks.clear();stop();stopPump();}
             else if(family==VivoOptions.LIQUID){
 
                 try{api.call(controller,"playAnim");}catch(Exception e){AliveLog.e("AliveClean","vivo playAnim failed id="+id,e);}
@@ -194,6 +214,7 @@ final class VivoEngineScene implements AutoCloseable {
             }
             if(value&&sensorGain!=null)sensorGain.start();
             running=value;
+            if(value)startPump();else stopPump();
         }catch(Exception e){AliveLog.e("AliveClean","Vivo lifecycle failed",e);}});
     }
     void mode(int next,boolean animate){transition(next,animate,nightLevel,aodMask);}
@@ -216,6 +237,7 @@ final class VivoEngineScene implements AutoCloseable {
 
     private void pinController(){
         if(controller==null||controllerSlot==null||controllerSlotField==null)return;
+        if(!preview&&previewActive())return;
         try{
             Object current=controllerSlotField.get(controllerSlot);
             if(current!=controller){
@@ -225,6 +247,7 @@ final class VivoEngineScene implements AutoCloseable {
         }catch(Throwable ignored){}
     }
     void draw()throws Exception{
+        frames.incrementAndGet();frameAt=SystemClock.uptimeMillis();
         pinController();
         drain();layer.updateClips();api.call(render,"glSurfaceDraw");
         Object matrix=api.call(render,"getMatrixManager");
@@ -282,6 +305,54 @@ final class VivoEngineScene implements AutoCloseable {
 
         Object effect=api.make(BASE+"bean.EffectJsonBean",new Class<?>[0]);api.set(effect,"maskWeights",weights);api.set(config,"effect",effect);
     }
+    private void startPump(){
+        if(family==VivoOptions.LIQUID||pumping||closed)return;
+        pumping=true;
+        main.post(pump);
+    }
+    private void stopPump(){
+        if(!pumping)return;
+        pumping=false;
+        main.removeCallbacks(pump);
+    }
+    private void pumpFrames(){
+        if(closed){pumping=false;return;}
+        if(!visible||(mode==0&&!animateInAod())){pumping=false;return;}
+        invalidate.run();
+        main.postDelayed(pump,16L);
+    }
+    private void checkHealth(){
+        if(closed)return;
+        try{
+            boolean shouldRun=visible&&(mode!=0||animateInAod());
+            int count=frames.get();
+            long idle=SystemClock.uptimeMillis()-frameAt;
+            if(shouldRun&&running&&idle>1500L&&count==seenFrames){
+                AliveLog.w("AliveClean","vivo stalled id="+id+" "+role+" family="+family+" idle="+idle+"ms frames="+count);
+                running=false;resumePending=false;
+                updateAnimation();
+                invalidate.run();
+            }
+            seenFrames=count;
+        }catch(Throwable e){AliveLog.e("AliveClean","vivo health check failed",e);}
+        main.postDelayed(health,1000L);
+    }
+    private void prune(){
+        if(closed||preview)return;
+        for(VivoEngineScene other:LIVE){
+            if(other!=this&&!other.closed){
+                AliveLog.w("AliveClean","vivo close stale id="+other.id+" kept="+id);
+                other.close();
+            }
+        }
+    }
+    private boolean previewActive(){
+        for(VivoEngineScene other:LIVE){
+            if(other!=this&&!other.closed&&other.preview&&other.family==family)return true;
+        }
+        return false;
+    }
+    boolean isPreview(){return preview;}
     void touch(int action,float x,float y){
         if(family!=VivoOptions.LIQUID)return;
         final float tx=.5f+(x-.5f)/drawnScale,ty=.4f+(y-.4f)/drawnScale;
@@ -341,7 +412,7 @@ final class VivoEngineScene implements AutoCloseable {
             if(family==VivoOptions.RASTER&&controller!=null){Object res=api.get(controller,"b");api.call(controller,"destroy");if(res!=null&&!videoRaster())((ExecutorService)api.get(res,"h")).shutdownNow();}
             if(family==VivoOptions.RASTER||family==VivoOptions.FLASH)clearSharedController(controller);
         }catch(Exception e){AliveLog.w("AliveClean","Vivo renderer release incomplete",e);}
-        closed=true;main.removeCallbacksAndMessages(null);glTasks.clear();dimPass.close();if(layer!=null){layer.close();layer=null;}if(liquidMask!=null){liquidMask.recycle();liquidMask=null;}
+        closed=true;LIVE.remove(this);main.removeCallbacksAndMessages(null);glTasks.clear();dimPass.close();if(layer!=null){layer.close();layer=null;}if(liquidMask!=null){liquidMask.recycle();liquidMask=null;}
 
         android.opengl.GLES30.glUseProgram(0);android.opengl.GLES30.glBindVertexArray(0);
     }

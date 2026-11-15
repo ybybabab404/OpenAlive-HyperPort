@@ -34,10 +34,9 @@ public final class AodWallpaperPreview {
                 @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     Bitmap original = param.getResult() instanceof Bitmap
                             ? (Bitmap) param.getResult() : null;
-                    if (original == null) return;
                     Context context = contextOf(param.thisObject);
                     if (context == null || !AodWallpaperMode.alive(context)) return;
-                    Bitmap preview = preview(context);
+                    Bitmap preview = forHook(context);
                     if (preview == null) return;
                     param.setResult(preview);
                     AliveLog.i(TAG, "aod wallpaper preview replaced " + preview.getWidth()
@@ -55,6 +54,7 @@ public final class AodWallpaperPreview {
 
         installUf(loader);
         installShots(loader);
+        installPersonalizeTasks(loader);
 
         Class<?> helper = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.DeviceScreenshotHelper", loader);
@@ -80,16 +80,16 @@ public final class AodWallpaperPreview {
                                 : original.getWidth() + "x" + original.getHeight())
                                 + " alive=" + alive);
                     }
-                    if (!alive || original == null) return;
-                    Bitmap preview = preview(context);
+                    if (!alive) return;
+                    Bitmap preview = forHook(context);
                     if (preview == null) return;
-                    Bitmap replacement = original.getWidth() == preview.getWidth()
+                    Bitmap replacement = original == null ? preview
+                            : (original.getWidth() == preview.getWidth()
                             && original.getHeight() == preview.getHeight()
                             ? preview
-                            : Bitmap.createScaledBitmap(preview,
-                                    original.getWidth(), original.getHeight(), true);
+                            : scaleOrRecycle(preview, original.getWidth(), original.getHeight()));
                     param.setResult(replacement);
-                    AliveLog.i(TAG, "tm wallpaper preview replaced " + replacement.getWidth()
+                    AliveLog.i(TAG, "tm ni7 replaced " + replacement.getWidth()
                             + "x" + replacement.getHeight());
                 }
             };
@@ -105,6 +105,59 @@ public final class AodWallpaperPreview {
         }
     }
 
+    /**
+     * PersonalizeActivity loads its lock/desktop cards through these two helpers,
+     * not through TemplateApiImpl.  A live system wallpaper has no static bitmap
+     * there, so both return null and the host paints its grey placeholder.  Fall
+     * back to the current MIUI AOD template only while our wallpaper is active.
+     */
+    private static void installPersonalizeTasks(ClassLoader loader) {
+        hookPersonalizeTask(loader,
+                "com.android.thememanager.settings.personalize.task.LockScreenWpTool",
+                0, "lock");
+        hookPersonalizeTask(loader,
+                "com.android.thememanager.settings.personalize.task.DeskWpTool",
+                1, "desk");
+    }
+
+    private static void hookPersonalizeTask(ClassLoader loader, String className,
+                                             final int argCount, final String label) {
+        Class<?> task = Xp.findClassIfExists(className, loader);
+        if (task == null) {
+            AliveLog.w(TAG, "tm " + label + " preview: " + className + " missing");
+            return;
+        }
+        try {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    if (param.args.length != argCount) return;
+                    Bitmap original = param.getResult() instanceof Bitmap
+                            ? (Bitmap) param.getResult() : null;
+                    Context context = Xp.currentApplication();
+                    boolean alive = false;
+                    try {
+                        alive = context != null && AodWallpaperMode.alive(context);
+                    } catch (Throwable ignored) {
+                    }
+                    if (!alive) return;
+                    Bitmap preview = forHook(context);
+                    if (preview == null) return;
+                    Bitmap replacement = original == null ? preview
+                            : (original.getWidth() == preview.getWidth()
+                            && original.getHeight() == preview.getHeight() ? preview
+                            : scaleOrRecycle(preview, original.getWidth(), original.getHeight()));
+                    param.setResult(replacement);
+                    AliveLog.i(TAG, "tm " + label + " preview replaced "
+                            + replacement.getWidth() + "x" + replacement.getHeight());
+                }
+            };
+            int count = Xp.hookAllMethods(task, "toq", hook).size();
+            AliveLog.i(TAG, "tm " + label + " preview hook count=" + count);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "tm " + label + " preview hook failed", error);
+        }
+    }
+
     private static void installUf(ClassLoader loader) {
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
@@ -117,7 +170,7 @@ public final class AodWallpaperPreview {
                 @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                     Bitmap original = param.getResult() instanceof Bitmap
                             ? (Bitmap) param.getResult() : null;
-                    if (original == null || param.args.length != 0) return;
+                    if (param.args.length != 0) return;
                     Context context = Xp.currentApplication();
                     boolean alive = false;
                     try {
@@ -127,14 +180,15 @@ public final class AodWallpaperPreview {
                     int n = UF_CALLS.incrementAndGet();
                     if (n <= 6) {
                         AliveLog.i(TAG, "tm uf call #" + n + " result="
-                                + original.getWidth() + "x" + original.getHeight()
+                                + (original == null ? "null"
+                                : original.getWidth() + "x" + original.getHeight())
                                 + " alive=" + alive);
                     }
                     if (!alive) return;
-                    Bitmap preview = preview(context);
+                    Bitmap preview = forHook(context);
                     if (preview == null) return;
-                    Bitmap replacement = Bitmap.createScaledBitmap(preview,
-                            original.getWidth(), original.getHeight(), true);
+                    Bitmap replacement = original == null ? preview
+                            : scaleOrRecycle(preview, original.getWidth(), original.getHeight());
                     param.setResult(replacement);
                     if (n <= 6) {
                         AliveLog.i(TAG, "tm uf replaced " + replacement.getWidth()
@@ -175,12 +229,16 @@ public final class AodWallpaperPreview {
                                 + " alive=" + alive);
                     }
                     if (!alive) return;
-                    Bitmap preview = preview(context);
+                    Bitmap preview = forHook(context);
                     if (preview == null) return;
                     Bitmap replacement = original == null ? preview
-                            : Bitmap.createScaledBitmap(preview,
-                                    original.getWidth(), original.getHeight(), true);
+                            : scaleOrRecycle(preview, original.getWidth(), original.getHeight());
                     param.setResult(replacement);
+                    try {
+                        Xp.setField(param.thisObject, "f53958zy", replacement);
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "tm shots field write failed", error);
+                    }
                     if (n <= 6) {
                         AliveLog.i(TAG, "tm shots t8r replaced " + replacement.getWidth()
                                 + "x" + replacement.getHeight());
@@ -221,6 +279,34 @@ public final class AodWallpaperPreview {
             }
         }
     }
+    /**
+     * The host may recycle whatever bitmap we return (BitmapUtil.fu4 calls
+     * recycle()).  The static cached template is shared by several hooks, so a
+     * recycled copy must never escape.  Fresh provider/file bitmaps are already
+     * owned by this call; only the cached instance needs a defensive copy.
+     */
+    private static Bitmap scaleOrRecycle(Bitmap preview, int width, int height) {
+        if (preview == null) return null;
+        if (preview.getWidth() == width && preview.getHeight() == height) return preview;
+        Bitmap scaled = Bitmap.createScaledBitmap(preview, width, height, true);
+        if (scaled != preview) preview.recycle();
+        return scaled;
+    }
+
+    private static Bitmap forHook(Context context) {
+        Bitmap bitmap = preview(context);
+        if (bitmap == null) return null;
+        if (bitmap == cached) {
+            try {
+                return bitmap.copy(Bitmap.Config.ARGB_8888, false);
+            } catch (Throwable error) {
+                AliveLog.w(TAG, "aod wallpaper preview copy failed", error);
+                return null;
+            }
+        }
+        return bitmap;
+    }
+
     private static synchronized Bitmap preview(Context context) {
         Bitmap provider = fromProvider(context);
         if (provider != null) return provider;

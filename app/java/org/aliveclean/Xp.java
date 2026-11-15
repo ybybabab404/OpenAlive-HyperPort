@@ -338,6 +338,102 @@ public final class Xp {
         return candidates.get(0);
     }
 
+
+    private static volatile ClassLoader serverLoader;
+
+    private static final String[] SERVER_PROBES = {"com.android.server.SystemServer",
+            "com.android.server.pm.PackageManagerService", "com.android.server.wallpaper.WallpaperManagerService",
+            "com.android.server.DeviceIdleController"};
+
+    private static final String[] SERVER_SERVICES = {"package", "wallpaper", "deviceidle", "activity", "window"};
+
+    public static ClassLoader systemServerLoader(ClassLoader given) {
+        ClassLoader cached = serverLoader;
+        if (cached != null) return cached;
+        java.util.LinkedHashMap<String, ClassLoader> candidates = new java.util.LinkedHashMap<>();
+        addLoader(candidates, "given", given);
+        addLoader(candidates, "application", systemApplicationLoader());
+        addLoader(candidates, "systemContext", systemContextLoader());
+        addLoader(candidates, "system", ClassLoader.getSystemClassLoader());
+        addLoader(candidates, "thread", Thread.currentThread().getContextClassLoader());
+        for (String name : SERVER_SERVICES) addLoader(candidates, "service:" + name, serviceLoader(name));
+        List<String> failed = new ArrayList<>();
+        for (java.util.Map.Entry<String, ClassLoader> entry : candidates.entrySet()) {
+            ClassLoader candidate = entry.getValue();
+            String probe = probeServer(candidate);
+            if (probe == null) {
+                failed.add(entry.getKey());
+                continue;
+            }
+            serverLoader = candidate;
+            AliveLog.i(AliveLog.TAG, "server loader: " + entry.getKey() + " via " + probe + " -> " + candidate);
+            return candidate;
+        }
+        AliveLog.w(AliveLog.TAG, "server loader: unresolved tried=" + failed);
+        throw new IllegalStateException("system server loader not found: " + failed);
+    }
+
+    private static String probeServer(ClassLoader candidate) {
+        if (candidate == null) return null;
+        for (String name : SERVER_PROBES) {
+            try {
+                Class.forName(name, false, candidate);
+                return name;
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static ClassLoader serviceLoader(String name) {
+        try {
+            Object binder = callStaticMethod(Class.forName("android.os.ServiceManager"), "getService", name);
+            if (binder == null) return null;
+            AliveLog.i(AliveLog.TAG, "server loader: service " + name + " binder=" + binder.getClass().getName());
+            return binder.getClass().getClassLoader();
+        } catch (Throwable error) {
+            AliveLog.w(AliveLog.TAG, "server loader: service " + name + " failed: " + AliveLog.describe(error));
+            return null;
+        }
+    }
+
+    private static void addLoader(java.util.Map<String, ClassLoader> candidates, String label,
+            ClassLoader loader) {
+        ClassLoader current = loader;
+        for (int depth = 0; current != null && depth < 4; depth++) {
+            if (!candidates.containsValue(current)) {
+                candidates.put(depth == 0 ? label : label + ".parent" + depth, current);
+            }
+            current = current.getParent();
+        }
+    }
+
+    private static ClassLoader systemApplicationLoader() {
+        try {
+            Class<?> globals = Class.forName("android.app.AppGlobals");
+            Object application = callStaticMethod(globals, "getInitialApplication");
+            if (application instanceof android.content.Context) {
+                return ((android.content.Context) application).getClassLoader();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static ClassLoader systemContextLoader() {
+        try {
+            Object thread = callStaticMethod(Class.forName("android.app.ActivityThread"),
+                    "currentActivityThread");
+            if (thread == null) return null;
+            Object context = callMethod(thread, "getSystemContext");
+            if (context instanceof android.content.Context) {
+                return ((android.content.Context) context).getClassLoader();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     private static Throwable unwrap(Throwable error) {
         return error.getCause() == null ? error : error.getCause();
     }

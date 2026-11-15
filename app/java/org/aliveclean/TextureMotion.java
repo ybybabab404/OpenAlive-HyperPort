@@ -28,6 +28,7 @@ final class TextureMotion {
         track.change(mode);
         if(!animate)track.finish();
     }
+    void advance(long frameNanos){if(lock!=null)lock.advance(frameNanos);if(home!=null&&home!=lock)home.advance(frameNanos);}
     boolean active(){return lock!=null&&lock.transitionActive()||home!=null&&home!=lock&&home.transitionActive();}
     private void write(SceneMotion track){
         for(int i=0;i<8;i++)packet.putFloat(track==null?0:track.values[SceneMotion.GLASS+i]);

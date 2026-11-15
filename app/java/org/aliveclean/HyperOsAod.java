@@ -1,15 +1,25 @@
 package org.aliveclean;
 
 import android.content.Context;
+import android.graphics.Outline;
 import android.graphics.SurfaceTexture;
+import android.os.SystemClock;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 
 final class HyperOsAod {
     private static final String TAG = "AliveHSAod";
     private static java.lang.ref.WeakReference<AodSurface> liveSurface;
+    private static java.lang.ref.WeakReference<ViewGroup> scheduledRoot;
+    private static long attachGeneration;
+    private static long scheduledAt;
+    private static final long ATTACH_DELAY_MS = 950;
+    private static final long FADE_MS = 180;
+    private static final float BALL_CENTER_Y = 0.165f;
+    private static final float BALL_RADIUS = 0.22f;
     private static final String[] VIEWS = {
             "com.android.keyguard.widget.AodView",
             "com.miui.aod.AODView"
@@ -22,16 +32,7 @@ final class HyperOsAod {
             if (view == null || !ViewGroup.class.isAssignableFrom(view)) continue;
             Xp.hookAllConstructors(view, new Xp.MethodHook() {
                 @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    final ViewGroup root = (ViewGroup) param.thisObject;
-                    root.post(new Runnable() {
-                        @Override public void run() {
-                            try {
-                                attach(root);
-                            } catch (Throwable error) {
-                                AliveLog.e(TAG, "attach failed", error);
-                            }
-                        }
-                    });
+                    scheduleAttach((ViewGroup) param.thisObject);
                 }
             });
             Trace.log("T01", "hooks installed for " + name);
@@ -70,16 +71,75 @@ final class HyperOsAod {
     static boolean injectIntoAod() {
         ViewGroup root = aodRoot == null ? null : aodRoot.get();
         if (root == null) return false;
-        attach(root);
-        return root.findViewWithTag(TAG) != null;
+        AodSurface existing = liveSurface == null ? null : liveSurface.get();
+        if (root.findViewWithTag(TAG) == null || existing == null
+                || !existing.isAttachedToWindow() || !existing.isShown()) {
+            scheduleAttach(root);
+        }
+        return true;
+    }
+
+    private static void scheduleAttach(final ViewGroup root) {
+        if (root == null) return;
+        long now = SystemClock.uptimeMillis();
+        ViewGroup pending = scheduledRoot == null ? null : scheduledRoot.get();
+        if (pending == root && now - scheduledAt < ATTACH_DELAY_MS) return;
+        scheduledRoot = new java.lang.ref.WeakReference<>(root);
+        scheduledAt = now;
+        final long generation = ++attachGeneration;
+        root.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (generation != attachGeneration) return;
+                ViewGroup current = scheduledRoot == null ? null : scheduledRoot.get();
+                if (current != root) return;
+                scheduledRoot = null;
+                try {
+                    attach(root);
+                } catch (Throwable error) {
+                    AliveLog.e(TAG, "attach failed", error);
+                }
+            }
+        }, ATTACH_DELAY_MS);
+    }
+
+    /**
+     * Removes the scene surface that was injected into MIUI's own AODView.  This is
+     * separate from AodOverlay's WindowManager view: when the AOD is switched off (or
+     * the system wallpaper is no longer ours) the injected child otherwise stays in the
+     * AOD hierarchy and keeps drawing the default ball.
+     */
+    static void detach() {
+        attachGeneration++;
+        scheduledRoot = null;
+        aodRoot = null;
+        AodSurface surface = liveSurface == null ? null : liveSurface.get();
+        liveSurface = null;
+        if (surface == null) return;
+        try {
+            if (surface.getParent() instanceof ViewGroup) {
+                ((ViewGroup) surface.getParent()).removeView(surface);
+            }
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "scene detach failed", error);
+        }
     }
 
     private static void attach(ViewGroup root) {
 
+        final long generation = attachGeneration;
         Context context = root.getContext();
         aodRoot = new java.lang.ref.WeakReference<>(root);
-        if (!aodSceneEnabled(context)) return;
+        if (!aodEnabled(context)) {
+            detach();
+            AliveLog.once(TAG, "aod-disabled", "AOD scene skipped: AOD is disabled");
+            return;
+        }
+        if (!aodSceneEnabled(context)) {
+            detach();
+            return;
+        }
         if (!AodWallpaperMode.alive(context)) {
+            detach();
             AliveLog.once(TAG, "aod-wallpaper-foreign", "AOD scene skipped: wallpaper is not ours");
             return;
         }
@@ -91,26 +151,43 @@ final class HyperOsAod {
             return;
         }
         if (existing != null) {
-
             Trace.log("T03", "attach replacing hidden surface id=" + System.identityHashCode(existing));
+            if (existing.getParent() instanceof ViewGroup) {
+                ((ViewGroup) existing.getParent()).removeView(existing);
+            }
             liveSurface = null;
         }
-
-        if (root.findViewWithTag(TAG) != null) return;
+        View stale = root.findViewWithTag(TAG);
+        if (stale != null) {
+            if (stale.getParent() instanceof ViewGroup) {
+                ((ViewGroup) stale.getParent()).removeView(stale);
+            }
+            if (stale == existing) liveSurface = null;
+        }
 
         ViewGroup target = findInnerAod(root);
         if (target == null) {
 
             AliveLog.once(TAG, "aod-view-pending", "inner AODView not up yet, waiting");
             root.postDelayed(new Runnable() {
-                @Override public void run() { injectIntoAod(); }
+                @Override public void run() {
+                    // detach()/a newer attach may have replaced the root during
+                    // these 200ms.  Never inject into a stale AOD hierarchy.
+                    if (generation != attachGeneration) return;
+                    ViewGroup current = aodRoot == null ? null : aodRoot.get();
+                    if (current != root) return;
+                    injectIntoAod();
+                }
             }, 200);
             return;
         }
         AodSurface surface = new AodSurface(context);
         surface.setTag(TAG);
-        surface.setAlpha(1f);
-        target.addView(surface, 0, new ViewGroup.LayoutParams(
+        surface.setAlpha(0f);
+        // R.layout.aod_mode_layout has an opaque black View at index 0.  Sit
+        // directly above it, but below the clock/content container, otherwise
+        // the ball is painted behind the AOD background.
+        target.addView(surface, Math.min(1, target.getChildCount()), new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         liveSurface = new java.lang.ref.WeakReference<>(surface);
         AliveLog.reset("aod-view-pending");
@@ -129,7 +206,8 @@ final class HyperOsAod {
                 if (surface.getParent() == null) {
                     if (++misses < 8) { next(); return; }
                     ViewGroup host = findInnerAod(root);
-                    (host != null ? host : root).addView(surface, 0,
+                    ViewGroup target = host != null ? host : root;
+                    target.addView(surface, Math.min(1, target.getChildCount()),
                             new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT));
                     misses = 0;
@@ -139,9 +217,10 @@ final class HyperOsAod {
                     ViewGroup inner = findInnerAod(root);
                     if (inner != null && surface.getParent() != inner) {
                         ((ViewGroup) surface.getParent()).removeView(surface);
-                        inner.addView(surface, 0, new ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT));
+                        inner.addView(surface, Math.min(1, inner.getChildCount()),
+                                new ViewGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT));
                         AliveLog.i(TAG, "scene moved into inner AODView");
                     }
                 }
@@ -183,6 +262,16 @@ final class HyperOsAod {
         }
     }
 
+    static boolean aodEnabled(Context base) {
+        try {
+            return android.provider.Settings.Secure.getInt(
+                    base.getContentResolver(), "doze_always_on", 0) == 1;
+        } catch (Throwable unavailable) {
+            AliveLog.w(TAG, "cannot read AOD switch; treating as off", unavailable);
+            return false;
+        }
+    }
+
     private static boolean aodSceneEnabled(Context base) {
         try {
             Context app = moduleContext(base);
@@ -205,12 +294,33 @@ final class HyperOsAod {
             super(context);
             appContext = moduleContext(context);
             setSurfaceTextureListener(this);
-            setOpaque(false);
+            setOpaque(true);
+            setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline outline) {
+                    int width = view.getWidth();
+                    int height = view.getHeight();
+                    float radius = BALL_RADIUS * width;
+                    int cx = width / 2;
+                    int cy = (int) (BALL_CENTER_Y * height);
+                    outline.setOval((int) (cx - radius), (int) (cy - radius),
+                            (int) (cx + radius), (int) (cy + radius));
+                }
+            });
+            setClipToOutline(true);
         }
 
         @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
             surface = new Surface(texture);
             loop = new RenderLoop(appContext);
+            loop.onFirstFrame(new Runnable() {
+                @Override public void run() {
+                    post(new Runnable() {
+                        @Override public void run() {
+                            animate().alpha(1f).setDuration(FADE_MS).start();
+                        }
+                    });
+                }
+            });
             loop.mode(0);
             loop.attach(surface, width, height);
             Trace.log("T05", "texture#available id=" + System.identityHashCode(this) + " " + width + "x" + height);

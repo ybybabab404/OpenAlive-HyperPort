@@ -6,15 +6,17 @@ import java.util.HashSet;
 import java.util.Set;
 
 import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam;
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam;
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam;
 
 public final class CleanHooks extends XposedModule {
     private static final String TAG = "AliveHSHooks";
+    private static final String SERVER_KEY = "system_server";
     private final Set<String> handled = new HashSet<>();
     private boolean ambientHooked;
-    private boolean systemHandled;
     private static final java.util.concurrent.atomic.AtomicBoolean ambientGrantLogged =
             new java.util.concurrent.atomic.AtomicBoolean();
 
@@ -24,11 +26,60 @@ public final class CleanHooks extends XposedModule {
     }
 
     @Override public void onPackageLoaded(PackageLoadedParam param) {
-        handle(param.getPackageName(), param.getDefaultClassLoader());
+        String packageName = param.getPackageName();
+        if ("android".equals(packageName)) return;
+        handle(packageName, param.getDefaultClassLoader());
     }
 
     @Override public void onSystemServerStarting(SystemServerStartingParam param) {
-        handle("android", param.getClassLoader());
+        handleSystemServer(param.getClassLoader());
+    }
+
+    /**
+     * LSPosed API 102 hot reload: the framework loads this APK's new dex into the
+     * already-running process.  The old hook handles are supplied in onHotReloaded;
+     * unhook them and re-install this process's hooks against the new class loader.
+     */
+    @Override public boolean onHotReloading(HotReloadingParam param) {
+        AliveLog.i(TAG, "module hot reloading pid=" + android.os.Process.myPid());
+        return true;
+    }
+
+    @Override public void onHotReloaded(HotReloadedParam param) {
+        Xp.attach(this);
+        AliveLog.i(TAG, "module hot reloaded process=" + param.getProcessName()
+                + " pid=" + android.os.Process.myPid());
+        try {
+            for (io.github.libxposed.api.XposedInterface.HookHandle handle : param.getOldHookHandles()) {
+                try { handle.unhook(); } catch (Throwable ignored) { }
+            }
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "hot reload unhook failed", error);
+        }
+        synchronized (handled) {
+            handled.clear();
+        }
+        ambientHooked = false;
+        ClassLoader loader = hotReloadLoader();
+        if (param.isSystemServer()) {
+            handleSystemServer(loader);
+            return;
+        }
+        String process = param.getProcessName();
+        if (process == null) return;
+        int colon = process.indexOf(':');
+        String packageName = colon < 0 ? process : process.substring(0, colon);
+        handle(packageName, loader);
+    }
+
+    private static ClassLoader hotReloadLoader() {
+        try {
+            android.app.Application app = Xp.currentApplication();
+            if (app != null) return app.getClassLoader();
+        } catch (Throwable ignored) {
+        }
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        return loader != null ? loader : ClassLoader.getSystemClassLoader();
     }
 
     private void handle(String packageName, ClassLoader loader) {
@@ -38,51 +89,53 @@ public final class CleanHooks extends XposedModule {
         boolean systemUi = "com.android.systemui".equals(packageName);
         boolean miuiAod = "com.miui.aod".equals(packageName);
         boolean themeManager = "com.android.thememanager".equals(packageName);
-        boolean system = "android".equals(packageName);
         AliveLog.i(TAG, "loaded into " + packageName + " pid=" + android.os.Process.myPid());
         if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(loader));
         if (themeManager) step("tm wallpaper preview", () -> AodWallpaperPreview.installThemeManager(loader));
-        if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
         if (miuiAod) step("aod settings hotfix", () -> AodSettingsGuard.install(loader));
         if (miuiAod) step("aod preview hide", () -> AodPreviewHider.install(loader));
         if (miuiAod) step("aod wallpaper preview", () -> AodWallpaperPreview.install(loader));
-        if (systemUi) step("aod full screen", () -> AodFullScreen.install(loader));
-        if (miuiAod) step("aod full screen", () -> AodFullScreen.install(loader));
+        if (systemUi) step("aod full screen", () -> AodFullScreen.install(loader, false));
+        if (miuiAod) step("aod full screen", () -> AodFullScreen.install(loader, true));
+        if (systemUi) step("module receipt", () -> ModuleActivationHook.install());
         if (systemUi) step("hyperos aod", () -> HyperOsAod.install(loader));
         if (systemUi) step("lock touch relay", () -> KeyguardTouchRelay.install(loader));
         if (systemUi) step("keyguard depth", () -> KeyguardDepthHider.install(loader));
         if (systemUi) step("hyperos doze", () -> HyperOsAod.installDoze(loader));
-        if (system && !systemHandled) {
-            systemHandled = true;
-            step("aod wallpaper mode", () -> AodWallpaperModeHook.install(loader));
-            step("device idle delay", () -> DeviceIdleDelayHook.install(loader));
+        if (!systemUi) return;
+        hookAmbientWallpaperInfo();
+    }
+
+    private void handleSystemServer(ClassLoader loader) {
+        synchronized (handled) {
+            if (!handled.add(SERVER_KEY)) return;
         }
-        if (!system && !systemUi) return;
-        if (!ambientHooked) {
-            ambientHooked = true;
-            step("ambient wallpaper info", () -> Xp.findAndHookMethod(WallpaperInfo.class,
-                    "supportsAmbientMode", new Xp.MethodHook() {
-                        @Override protected void afterHookedMethod(Xp.MethodHookParam call) {
-                            WallpaperInfo info = (WallpaperInfo) call.thisObject;
-                            if ("org.aliveclean".equals(info.getPackageName())) call.setResult(true);
-                        }
-                    }));
-        }
-        if (system) {
-            step("ambient permission base", () -> hookCheckPermission(
-                    "com.android.server.pm.IPackageManagerBase", loader, "IPackageManagerBase"));
-            step("ambient permission service", () -> hookCheckPermission(
-                    "com.android.server.pm.PackageManagerService", loader, "PackageManagerService"));
-        }
+        AliveLog.i(TAG, "loaded into system_server pid=" + android.os.Process.myPid());
+        ClassLoader server = resolveServerLoader(loader);
+        step("aod wallpaper mode", () -> AodWallpaperModeHook.install(server));
+        step("device idle delay", () -> DeviceIdleDelayHook.install(server));
+        step("ambient permission base", () -> hookCheckPermission(
+                "com.android.server.pm.IPackageManagerBase", server, "IPackageManagerBase"));
+        step("ambient permission service", () -> hookCheckPermission(
+                "com.android.server.pm.PackageManagerService", server, "PackageManagerService"));
+        hookAmbientWallpaperInfo();
+    }
+
+    private void hookAmbientWallpaperInfo() {
+        if (ambientHooked) return;
+        ambientHooked = true;
+        step("ambient wallpaper info", () -> Xp.findAndHookMethod(WallpaperInfo.class,
+                "supportsAmbientMode", new Xp.MethodHook() {
+                    @Override protected void afterHookedMethod(Xp.MethodHookParam call) {
+                        WallpaperInfo info = (WallpaperInfo) call.thisObject;
+                        if ("org.aliveclean".equals(info.getPackageName())) call.setResult(true);
+                    }
+                }));
     }
 
     private static void hookCheckPermission(String className, ClassLoader loader, String label) {
         Class<?> type = findServerClass(className, loader, label);
-        if (type == null) {
-            AliveLog.w(TAG, "ambient permission: " + className + " not found"
-                    + " (loader=" + loader + ")");
-            return;
-        }
+        if (type == null) throw new IllegalStateException(className + " not found (" + loader + ")");
         Xp.findAndHookMethod(type, "checkPermission", String.class, String.class, int.class,
                 new Xp.MethodHook() {
                     @Override protected void beforeHookedMethod(Xp.MethodHookParam call) {
@@ -92,6 +145,15 @@ public final class CleanHooks extends XposedModule {
                             AliveLog.i(TAG, "ambient permission: granted via " + label);
                     }
                 });
+    }
+
+    private static ClassLoader resolveServerLoader(ClassLoader loader) {
+        try {
+            return Xp.systemServerLoader(loader);
+        } catch (Throwable error) {
+            AliveLog.e(TAG, "system server loader: failed", error);
+            return loader;
+        }
     }
 
     private static Class<?> findServerClass(String className, ClassLoader loader, String label) {

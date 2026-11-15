@@ -1,7 +1,10 @@
 package org.aliveclean;
 
 final class Diagnostics {
-    /** 2026-11-15 诊断构建临时打开；出正式包前改回 false（见 docs/kb/05 §2.4 与 09 记录）。 */
-    static final boolean TRACE=true;
+    /**
+     * 诊断开关。true 时 Trace.enabled() 无条件放行（打 T01..T13）。
+     * 正式包必须为 false —— 见 docs/kb/05 §10 检查清单。
+     */
+    static final boolean TRACE=false;
     private Diagnostics(){}
 }

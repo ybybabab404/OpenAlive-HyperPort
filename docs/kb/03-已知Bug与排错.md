@@ -667,7 +667,52 @@ supervise done, parent=com.miui.aod.AODView
 - `aodSceneState()` 改成三态：`SCENE_UNKNOWN`（用户未解锁 → 2s 后重试，最多 15 次）不再当成"用户关了场景"；
 - `Trace.enabled()` 现在也认 `Diagnostics.TRACE`，否则诊断包一条 `T0x` 都没有（这次踩过）。
 
-**仍未验证**：Bug B/C 的 `reconcileNative` 效果需要"切回系统壁纸"这一步，得手动换壁纸后再看键值。
+**关键证据 4：Bug B/C 的 `reconcileNative` 生效（23:37 切回系统壁纸后实测）**
+
+```text
+I/AliveHS : full aod: handed back to MIUI (native recompute)
+I/AliveHS : full aod flags activation alive=false: SUPPORT_FULL_AOD=false INNER_SCREEN_SUPPORT_FULL_AOD=false
+I/AliveHSHooks: aod foreign confirmed x5
+I/AliveHSHooks: aod mode restored=1
+alive_aod_restore_value/set/active = null, null, null
+```
+
+- 我们不再把 `SUPPORT_FULL_AOD` 撒谎成 true（之前 `alive=true: … =true`，现在恢复成 false）；
+- 自己的三个 marker 已被 `restore()` 清空；
+- `full_screen_aod_support=1` / `full_screen_aod_disable_reason=0` 是 **MIUI 自己算出来的**
+  （静态 MIUI 壁纸 + 默认锁屏主题 → `isWallpaperTypeSupport=true`），不是我们的残留 —— 这一条
+  推翻了"support=1 一定是残留"的猜测，`03-*` §9.2 里的 B2 需要按此修正为"我们确实造成过，但当前值本身是原生的"。
+
+**关键证据 5：AOD 样式下拉现在能改、且改得住（Bug B 的症状是模块抢回设置造成的）**
+
+uiautomator dump（系统壁纸下、模块不介入时）：
+
+```text
+com.miui.aod:id/aod_resting_screen_style  clickable="true" enabled="true"   ← 行是可点的，不是被我们禁用的
+下拉项只有两项： 「自定义」 / 「和锁屏样式一致」（当前选中后者）
+```
+
+实测点击：
+
+| 选择 | `full_screen_aod_on` | 是否留得住 |
+|---|---|---|
+| 自定义 | **0** | 是（checked 保持，未被改回） |
+| 和锁屏样式一致 | **1** | 是 |
+
+也就是说：`和锁屏样式一致` = 全屏 AOD（用壁纸），`自定义` = 用自定义 AOD 样式。
+**b1c 的症状"怎么设都是自定义/跟壁纸一致"来自 `ensureEnabled()`/`restore()` 把
+`full_screen_aod_on` 又写回 1**；`ff49027` 之后这次实测没有再抢回来。
+
+**关键证据 6：`alpha watchdog` 真的会兜底**
+
+```text
+I/AliveHSAod: alpha watchdog fired, alpha=0.0
+```
+
+某次 AOD 首帧没来，看门狗把它从 0 拉起来（这条日志证明 A-2 的兜底链路是通的）。
+同时那一轮屏幕处于 `mState=DOZE_SUSPEND`（AOD 未点亮），所以截图是黑的 —— **这和模块无关**，
+是设备的 AOD 在 doze 后很快挂起/未点亮造成的测量干扰。
+
 
 ## 10. 下一步（2026-11-15 23:32）
 

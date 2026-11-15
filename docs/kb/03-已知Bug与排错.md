@@ -617,7 +617,64 @@ isDeviceSupport && mAodEnable && mAodFullScreenEnable && isFullAodSupport
 
 **仍未判定**：真机上是"没注入"（看 `T06 gave up`）、"注入了但被移除"（`T09 supervise stop` / `T04` 后无 `T05`）还是"注入了但内容黑"（有 `T05`+`alpha watchdog fired`）。这三条只能靠 `4591c24` 的日志区分，不要在没有日志的情况下继续改代码。
 
-### 9.4 下一步（就是 §8 第 1、2 条）
+### 9.5 2026-11-15 23:23–23:32 真机验证：球已经出来了（【已验证】）
 
-装 `4591c24` → `adb reboot` → 应用项目壁纸 → 息屏 20s（2/6/12/18s 截图）→ 抓 `logcat -s AliveHS*`：按 §1.5 判定树走。设备侧操作已在 `09-*` §3.7 登记。
+诊断构建 `4591c24` 装了没修好，`56e279f` 修了"开机时 attach 被锁屏打断"这条，仍不可见；`ff49027` 在 systemui 重启后**稳定显示**。
+
+**关键证据 1：2038 悬浮窗在 doze 下被系统强制隐藏（这条路是死的）**
+
+```text
+Window #12 Window{... u0 AliveHSAod}  ty=APPLICATION_OVERLAY
+  mPolicyVisibility=false  isVisibleByPolicy=false  isOnScreen=false
+  Surface: shown=false  mDrawState=READY_TO_SHOW  mShownAlpha=0.8
+```
+
+即：`AodOverlay` 的 SurfaceView 内容画得出来（`AOD frame lensScale=0.22 … photo=1`），
+但窗口本身被 WindowManager 策略隐藏。**所以"用悬浮窗兜底"在 HyperOS 4.0.0.33 上不成立**，
+唯一可行路径就是注入 AOD 自己的层级。
+
+**关键证据 2：AOD 视图就是 `com.miui.aod.AODView`，子 View 顺序如下**
+
+```text
+[HA][T12] aod children of AODView count=5
+  [0:View  1:AodSurface(ours)  2:AodContainerView  3:NotificationAnimationView  4:ViewStub]  hostAlpha=0.0 hostShown=true
+[HA][T04] surface#create id=… host=… children=5
+[HA][T09] supervise start id=…
+[HA][T05] texture#available id=… 1200x2608
+[HA][T13] surface state alpha=1.0 shown=true size=1200x2608 parent=AODView
+supervise done, parent=com.miui.aod.AODView
+```
+
+`index 0` 是不透明黑底，我们的 `AodSurface` 插在 index 1（黑底之上、时钟容器 `AodContainerView` 之下），
+与代码注释里的布局假设一致 —— 这次实测确认了。
+
+**关键证据 3：截图**
+
+- 修好前（`b1c` / `4591c24`）：纯黑 + 日期时钟，无球 → `r2_18.png`、`r4_38.png`（42KB 左右）
+- 修好后（`ff49027`）：黑底 + 顶部球 + 日期时钟，25s / 45s / 65s 三张稳定 → `r5_36.png`、`r6_25/45/65.png`（217–236KB）
+
+**为什么之前失败（按证据排序）**
+
+1. doze 时 `AodOverlay` 走 2038 悬浮窗 → 被 WMS 隐藏（证据 1），而 `injectIntoAod()` 因为拿不到 root 放弃了；
+2. `AodView` 实例**开机就构造一次**（23:09:31 的 `attach` 栈），那一刻用户还没解锁，读凭证加密的
+   SharedPreferences 抛 `IllegalStateException`，`attach()` 直接 `detach()` 把 `aodRoot` 清空，之后**再也没有重试**；
+3. 于是每条息屏都走"普通 AOD"路径：黑底 + 时钟，壁纸在熄屏转场里被一起淡掉 —— 与用户描述完全一致。
+
+**本次修法（`ff49027`）**
+
+- `install()` 的构造器 hook 里立即缓存 `cachedRoot`，`aodRoot` 同步指向它；`rootView()` 优先取"已 attached"的实例；
+- `detach()` 不再清 `aodRoot/cachedRoot`（实例整机只构造一次，清掉就永久失去注入机会）；
+- `aodSceneState()` 改成三态：`SCENE_UNKNOWN`（用户未解锁 → 2s 后重试，最多 15 次）不再当成"用户关了场景"；
+- `Trace.enabled()` 现在也认 `Diagnostics.TRACE`，否则诊断包一条 `T0x` 都没有（这次踩过）。
+
+**仍未验证**：Bug B/C 的 `reconcileNative` 效果需要"切回系统壁纸"这一步，得手动换壁纸后再看键值。
+
+## 10. 下一步（2026-11-15 23:32）
+
+1. 手动切回系统壁纸 → 读 `full_screen_aod_on` / `full_screen_aod_support` / `full_screen_aod_disable_reason`
+   是否回到原生值，并看 AOD 样式页是否还是"和锁屏样式一致"（验证 `reconcileNative`）。
+2. 把 `Diagnostics.TRACE` 改回 `false` 出正式包；`Trace.enabled()` 的 TRACE 短路保留（它只在诊断包生效）。
+3. `ff49027` 尚未在"冷启动 + 锁屏未解锁"的场景下完整回归（这次是通过 `killall com.android.systemui` 加载的）。
+   要补一次"重启 → 解锁 → 息屏"的完整回归，确认 `SCENE_UNKNOWN` 重试链在真机成立。
+
 

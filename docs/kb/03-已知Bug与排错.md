@@ -703,23 +703,64 @@ com.miui.aod:id/aod_resting_screen_style  clickable="true" enabled="true"   ← 
 **b1c 的症状"怎么设都是自定义/跟壁纸一致"来自 `ensureEnabled()`/`restore()` 把
 `full_screen_aod_on` 又写回 1**；`ff49027` 之后这次实测没有再抢回来。
 
-**关键证据 6：`alpha watchdog` 真的会兜底**
+**关键证据 7：`framePosted` 卡死 = 间歇性"surface 在、画面不出"的真因（23:5x 定位并修复）**
+
+用户 23:47 复现"没看到球 + 缓慢黑屏"，日志只有：
+
+```text
+I/AliveHSAod: injected into the AOD view
+I/AliveClean: EGL init requested=1200x2608 …
+I/AliveClean: aod photo from provider 1200x2608      ← 照片加载成功
+I/AliveHSAod: alpha watchdog fired, alpha=0.0        ← 首帧始终没来
+```
+
+`RenderLoop.schedule()` 原本是：
+
+```java
+if (…) { framePosted = true; choreographer.postFrameCallback(frame); }
+```
+
+`framePosted` 只有 `onVsync()` 会复位。**doze/息屏期间 Choreographer 可能整段不发 vsync**，
+回调不来 → `framePosted` 永久为 true → 之后所有 `schedule()` 都是空操作，
+`firstFrame` 永不触发 → `AodSurface` 停在 alpha=0 → 用户看到的就是"没有球"。
+
+修法（`1095efd` / 正式包 `338aae7`）：`schedule()` 里加 120ms 的 `vsyncWatchdog`，
+到点若 `framePosted` 仍为 true 就直接渲染一帧并打 `vsync watchdog: drawing without Choreographer`；
+`onVsync` / `stopFrames` 里清掉它。这是"只在 vsync 真的没来时生效"的兜底，不改变正常帧率路径。
+
+**验证方法（可复现，不靠肉眼）**：锁屏后轮询 `dumpsys display | grep mState=` 到 `DOZE`，
+截图后统计顶部球区域（y=200–700，缩略到 40×20）亮像素数：
+
+| 样本 | 亮像素 | 结论 |
+|---|---|---|
+| 失败样本 `r4_38`（b1c/4591c24 时代） | **0/800** | 无球 |
+| `1095efd` 连测 6 轮 `cycle1..6` | 86–124 | 有球 |
+| 正式包 `338aae7` 连测 3 轮 `rel1..3` | 90–115 | 有球 |
+
+对应截图：`.tmp/screenshots/bugfix-20261115/rel1..3.png`、`cycle1..6.png`、`n1..3.png`。
+
+> 注意：**只有"锁定 → 等到 DOZE → 再截图"才有意义**。屏幕处于 `DOZE_SUSPEND` 时截出来必然全黑，
+> 23:44–23:46 那几轮"全黑"就是踩了这个坑，不是模块的问题。
+
+**关键证据 6（补记）：alpha 看门狗本身是通的**
 
 ```text
 I/AliveHSAod: alpha watchdog fired, alpha=0.0
 ```
 
-某次 AOD 首帧没来，看门狗把它从 0 拉起来（这条日志证明 A-2 的兜底链路是通的）。
-同时那一轮屏幕处于 `mState=DOZE_SUSPEND`（AOD 未点亮），所以截图是黑的 —— **这和模块无关**，
-是设备的 AOD 在 doze 后很快挂起/未点亮造成的测量干扰。
+某次 AOD 首帧没来，看门狗把它从 0 拉起来（证明 A-2 的兜底链路是通的）。
+但"看门狗把 alpha 拉起来"只解决"透明"，不解决"没内容"——内容要靠证据 7 的 vsync 兜底。
 
 
-## 10. 下一步（2026-11-15 23:32）
+## 10. 下一步（2026-11-15 23:56 更新）
 
-1. 手动切回系统壁纸 → 读 `full_screen_aod_on` / `full_screen_aod_support` / `full_screen_aod_disable_reason`
-   是否回到原生值，并看 AOD 样式页是否还是"和锁屏样式一致"（验证 `reconcileNative`）。
-2. 把 `Diagnostics.TRACE` 改回 `false` 出正式包；`Trace.enabled()` 的 TRACE 短路保留（它只在诊断包生效）。
-3. `ff49027` 尚未在"冷启动 + 锁屏未解锁"的场景下完整回归（这次是通过 `killall com.android.systemui` 加载的）。
-   要补一次"重启 → 解锁 → 息屏"的完整回归，确认 `SCENE_UNKNOWN` 重试链在真机成立。
+1. ~~切回系统壁纸验证 `reconcileNative`~~ —— 已完成（§9.5 证据 4/5）。
+2. ~~正式包关 TRACE~~ —— 已完成：`338aae7`。
+3. **待做：冷启动回归**——重启 → 锁屏态下 AODView 先构造一次（会走 `SCENE_UNKNOWN` 重试链）
+   → 解锁 → 应用壁纸 → 锁屏看球。这次的所有验证都是 `killall com.android.systemui` 后的热路径。
+4. 待做：把 `03-*` §1.4 的 H1–H6 按 §9 的证据重新标级（H1/H2 已修，H5 未涉及）。
+5. 待做：B（全屏 AOD 不生效）本身还没"修"——现在球是靠注入 AODView 显示的，
+   壁纸在普通 AOD 下仍会被系统淡掉。若要"和锁屏样式一致"的真全屏 AOD，
+   需要另开一题查 `MiuiClockController` 的 `wallpaperInfo.isSupportFullScreenAod=false`。
 
 

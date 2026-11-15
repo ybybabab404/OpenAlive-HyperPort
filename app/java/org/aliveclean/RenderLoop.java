@@ -212,9 +212,25 @@ final class RenderLoop {
             if(surface!=null&&surface.isValid()){init(surface,width,height);schedule();}return;
         }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){AliveLog.e("AliveClean","Scene reload failed",e);release();}}
     void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
-    private void schedule(){if((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)&&choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}}
-    private void onVsync(long time){framePosted=false;if(probeUntil!=0){long ms=time/1_000_000L;if(probeVsyncLast!=0&&ms-probeVsyncLast>25)AliveLog.i("AliveClean","probe vsync gap="+(ms-probeVsyncLast)+" mode="+mode+" v0="+(motion!=null?motion.values[0]:-1));probeVsyncLast=ms;}frameTime=time;handler.post(renderTask);}
-    private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);}
+    private void schedule(){
+        if(!((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)))return;
+        if(choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}
+        // Choreographer 在 doze/息屏期间可能整段不发 vsync；一旦回调不来，framePosted 会
+        // 永久卡在 true，之后 schedule() 全是空操作 —— 表现就是"surface 在、画面永远不出"。
+        // 这里兜一个 120ms 的看门狗：只在 vsync 真的没来时直接渲染一帧。
+        handler.removeCallbacks(vsyncWatchdog);
+        handler.postDelayed(vsyncWatchdog,120);
+    }
+    private final Runnable vsyncWatchdog=()->{
+        if(!framePosted)return;
+        framePosted=false;
+        if(!(renderingVisible()||forceFrame)||(scene==0&&cosmic==null&&vivo==null))return;
+        AliveLog.i("AliveClean","vsync watchdog: drawing without Choreographer mode="+mode);
+        try{frameTime=android.os.SystemClock.uptimeMillis()*1_000_000L;render(frameTime);}
+        catch(Throwable error){AliveLog.w("AliveClean","vsync watchdog render failed",error);}
+    };
+    private void onVsync(long time){handler.removeCallbacks(vsyncWatchdog);framePosted=false;if(probeUntil!=0){long ms=time/1_000_000L;if(probeVsyncLast!=0&&ms-probeVsyncLast>25)AliveLog.i("AliveClean","probe vsync gap="+(ms-probeVsyncLast)+" mode="+mode+" v0="+(motion!=null?motion.values[0]:-1));probeVsyncLast=ms;}frameTime=time;handler.post(renderTask);}
+    private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);handler.removeCallbacks(vsyncWatchdog);}
     private void updateCosmicLifecycle(){
         try{
             if(cosmic!=null){

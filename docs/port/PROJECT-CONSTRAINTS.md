@@ -60,7 +60,7 @@ app/res/                   资源（values/strings.xml 内含 xposed_scope）
 app/assets/                素材（体积大，尽量不动）
 tools/                     构建与部署脚本（build_release.py / deploy.py / 校验脚本）
 docs/port/                 交接文档（HANDOVER / PROGRESS / REQUIREMENTS 等）
-.tmp/                      临时产物与反编译（不入库）
+.tmp/                      临时工作区（不入库）：build/ artifacts/ research/ logs/ screenshots/ scripts/ archive/ scratch/
 dist/                      构建产物（不入库）
 ```
 

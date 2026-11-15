@@ -1,3 +1,5 @@
+> **本文档写于 2026-11-02，已过时。当前状态与下一步请读 [HANDOVER-20261114.md](HANDOVER-20261114.md)。**
+
 # AliveHS 交接文档
 
 > 写于 2026-11-02 14:02（周一）。上一个会话因上下文熔断无法继续，这份文档是唯一入口：
@@ -80,7 +82,7 @@ dist/                            构建输出
 cd "<repo>" && \
 ANDROID_HOME="$ANDROID_HOME" \
 JAVA_HOME="$JAVA_HOME" \
-HYPERALIVE_NATIVE_SO=".tmp/libalive_clean.so" \
+HYPERALIVE_NATIVE_SO=".tmp/build/libalive_clean.so" \
 USERPROFILE="$HOME" \
 PYTHONIOENCODING=utf-8 \
 C:/Python314/python.exe tools/build_release.py --no-checks

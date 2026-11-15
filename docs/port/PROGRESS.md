@@ -61,7 +61,7 @@
 - 构建：`C:\Python314\python.exe tools\build_release.py --no-checks`
   `ANDROID_HOME=$ANDROID_HOME`
   `JAVA_HOME=$JAVA_HOME`
-  `HYPERALIVE_NATIVE_SO=.tmp\libalive_clean.so`　`PYTHONIOENCODING=utf-8`
+  `HYPERALIVE_NATIVE_SO=.tmp\build\libalive_clean.so`　`PYTHONIOENCODING=utf-8`
   单次约 45–60s。
 - 装包走 USB `<usb-serial>`（无线装大包会 Broken pipe）；adb server 常在两次调用之间掉，先 `adb start-server`。
 - 原生 `.so` 是从官方 APK 里取的，sha256 `43ff8838…eaf027`；本机无 Rust/NDK，无法重编，

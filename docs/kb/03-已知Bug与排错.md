@@ -5,6 +5,8 @@
 >
 > 当前快照：2026-11-15，设备 `9eb96e8a`，构建 b1c（`b1c98f74...`）。
 > 设备在最后一次复现前 adb 断开，部分稳态截图未完成；以下 AOD 稳态问题以**用户实机观察**为主，辅以源码链路推断。
+>
+> **2026-11-15 22:40 复核（设备未连接）**：本文件里靠 logcat 支撑的“已验证/已复现”条目，多数在 `.tmp` 中已找不到原始日志（只保留 2026-11-15 10:xx 旧构建的日志与截图）。凡涉及 b1c 的日志类证据，一律降级为【证据缺失】；截图类证据已逐张复核（结论见 `01-*` §8.1）。另外修正了三处与源码不符的表述，见 §1.4、§1.5、§3.5 的“复核”注记。
 
 ## 0. 当前未关闭问题（用户原话）
 
@@ -39,8 +41,10 @@
 
 - b1c 录屏 `.tmp/screenshots/anim_b1c_home.mp4`、`anim_final.mp4` 的 contact sheet 中能看到球体帧；但这只是**转场帧**，不是稳定 12/18 秒后的 AOD。
 - b1c AOD 开启截图 `.tmp/screenshots/b1c_aod_on.png` 显示的是当前橙紫壁纸 + 时钟，不是明显的球；用户观察与此一致。
+  - **2026-11-15 22:40 复核**：该截图里有完整状态栏（电量/信号）和“已开启 USB 文件传输模式”通知卡片，形态更像**锁屏**而不是 AOD。它既不能证明“AOD 有球”，也不能证明“AOD 无球”，只能证明那一刻壁纸是项目图。不要再用它当 AOD 稳态证据。
 - 早先 5f41/0ecc 的截图也多为“全屏壁纸 + 时钟”或转场帧，没有完成“稳定 18 秒仍有球”的证据。
 - 设备 adb 在准备做 2/6/12/18 秒稳态截图时断开，尚未补测。
+- **另一份可用的旧证书**：`.tmp/aod-evidence/report.md`（2026-11-15 10:25–10:47，构建 `08a0d3b3…`）用例 1 在 `doze_always_on=0` 下拍到黑底上的黑白 AliveHS 球（`case1/cycle1b-off-8s.png`、`cycle2b-t02.png`）。这说明“注入的球确实能被画出来”，但那是**该关掉 AOD 时反而出球**的失败证据，不能反推 b1c 稳定态有球。
 
 **结论：Bug A 没有已确认的正常构建。** 不能引用 `stable-anim-2026-11-02` 来证明“球正常”；那个 tag 证明的是动画/打断表现，不是稳定球。
 
@@ -87,6 +91,14 @@
 - `app/java/org/aliveclean/HyperOsAod.java:127-230`（attach）
 - `app/java/org/aliveclean/HyperOsAod.java:199-240`（supervise，未调用）
 - `app/java/org/aliveclean/HyperOsAod.java:71-102`（inject/schedule）
+
+**2026-11-15 22:40 复核（H1 需要收窄）**：`install()` 是对 AODView **构造器**做 hook（两个类名都 hook）。所以“MIUI 重建 AODView”这个前提一旦成立，构造 hook 会重新触发 `scheduleAttach` → 950ms 后重新 `attach`，并会移除 stale 子 View 后新建 surface。因此 H1 只在下列情形成立：
+
+- AODView **实例没重建**，只是被清空了子 View 或目标容器换成了另一个 ViewGroup（此时没有任何 hook 会再触发）；
+- 新 surface 建了但立刻又被移除（例如 AODView 在同一轮里被重排两次），而 `supervise` 又不工作；
+- `liveSurface` 仍指向旧 surface 且 `isAttachedToWindow() && isShown()` 为真（旧 View 尚未 detach 完全），使新 attach 直接早退。
+
+换句话说：**“supervise 未调用”是事实，但“因此必然不重挂”是推断，不能当结论**。要判定到底走哪条分支，必须按 §1.5 抓 `T03/T04` 日志（`attach skipped, live surface id=`、`surface#create id=… children=`）与 `onViewRemoved/onViewAdded` 时序。H1 的优先级应从“最高”降为“与 H2/H5 并列，待日志区分”。
 
 #### H2：首帧 never comes，`AodSurface` 永远 alpha=0
 
@@ -177,12 +189,14 @@ loop.onFirstFrame(() -> post(() ->
    ├─ 有球 → 用户描述可能是转场/特定场景，记录场景
    └─ 无球 → 继续
 
-2. logcat 过滤 AliveHSAod / AliveClean / AliveHSHooks
-   ├─ 没有 "injected into the AOD view" → 注入没发生，查 attach 条件/延迟
-   ├─ 有 injected，但没有 "texture#available" → SurfaceTexture 没起来
-   ├─ 有 texture#available，但没有 "aod photo from provider" → RenderLoop 没读图/EGL 失败
+2. logcat 过滤 AliveHSAod / AliveClean / AliveHSHooks（**下载/构建前先开 `Trace`，否则拿不到 T03/T04**）
+   ├─ 没有 "injected into the AOD view" → aodRoot 都还没建立，查 AODView 构造 hook 是否装上
+   ├─ 有 "injected into the AOD view" **但**没有 "T04 surface#create" → 注入了个寂寞：`injectIntoAod()` 只判断 `aodRoot != null` 就返回 true，这条日志不证明 surface 加进去了（2026-11-15 复核修正）
+   ├─ 有 "T04 surface#create"，但没有 "T05 texture#available" → SurfaceTexture 没起来
+   ├─ 有 T05，但没有 "aod photo from provider" → RenderLoop 没读图/EGL 失败
    ├─ 有 provider 日志，但球黑 → 检查图片/上传/场景
-   └─ 有 injected，稳定后无球 → 重点查 H1（surface 被移除/未重挂）
+   ├─ 有 "attach skipped, live surface id=" → 走了早退分支：旧 surface 仍 isAttachedToWindow+isShown，查它到底还在不在 AODView 里
+   └─ 有 T04 且之后无任何 T03/T04 → 稳定后既没重建也没重挂，重点查 H1（surface 被移除/未重挂）
 
 3. 检查 surface 状态（需要加日志）
    - surface.getParent() 是否为 null
@@ -375,9 +389,11 @@ adb shell logcat -d -s AliveHSHooks AliveHSAod | tail -100
 
 #### C3：`ensureEnabled` 把系统壁纸误当成“我们”
 
-**证据级别：中。**
+**证据级别：低（2026-11-15 复核后下调）。**
 
-`ensureEnabled` 在 `KEY_HAS_RESTORE != 1` 时直接 `enter(context)`，把 `full_screen_aod_on` 设为 1。如果切壁纸后 marker 被清、但 `alive` 因槽位/缓存误判为 true，就会写回 1。
+`ensureEnabled` 开头是 `if (!alive(context)) return;`，之后还有 `if (!aodEnabled || !aodSwitchFromShell()) return;`，最后才在 `KEY_HAS_RESTORE != 1` 时调 `enter(context)`（`AodWallpaperMode.java:304-322`）。所以它**不可能**仅凭“marker 被清”就把系统壁纸当首次应用。
+
+要成立必须同时满足：壁纸被误判为 ours（即 `getWallpaperInfo()` 返回了 `org.aliveclean` 的 `WallpaperInfo`）**且** AOD 开关为开。这种情况更可能是 WMS 尚未重绑壁纸的短窗口，而不是 marker 逻辑缺陷。原表述把前置条件漏掉了，会误导排查方向。
 
 #### C4：system_server 未加载新代码/未重启
 
@@ -418,6 +434,10 @@ adb shell logcat -d -s AliveHSHooks AliveHSAod | tail -100
 ### 3.5 正常版本
 
 - `b1c` AOD 关闭 + `SceneApply` 已验证 `full_screen_aod_on=0`；但**系统壁纸互切没有完整回归**。
+- **2026-11-15 22:40 复核修正**：并非“完全没有证据”。`.tmp/aod-evidence/report.md` §3 用例 4 在构建 `08a0d3b3…`（2026-11-15 10:38–10:42）上做过一次完整的「项目壁纸 → 系统壁纸」切换：应用项目壁纸后 `full_screen_aod_on=1`、`alive_aod_restore_value=0`、样式行显示 AliveHS 且不可点；切回系统静态壁纸后 `full_screen_aod_on=0`、`alive_aod_*` 变 null、`aod mode restored=0`、样式行恢复“自定义”且可点。判定 PASS。
+  - 但这条证据的边界很清楚：**单次、单向、08a0 构建、未重启、且没有“系统→项目→系统”多轮往返**。
+  - 用户仍报“互切恢复没解决”，与这次 PASS 不矛盾：用户测的很可能是 b1c 或其它顺序。
+  - 正确表述：【历史/待验证】08a0 上单向切换 PASS；**【证据不足】** b1c 上的互切恢复；【用户反馈】**未解决**。
 - 旧版 `08a0/73b54` 也没有完整互切证据。
 - 不能把“AOD 关闭测试通过”当成“互切恢复通过”；两者路径不同。
 
@@ -452,6 +472,9 @@ adb shell logcat -d -s AliveHSHooks AliveHSAod | tail -100
 | 应用成功但桌面没变 | `dumpsys wallpaper` 是否 CleanWallpaper；是否只改了 lock 槽 |
 | 应用后 AOD 开关变 0 | `AodWallpaperMode.enter` 捕获顺序；`AodFullScreen.onActivation` 是否 restore |
 | 安装成功但仍旧行为 | APK SHA；system_server 是否重启；进程是否旧 |
+
+> **2026-11-15 22:40 复核**：全仓（源码 + `docs/`）搜索 `RUNNING_LOCKED`，**只在本 KB 的 4 个文件里出现，源码与旧交接文档中都没有出处**。`SceneApply.apply()` 的失败判据是“退出码非 0 或输出不含 `SCENE_APPLIED`”，并把子进程输出原样带回；代码里没有任何地方会产生或匹配 `RUNNING_LOCKED`。
+> 结论：【不支持】“设备锁屏会报 `RUNNING_LOCKED`”这一说法作为一个**可观察错误串**；【待验证】“锁屏时 `app_process` 读 Settings 失败”这个**机理**仍然可能存在，但表现应是异常堆栈/空值，不是这个字符串。排查时请贴子进程真实输出，不要等这个字符串。
 
 ### 5.2 AOD 设置页异常
 

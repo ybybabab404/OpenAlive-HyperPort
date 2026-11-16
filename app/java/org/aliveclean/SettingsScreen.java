@@ -6,7 +6,8 @@ import android.view.*;
 import android.widget.*;
 
 /**
- * 模块自带设置页的构建入口；拿不到官方上下文时降级为简单提示，不抛异常。
+ * 模块自带设置页的构建入口：用官方（Flyme）Toolbar 拼界面。{@code create} 本身会抛异常，
+ * 降级提示由调用方 catch 后走 {@code fail}。
  */
 final class SettingsScreen {
     static LinearLayout create(Activity activity,SettingsUi ui,String title)throws Exception{

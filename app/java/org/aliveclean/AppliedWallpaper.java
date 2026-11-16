@@ -6,7 +6,8 @@ import android.content.ComponentName;
 import android.os.Build;
 
 /**
- * 判断当前生效的壁纸是不是我们的：系统槽与锁屏槽分别判断，二者可能不同步。
+ * 读锁屏槽上的壁纸组件（取不到时回落到系统槽），并判断它是否属于我们认识的那几个组件。
+ * 两个槽「分别判断」由 {@code WallpaperPicker.applied} 负责，本类只提供读数与白名单。
  */
 final class AppliedWallpaper {
     static WallpaperInfo lock(WallpaperManager manager){

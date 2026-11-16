@@ -6,7 +6,8 @@ import android.content.pm.*;
 import android.widget.Toast;
 
 /**
- * 主题商店/个性化页面的跳转解析：按平台挑对应的组件与 intent，失败时返回 false。
+ * 主题商店跳转：{@code resolve} 依次探测两个 ColorOS 主题商店包，命中返回 Intent、都不在返回 null；
+ * {@code open} 直接把 Intent 交给 Activity（失败由调用方兜）。不区分 HyperOS 与其它平台。
  */
 final class ThemeLinks {
     static Intent resolve(Context context,boolean font){

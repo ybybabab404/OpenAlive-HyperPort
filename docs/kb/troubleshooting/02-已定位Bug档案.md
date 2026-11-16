@@ -1356,3 +1356,34 @@ self.aod_pass(frame, decor, lens_src);
 
 **最终确认**：用户 2026-11-16 22:21「可以了」= 【支持】。tag `save-20261116-sailwake`。
 
+
+## 13. 2026-11-16 23:3x 整理过程中发现、**未修**的代码级问题
+
+> 本轮是"注释与死代码整理"，原则是不动任何可能改变行为的逻辑（用户明确要求）。
+> 下面 4 条在审查时被证实，属于真缺陷，但修它们=改行为，所以只记录，等用户决定。
+
+### 13.1 `RootBridge` 读一个没人写的字段 → 每次都弹"后台运行设置未确认"
+
+- 现象：非 HyperOS（ColorOS 全景 AOD）路径上，每次都会提示"后台运行设置未确认…"。
+- 证据：`RootBridge.java:37` 的 `json.optBoolean("backgroundAllowed")` 是**全仓唯一**出现处；
+  `PlatformApply` 的输出只有 `ok / before / mode`（`PlatformApply.java` 末尾 JSON 组装），从不写 `backgroundAllowed`。
+- 后果：`true` 分支不可达，假告警常驻。
+- 两种修法（择一）：让 `PlatformApply` 输出该字段；或删掉该分支与那句提示。**未实施**。
+
+### 13.2 `WallpaperPicker.applied(...)` 的 4 个参数只进日志，不参与判定
+
+- 证据：`WallpaperPicker` 里 `applied()` 只看当前系统槽/锁屏槽上的组件是不是 `expected`；
+  `result`、`reliableResult`、`previousHomeId`、`previousLockId` 仅用于打日志（原先那个 `confirmed` 局部变量已被本次整理删除）。
+- 后果：调用方以为"预览页返回 OK"或"槽位 id 变了"会影响结论，实际不会。
+- 建议：要么把 `confirmed || id 变化` 的意图接回判定，要么收敛签名。**未实施**（改签名会牵动所有调用方）。
+
+### 13.3 `PlatformApply` 的 `local-aod` 参数无调用方
+
+- 证据：全仓唯一调用是 `RootBridge.java:20` 传 `panoramic-aod`；`PlatformApply.java:23` 仍接受 `local-aod`，
+  且 SDK<31 的提示文案只提 "Local AOD adapter"。属保留入口，不是死码，但容易误解。**未实施**。
+
+### 13.4 `setReadOnly()` 先于写入（靠已打开的写 FD 才成功）
+
+- 位置：`VivoEngineRuntime`（解包 so）、`XiaomiPlayer`（解包 so）。
+- 现状行为正确（先 open 出写 FD、再 chmod 只读、继续写该 FD），但顺序反直觉：
+  若将来改成"先 chmod 再 open"会立刻失败。**未实施**（只是提醒，不是缺陷）。

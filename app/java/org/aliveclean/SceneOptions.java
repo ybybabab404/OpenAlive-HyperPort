@@ -4,7 +4,8 @@ import android.content.SharedPreferences;
 
 /**
  * 场景配置的读写层：applied 存 {@code scene}，预览/编辑存 {@code scene.preview}，
- * 所有键名与默认值集中在这里，其它类不要自己拼 SharedPreferences 键。
+ * 负责把键值翻译成字段并给出默认值。注意：个别键名（如 {@code photo}、{@code frame_*}）目前仍以字面量
+ * 散落在调用方，新增键时请优先在这里补常量，避免拼错。
  */
 final class SceneOptions {
     static final String APPLIED="scene", DRAFT="scene.preview";

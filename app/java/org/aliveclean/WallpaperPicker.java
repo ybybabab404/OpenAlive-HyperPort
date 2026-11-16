@@ -15,7 +15,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 拉起系统壁纸选择器，并判断用户最终是不是选了我们的壁纸（含手动选择的兜底判断）。
+ * 拉起系统壁纸选择器；跳不过去时只弹一次 Toast 让用户自己去列表里选（没有别的兜底），
+ * 事后由 {@link #applied} 看当前槽上的组件是不是我们，来判定到底有没有换成。
  */
 final class WallpaperPicker {
     private static final String[] PACKAGES={
@@ -81,7 +82,6 @@ final class WallpaperPicker {
 
     static boolean applied(WallpaperManager manager,ComponentName expected,int result,
             boolean reliableResult,int previousHomeId,int previousLockId){
-        boolean confirmed=reliableResult&&result==Activity.RESULT_OK;
         WallpaperInfo home=manager.getWallpaperInfo();
         String homeName=home==null?null:home.getComponent().flattenToShortString();
         int homeId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);

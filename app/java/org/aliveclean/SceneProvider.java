@@ -7,7 +7,8 @@ import android.os.*;
 
 /**
  * 场景信号的 ContentProvider 通道（authority {@code org.aliveclean.scene}），
- * 用 call/query 传递 mode 与配置，受 STATUS_BAR 权限保护。
+ * 只实现 {@code call}（{@code connect} 换通道 binder、{@code configuration} 读当前配置）；
+ * query/insert/delete/update 一律抛 UnsupportedOperationException。调用方需持 STATUS_BAR 权限。
  */
 public final class SceneProvider extends ContentProvider {
     static final Uri CONFIGURATION=Uri.parse("content://org.aliveclean.scene/configuration");

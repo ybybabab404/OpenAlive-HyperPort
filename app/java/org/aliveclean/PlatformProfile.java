@@ -4,7 +4,8 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 
 /**
- * 平台识别：区分 HyperOS / MIUI / 其它，并记录平台组件是否安装，决定后续走哪条实现。
+ * 平台识别：只区分 HyperOS 与其它（没有 MIUI 分支），靠 {@code com.miui.miwallpaper} 是否存在判定，
+ * 决定后续走系统接口还是 ColorOS 那套 root 桥。
  */
 final class PlatformProfile {
     static final int UNKNOWN=0;

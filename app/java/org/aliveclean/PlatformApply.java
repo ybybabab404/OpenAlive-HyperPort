@@ -9,8 +9,10 @@ import android.os.Process;
 import org.json.JSONObject;
 
 /**
- * 平台侧"应用壁纸"的独立入口（{@code app_process} 起，跑在系统 UID 下），
- * 由 {@link RootBridge} 在需要时拉起。
+ * ColorOS 息屏模式（全景 AOD）的配置入口：{@code app_process} 起、跑在系统 UID 下，
+ * 通过 {@code com.oplus.aod.AodMachineHelperProvider} 写 AOD 相关设置；壁纸只用来做前置校验，
+ * 由 {@link RootBridge} 在需要时拉起。参数只有 {@code panoramic-aod}（当前唯一调用方用的）
+ * 与 {@code local-aod}（保留入口，暂无调用方）。
  */
 public final class PlatformApply {
     private static final String PROVIDER="com.oplus.aod.AodMachineHelperProvider";

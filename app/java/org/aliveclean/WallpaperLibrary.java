@@ -11,7 +11,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 内置壁纸列表：给 ListView 提供适配器与预览图。
+ * 内置壁纸库：把 assets 里的魅族壁纸列成 GridView 网格（名称取自 catalog.json，路径先做越界校验）。
  */
 final class WallpaperLibrary {
     interface Selection { void choose(String asset); }

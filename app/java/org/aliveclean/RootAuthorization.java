@@ -9,7 +9,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * root 授权的获取与监听：负责请求、投递结果，并在授权丢失后重新检查。
+ * root 授权查询：向授权界面请求一次、把结果投给回调；结果有 15 秒缓存，
+ * 需要即时状态时由调用方用 {@code force=true} 强制重查（本类不做自动监听）。
  */
 final class RootAuthorization {
     enum Status {

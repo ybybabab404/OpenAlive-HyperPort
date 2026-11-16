@@ -5,7 +5,8 @@ import android.net.Uri;
 import android.os.*;
 
 /**
- * 模块激活状态：判断 AliveHS 是否已在当前开机里被系统真正加载，供 UI 与壁纸侧查询。
+ * 模块激活状态：看 SystemUI 进程里上报的模块 binder 是否还活着（SystemUI 重启后会重新上报），
+ * 供 UI 与壁纸侧查询「当前这套 SystemUI 里模块有没有生效」。
  */
 final class ModuleActivation {
     static final String QUERY="org.aliveclean.QUERY_MODULE_ACTIVATION";

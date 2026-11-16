@@ -1160,7 +1160,7 @@ adb shell settings get secure full_screen_aod_on                  # 应回到应
 
 **边界**：只在应用壁纸时捕获；用户在模块生效期间改的模式不会被记为"原值"；清模块数据会重新捕获当前值。
 
-### 12.13 2026-11-16 20:38 **待验证**：选「和锁屏样式一致」时，景深层上下重叠（两层）
+### 12.13 2026-11-16 20:38 **已修（用户确认）**：锁屏上景深层上下重叠（两层）
 
 **用户描述**：使用「和锁屏样式一致」时出现两个系统壁纸景深上层上下重叠；属于以前解决过的问题，
 不确定哪个版本引入，高概率是最近版本。截图 `Screenshot_2026-11-16-20-36-35-635_lockscreen.jpg`
@@ -1187,18 +1187,31 @@ logcat
 20:36 之后用户切回了系统壁纸，20:42 的 dumpsys 已是 system=MIUI 静态图、lock=MIUI 画报
 （`MiuiKeyguardPictorialWallpaper`）。
 
-**主要假设**：`SceneApply`/`XiaomiApply` 里 `setWallpaperComponentWithFlags(SYSTEM|LOCK)`
-在 HyperOS 上**有时只落到系统槽**，锁屏槽仍是 MIUI 的静态图/画报；而 `SceneApply` 只校验系统槽
-（`manager.getWallpaperInfo()`），于是"应用成功"但锁屏槽不是我们的。此时选「和锁屏样式一致」
-（全屏 AOD），MIUI 会用**它自己的锁屏壁纸**合成再叠一层景深，和我们注入的 AOD surface 重叠 →
-"两个景深上层上下重叠"。
+**结论（2026-11-16 21:03，用户确认"现在好像正常了"）**：用户澄清问题是**亮屏锁屏**上的，
+与息屏/桌面无关。真因是两条叠加：
 
-**已落地的改动（构建 `154eb27`，未装机）**：
+1. `SceneApply`/`XiaomiApply` 里 `setWallpaperComponentWithFlags(SYSTEM|LOCK)` 在 HyperOS 上
+   **常常只落到系统槽**，锁屏槽仍是 MIUI 的静态图（20:20 dumpsys 实证：
+   system=`org.aliveclean/CleanWallpaper`、lock=`com.miui.miwallpaper/ImageWallpaper`），
+   而 `SceneApply` 只校验系统槽，所以"应用成功"却没有人发现锁屏槽不是我们的；
+2. `KeyguardDepthHider.isOurWallpaper()` 只看系统槽 → 认为"壁纸是我们的"→ 去清空/重设 MIUI 的
+   景深层；但锁屏上实际是 MIUI 的图，MIUI 随即重建景深层 → 锁屏上出现**两层景深上下重叠**。
+   这与 `docs/port/AOD-ALIVEHS-20261114.md` §2 是同一个机制的镜像情形（那次是"锁屏残留项目壁纸"，
+   这次是"锁屏是 MIUI 的图"，两次都是判据只看了一个槽）。
+
+**修法（构建 `154eb27` 装机后用户确认正常；`5f23bc6` 再加防复发守卫）**：
 
 - `SceneApply.apply()`：系统槽校验通过后，再校验 `FLAG_LOCK`；不是我们的就
   `manager.clear(WallpaperManager.FLAG_LOCK)`（让锁屏跟随系统壁纸=我们的），并打印
-  `lock slot after clear=…`。
+  `lock slot after clear=…` —— **这一条就是让两层消失的改动**。
 - `XiaomiApply`：原来锁屏槽校验不过是**直接抛错**（用户看到"应用失败"），改为同样 clear + 继续。
+- 防复发（`5f23bc6`）：新增 `AodWallpaperMode.lockShowsOurs()`（锁屏有独立 live 壁纸看包名；
+  锁屏有独立静态图 → **不是我们的**；没有独立壁纸才看系统槽），`KeyguardDepthHider.isOurWallpaper()`
+  改用它。这样即使锁屏槽以后又被 MIUI 静态图占住，我们也不会再去动它的景深层。
+
+**验证记录**：用户装 `154eb27` 后确认"现在好像正常了"（【支持】：用户观察）；
+决定性日志 `lock wallpaper is not ours` / `lock slot after clear=` 没抓到 —— 装机时的
+`killall` 之后 logcat 缓冲区已滚动，下一次应用壁纸时应能复现这两行。
 
 **验证方法（设备连上后）**：
 
@@ -1210,7 +1223,7 @@ adb shell "dumpsys wallpaper | grep -m3 mWallpaperComponent"
 # 3) 息屏（和锁屏样式一致）看是否仍有两层
 ```
 
-**若验证后两层仍在**，则假设不成立，下一步按这个顺序排查：
+**若以后又出现两层**，按这个顺序排查：
 
 1. 对比 `aod=-1`（关息屏场景）时是否还有两层 —— 判断是不是我们的注入层；
 2. 看 `HyperOsAod` 的 T04/T05/T13 日志，确认注入 surface 是否与 MIUI 自己的层同屏；

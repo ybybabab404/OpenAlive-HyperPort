@@ -4,6 +4,7 @@ import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -52,6 +53,29 @@ final class AodWallpaperMode {
             return isOurs(manager.getWallpaperInfo());
         } catch (Throwable error) {
             AliveLog.w(TAG, "aod wallpaper lookup failed", error);
+            return false;
+        }
+    }
+
+    /**
+     * 锁屏上实际显示的是不是我们的壁纸。
+     *
+     * <p>锁屏有自己的独立壁纸时以它为准：live 壁纸看组件包名，静态图（`getWallpaperId>=0`
+     * 但 `getWallpaperInfo` 为空）说明锁屏是 MIUI 自己的图 —— 这时 MIUI 的景深层属于它自己，
+     * 我们的 {@code KeyguardDepthHider} 一旦去清空，MIUI 会重建一份，锁屏上就出现
+     * "两个景深上层上下重叠"。只有锁屏没有独立壁纸（继承系统壁纸）时，才用系统槽判断。</p>
+     */
+    static boolean lockShowsOurs(Context context) {
+        try {
+            WallpaperManager manager = WallpaperManager.getInstance(context);
+            if (Build.VERSION.SDK_INT >= 34) {
+                WallpaperInfo lock = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
+                if (lock != null) return isOurs(lock);
+                if (manager.getWallpaperId(WallpaperManager.FLAG_LOCK) >= 0) return false;
+            }
+            return alive(context);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "lock wallpaper lookup failed", error);
             return false;
         }
     }

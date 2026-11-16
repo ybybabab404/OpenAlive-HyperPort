@@ -166,11 +166,10 @@ final class KeyguardDepthHider {
         if (wallpaperCheckedAt != 0L && now - wallpaperCheckedAt < 500L) return ourWallpaper;
         if (context == null) context = appContext;
         if (context == null) return false;
-        // System/home wallpaper is authoritative.  Checking the lock slot first
-        // made a stale live lock wallpaper keep depth hiding active after the user
-        // switched the home wallpaper back to MIUI, which produced duplicated
-        // depth layers and the fingerprint/clock flicker.
-        boolean ours = AodWallpaperMode.alive(context);
+        // 锁屏上到底显示谁的壁纸：锁屏槽有独立壁纸时以锁屏槽为准。
+        // 只看系统槽会在"系统=我们的、锁屏=MIUI 静态图"时误判，去清空 MIUI 的景深层，
+        // MIUI 随即重建一份 —— 锁屏上就成了"两个景深上层上下重叠"（2026-11-16 复现）。
+        boolean ours = AodWallpaperMode.lockShowsOurs(context);
         ourWallpaper = ours;
         wallpaperCheckedAt = now;
         return ours;

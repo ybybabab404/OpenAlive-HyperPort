@@ -181,9 +181,10 @@ public final class AodSettingsGuard {
             SAVED.put(root, saved);
         }
         applyLabel(context, spinner, saved);
-        // 2026-11-16：不再 lock(row, spinner)。
-        // 旧的锁死是为了"我们的壁纸必须全屏 AOD"，但那样用户在我们壁纸下也改不了样式，
-        // 与"用户设置为准"的原则冲突（见 Bug B）。现在允许用户随时切回「自定义」。
+        // 2026-11-16 12:3x 用户反馈：应用项目壁纸后下拉里同时出现「AliveHS 样式」和「自定义」，
+        // 而「自定义」选了没有反应（因为我们的壁纸本来就走全屏 AOD）。产品预期是
+        // 项目壁纸下只提供「AliveHS 样式」，所以恢复锁定。
+        lock(row, spinner);
     }
 
     private static int id(Context context, String name) {

@@ -39,9 +39,21 @@ ALIVEHS_NATIVE_SO=path/to/libalive_clean.so python3 tools/build_release.py
 
 `tools/deploy.py` 会自动挑 `build/release/libalive_clean.so`，编完顺手推到设备上装好。
 
+## 检查脚本
+
+构建前会自动执行 `tools/check_*.py`（按文件名自动发现，新增脚本无需改代码）：
+
+| 脚本 | 检查什么 |
+| --- | --- |
+| `check_imports.py` | `AndroidManifest.xml` 声明的组件类是否都存在；`tools/check_*.py` 是否都能编译；`vendor/` 关键输入是否齐全，xz 源码 jar 的 sha256 是否与脚本内固定值一致 |
+| `check_scene_logic.py` | 用宿主 JDK 编译 4 个不含 Android 依赖的纯逻辑类，并跑 `tests/scene_logic` 的断言（AOD 区域换算、AOD 速度曲线、场景状态机、转场时钟） |
+| `check_xiaomi_assets.py` | `ui.apk` 与 `vendor/xiaomi/ui-manifest.json`、`ui.sha256` 逐条比对；`catalog.json`/`packs.json` 内部一致；若 `app/assets/xiaomi/packs/` 存在则逐块解压校验 |
+
+任何一条失败都会中断构建。
+
 ## 选项
 
-- `--no-checks`：跳过 `tools/check_*.py` 那组资源与清单校验
+- `--no-checks`：跳过上面那组检查（只建议在用 `ALIVEHS_NATIVE_SO` 快速迭代 Java 时使用）
 - `--skip-sign`：只产出未签名 APK，方便看结构
 
 ## 签名

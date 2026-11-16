@@ -4,13 +4,7 @@
 
 本项目以 Vibe Coding 方式开发：代码、文档和调试大量由 AI 生成。
 
-![HyperOS 4.0](https://img.shields.io/badge/HyperOS-4.0-ff6900)
-
-![Android 17](https://img.shields.io/badge/Android-17-3ddc84)
-
-![LSPosed API 102](https://img.shields.io/badge/LSPosed-API%20102-5b7cfa)
-
-![License MIT](https://img.shields.io/badge/license-MIT-yellow)
+![HyperOS 4.0](https://img.shields.io/badge/HyperOS-4.0-ff6900) ![Android 17](https://img.shields.io/badge/Android-17-3ddc84) ![LSPosed API 102](https://img.shields.io/badge/LSPosed-API%20102-5b7cfa) ![License MIT](https://img.shields.io/badge/license-MIT-yellow)
 
 > **这不是 OpenAlive 官方项目。**
 >
@@ -54,11 +48,11 @@ python3 tools/build_release.py
 ALIVEHS_NATIVE_SO=path/to/libalive_clean.so python3 tools/build_release.py
 ```
 
-细节见 [BUILD.md](BUILD.md)。
+构建时会自动跑 `tools/check_*.py` 这组离线检查（清单见 [BUILD.md](BUILD.md)）。细节见 [BUILD.md](BUILD.md)。
 
 ## 许可
 
-自实现代码跟随上游采用 [MIT](LICENSE) 许可。**部分资产来源于魅族22FlymeOS、**&#x4F;riginOS 7，官方 UI、字体、壁纸及效果素材不纳入 MIT 授权，详见[资源说明](THIRD_PARTY.md)。
+自实现代码跟随上游采用 [MIT](LICENSE) 许可。**部分资产来源于魅族 22 FlymeOS、OriginOS 7，官方 UI、字体、壁纸及效果素材不纳入 MIT 授权，详见[资源说明](THIRD_PARTY.md)。
 
 ## 致谢
 

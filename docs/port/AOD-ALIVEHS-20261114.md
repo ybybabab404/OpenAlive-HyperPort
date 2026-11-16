@@ -54,7 +54,7 @@
 ## 构建
 
 ```text
-JAVA_HOME=C:\Users\ybybabab\app\pcl\JAVA21\graalvm
+JAVA_HOME=<jdk>
 ALIVEHS_NATIVE_SO=.tmp/build/libalive_clean.so
 python3 tools/build_release.py --no-checks
 ```
@@ -144,7 +144,7 @@ python3 tools/build_release.py --no-checks
 
 ## 2026-11-15 15:45 最终验证（5f41，reviewer 复核后）
 
-reviewer 复核报告：`C:/Users/ybybabab/.percho/agent/team/artifacts/HyperAlive-a6k6we/20261115-071254-jjdb/stage1-reviewer-1.md`。报告指出的 P0/P1 已在本轮代码中修复，构建 `5f41c9561f9cff299f58bf254ac3eda1a9dac51868badbc3c5b8241b0e44ebd5`（308,625,742 bytes），2026-11-15 15:39 USB 安装到 9eb96e8a。
+reviewer 复核报告：`<内部评审记录（未入库）>`。报告指出的 P0/P1 已在本轮代码中修复，构建 `5f41c9561f9cff299f58bf254ac3eda1a9dac51868badbc3c5b8241b0e44ebd5`（308,625,742 bytes），2026-11-15 15:39 USB 安装到 9eb96e8a。
 
 本轮代码改动：
 
@@ -223,4 +223,4 @@ reviewer 复核报告：`C:/Users/ybybabab/.percho/agent/team/artifacts/HyperAli
 
 ### 构建备注
 
-仓库路径含中文时 `tools/build_release.py` 的 `javac @app.args` 会因平台编码失败。本轮使用 `subst H:` 映射仓库，并用 `.tmp/build_h.py` 将 `build_release.ROOT` 指向 `H:/`、重写 `rel()` / `arg_path()`，环境为 `JAVA_HOME=C:/Users/ybybabab/app/pcl/graalvm-jdk-17.0.21.0.3+1.1`、`ALIVEHS_NATIVE_SO=.tmp/build/libalive_clean.so`，执行 `python3 .tmp/build_h.py`（内部 `--no-checks`）。
+仓库路径含中文时 `tools/build_release.py` 的 `javac @app.args` 会因平台编码失败。本轮使用 `subst H:` 映射仓库，并用 `.tmp/build_h.py` 将 `build_release.ROOT` 指向 `H:/`、重写 `rel()` / `arg_path()`，环境为 `JAVA_HOME=<home>/app/pcl/graalvm-jdk-17.0.21.0.3+1.1`、`ALIVEHS_NATIVE_SO=.tmp/build/libalive_clean.so`，执行 `python3 .tmp/build_h.py`（内部 `--no-checks`）。

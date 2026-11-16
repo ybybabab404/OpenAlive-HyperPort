@@ -19,7 +19,7 @@
 
 ### 2.1 删除失联的 `wt-stable` 工作树（2.1 GB）
 
-- 原状：`git worktree list` 登记 `C:/Users/ybybabab/app/项目开发/HyperAlive/.tmp/wt-stable`，detached HEAD `b6ae18e`；工作树内有未提交改动（`RenderLoop.java` 的探针，27 插入 / 3 删除）。
+- 原状：`git worktree list` 登记 `<repo>/.tmp/wt-stable`，detached HEAD `b6ae18e`；工作树内有未提交改动（`RenderLoop.java` 的探针，27 插入 / 3 删除）。
 - 处理：
   1. 保存文件清单与差异：`.tmp/archive/wt-stable-b6ae18e-probe2.patch`（53 行）。
   2. `git worktree remove --force .tmp/wt-stable`。
@@ -123,7 +123,7 @@ workbench/
 ## 4. 验证
 
 - `javac` 自检：使用 `.tmp/build/sources2.txt` + `android-37.0/android.jar`，`exit=0`，仅有 deprecation/unchecked 提示。
-- `git worktree list`：仅主工作树 `C:/Users/ybybabab/app/项目开发/HyperAlive fc8124f [deep-clean-v2]`。
+- `git worktree list`：仅主工作树 `<repo> fc8124f [deep-clean-v2]`。
 - `git status --short`：13 个 Java + 4 个文档 + `tools/build_release.py` 已修改；两个未跟踪文档
   `docs/port/HANDOVER-20261114.md`、`docs/port/SESSION-BRIEF-20261114.md`。
 - `.tmp/README.md`、`workbench/README.md` 已创建。

@@ -1301,3 +1301,58 @@ adb shell "dumpsys wallpaper | grep -m3 mWallpaperComponent"
 - 图省事把两条路径合一，会把**该场景专有的纹理/构图**带到另一条路径（本例：锁屏纹理出现在桌面）。
 - 正确做法是"参数共用、构图各自"，而不是"砍掉一条路径"。
 
+#### 12.14.2 2026-11-16 22:21 **已修（用户确认）**：双层根治（native 两处，`41f62b0` → `1f071d5`）
+
+**为什么必须动 native**：`25dfb99` 的"不渲染桌面构图"被用户否决（会让锁屏纹理出现在桌面），
+而仅靠时长/参数对齐解决不了双层 —— 因为 **镜头层（AOD 层）的取样源被写死成锁屏层**：
+
+```rust
+// renderer.rs::draw() 修改前
+if !(1..=5).contains(&self.aod)&&aod_visible{self.aod_pass(frame,decor);}
+// aod_pass 内部：
+let source=self.blurred(self.targets[1].texture,l[0],12.);   // 永远取锁屏层
+```
+
+于是"息屏→桌面"时，镜头里是**锁屏那份画面**、外面是**桌面那份画面**，两张不同的图叠着淡出 = 双层；
+而"息屏→锁屏"因为源和目标同属锁屏层，看起来是一张图在缩放，所以没有双层。
+
+**改法**：`aod_pass` 增加取样源参数，`draw()` 里按目标层选择：
+
+```rust
+let lens_from_home = self.aod==0 && aod_visible && home_visible && ratio[1]<=0.;
+if lock_visible && !lens_from_home { self.lock_pass(frame); }
+if home_visible && lens_from_home { /* 先画桌面层，镜头层才有东西可取样 */ ...; self.home_pass(frame); }
+let lens_src = if lens_from_home { self.targets[3].texture } else { self.targets[1].texture };
+self.aod_pass(frame, decor, lens_src);
+```
+
+效果：镜头层与桌面层是同一张图的不同缩放 → 形变+模糊保留，双层消失，锁屏纹理不会出现在桌面。
+
+**验证**：构建 `41f62b0`（含新 `libalive_clean.so` 467,960 B）。判据：
+- 息屏→桌面应有形变+模糊，且**无双层**；
+- 息屏→锁屏行为不变；
+- 逐帧日志 `diag tr=` 里 `ratio` 仍应正常衰减，`aodVis/homeVis` 同时为真但画面只有一张图。
+
+**回退**：把 `lens_src` 固定回 `self.targets[1].texture` 即可（Java 侧无需改动）。
+
+**第二处（`1f62b0` 之后仍双层，`1f071d5` 根治）**：逐帧日志显示 `0→2` 时 `ratio` 从
+`1.000,0.000,0.000` 平滑到 `0.139,0.000,0.861` —— aod 层与桌面层整段同时可见。原因在 blend 着色器：
+
+| 场景 | 分支 | 结果 |
+|---|---|---|
+| 息屏→锁屏 | `u_ratio.z < 1e-6`（aod-lock） | **只画 aod 层一份** → 单图形变，无双层 |
+| 息屏→桌面 | `u_ratio.y < 1e-6`（aod-launcher） | 圆内 aod + 圆外 launcher 涂黑，两份按比值混合 → 双层 |
+
+修法（`shaders.rs` 的 `lens_blend_frag`）：
+
+```glsl
+} else if (u_ratio.y < 0.000001) { // aod-launcher融合
+    // 与 aod-lock 分支一致：转场期间只显示 aod 层（它自身在缩放/模糊/扭曲），
+    // 比值到 1 时走首分支切到桌面层。
+    contentColor = texture(u_aod_effect, v_texCoord0).rgb;
+```
+
+`lens_blend` 只用于 `aod==0`（启航）；照片 AOD 样式（`aod 1..5`）走 `chromakey_blend`，不受影响。
+
+**最终确认**：用户 2026-11-16 22:21「可以了」= 【支持】。tag `save-20261116-sailwake`。
+

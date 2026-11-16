@@ -86,6 +86,22 @@ public final class SceneApply {
                 }
                 WallpaperInfo actual = manager.getWallpaperInfo();
                 if (actual == null || !component.equals(actual.getComponent())) throw new IllegalStateException("Wallpaper verification failed");
+                // 锁屏槽必须也是我们：HyperOS 上 setWallpaperComponentWithFlags(SYSTEM|LOCK)
+                // 有时只落到系统槽，锁屏仍旧是 MIUI 的静态图/画报。此时选「和锁屏样式一致」
+                // （全屏 AOD）时，MIUI 会用**它自己的锁屏壁纸**去合成再加一层景深，
+                // 和我们的注入层叠在一起 —— 用户看到的就是"两个景深上层上下重叠"。
+                // 校验不过就清掉锁屏壁纸，让它回落到系统壁纸（= 我们的），保证只有一层。
+                WallpaperInfo lock = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
+                if (lock == null || lock.getComponent() == null || !component.equals(lock.getComponent())) {
+                    AliveLog.i(AliveLog.APPLY, "lock wallpaper is not ours (" + lock + "), clearing lock slot");
+                    try {
+                        manager.clear(WallpaperManager.FLAG_LOCK);
+                    } catch (Throwable clearError) {
+                        AliveLog.w(AliveLog.APPLY, "clear lock wallpaper failed", clearError);
+                    }
+                    WallpaperInfo after = manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
+                    AliveLog.i(AliveLog.APPLY, "lock slot after clear=" + after);
+                }
             } catch (Throwable applyError) {
                 AodWallpaperMode.restore(context);
                 throw applyError;

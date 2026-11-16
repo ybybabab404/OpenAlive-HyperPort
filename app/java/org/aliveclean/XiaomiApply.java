@@ -49,7 +49,16 @@ public final class XiaomiApply {
                 WallpaperInfo actual=wm.getWallpaperInfo();if(!(e.getCause() instanceof SecurityException)||actual==null||!component.equals(actual.getComponent()))throw e;
             }
             WallpaperInfo actual=wm.getWallpaperInfo();if(actual==null||!component.equals(actual.getComponent()))throw new IllegalStateException("Wallpaper verification failed");
-            if(Build.VERSION.SDK_INT>=34){WallpaperInfo lock=wm.getWallpaperInfo(WallpaperManager.FLAG_LOCK);if(lock==null&&wm.getWallpaperId(WallpaperManager.FLAG_LOCK)<0)lock=actual;if(lock==null||!component.equals(lock.getComponent()))throw new IllegalStateException("Lock wallpaper verification failed");}
+            if(Build.VERSION.SDK_INT>=34){WallpaperInfo lock=wm.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
+                if(lock==null&&wm.getWallpaperId(WallpaperManager.FLAG_LOCK)<0)lock=actual;
+                // 锁屏槽没落到我们身上时，不要直接失败（用户会看到"应用失败"），
+                // 而是清掉锁屏壁纸让它跟随系统壁纸。否则选「和锁屏样式一致」时 MIUI 会拿
+                // 它自己的锁屏壁纸（静态图/画报）合成景深，和我们的注入层叠成两层。
+                if(lock==null||lock.getComponent()==null||!component.equals(lock.getComponent())){
+                    AliveLog.i(AliveLog.APPLY,"xiaomi lock slot not ours ("+lock+"), clearing");
+                    try{wm.clear(WallpaperManager.FLAG_LOCK);}catch(Throwable clearError){AliveLog.w(AliveLog.APPLY,"clear lock wallpaper failed",clearError);}
+                    AliveLog.i(AliveLog.APPLY,"xiaomi lock slot after clear="+wm.getWallpaperInfo(WallpaperManager.FLAG_LOCK));
+                }}
         }catch(Throwable applyError){AodWallpaperMode.restore(c);throw applyError;}
         try{ModuleActivation.request(c);}catch(Throwable ignored){}
         AliveLog.i(AliveLog.APPLY,"xiaomi applied "+component.flattenToShortString());System.out.println("XIAOMI_APPLIED");System.exit(0);

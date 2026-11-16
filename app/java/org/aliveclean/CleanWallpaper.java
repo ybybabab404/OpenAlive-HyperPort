@@ -18,7 +18,7 @@ public final class CleanWallpaper extends WallpaperService {
 
     static final long FINGERPRINT_WINDOW=900L;
 
-    static final long HOME_GRACE=400L;
+    static final long HOME_GRACE=1500L;
 
     static volatile boolean RUNNING;
 
@@ -82,13 +82,6 @@ public final class CleanWallpaper extends WallpaperService {
             AliveLog.i(TAG,"scene wake action="+action+" ambient="+ambient+" locked="+keyguardLocked()
                     +" authoritative="+scenesState.authoritative()+" mode="+scenesState.mode());
             update("broadcast:"+action);refreshVisibility();
-            if(Intent.ACTION_USER_PRESENT.equals(action)&&!isPreview()&&!ambient&&!keyguardLocked()&&lastSentMode!=1){
-                // 指纹/面容解锁完成：系统已经切到桌面，别再让壁纸停在锁屏构图里等 HOME_GRACE，
-                // 否则"息屏→桌面"会多叠一层（用户 2026-11-16 反馈的双层/残影）。
-                AliveLog.i(TAG,"scene user present ->1 immediate mode="+lastSentMode+"->1");
-                send(1,true);
-                refreshVisibility();
-            }
             if(Intent.ACTION_SCREEN_ON.equals(action)||Intent.ACTION_USER_PRESENT.equals(action))settle("broadcast:"+action);
         }};
         @Override public void onCreate(SurfaceHolder holder){
@@ -219,15 +212,10 @@ public final class CleanWallpaper extends WallpaperService {
                             long fp=fingerprintAt;
                             if(!keyguardLocked()){
                                 lockGraceActive=false;
-                                // 2026-11-16: 之前这里发的是 mode=2（锁屏构图）。
-                                // 但"没有锁屏密码/锁屏已禁用"的设备唤醒是直接进桌面的，
-                                // 先给 1.5s 的锁屏构图、再切桌面就会和系统转场叠成两层
-                                // （用户实测：息屏→桌面出现双层+残影，锁屏→桌面正常）。
-                                // 已经解锁就直接给桌面构图。
                                 AliveLog.i(TAG,"scene wake hold unlocked source="+cause
-                                        +" mode="+lastSentMode+"->1 (applied, no keyguard) heldMs="+(now-start)
+                                        +" mode="+lastSentMode+"->2 (applied) heldMs="+(now-start)
                                         +" fpMs="+(fp==0?-1:now-fp));
-                                send(1,true);
+                                send(2,true);
                                 return;
                             }
 
@@ -290,10 +278,6 @@ public final class CleanWallpaper extends WallpaperService {
             cancelLockGrace();
             if(skipAodMode(mode))return;
             int from=lastSentMode;
-            // 2026-11-16: 从 AOD(0) 醒到桌面(1) 时不要自己做过渡动画。
-            // 系统在唤醒时已经有一层缩放/淡入，两层动画各走各的 → 用户看到"双层 + 残影"
-            // （12:57 录像逐帧确认收敛要 0.75s）。这里改成瞬时切换，只留系统那一层。
-            if(from==0&&mode!=0&&!isPreview())animate=false;
             boolean wasDark=panelDark;
             lastSentMode=mode;
             if(mode==2)homeAt=android.os.SystemClock.uptimeMillis();

@@ -51,26 +51,6 @@ final class HyperOsAod {
             installed = true;
         }
         if (!installed) AliveLog.i(TAG, "no AOD view class in this process");
-        // 唤醒最早的一道信号：DozeServiceHostInjector 的 wakefulness 观察者。
-        // onDreamingStopped / ACTION_SCREEN_ON 都可能晚于系统"截图并开始解锁动画"，
-        // 于是 AOD 里的球被一起带进转场，看起来就是双层（2026-11-16 实测录像确认修复不到位）。
-        try {
-            Class<?> observer = Xp.findClassIfExists(
-                    "com.android.keyguard.injector.DozeServiceHostInjector$mWakefulnessObserver$1", loader);
-            if (observer != null) {
-                Xp.findAndHookMethod(observer, "onStartedWakingUp", new Xp.MethodHook() {
-                    @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
-                        Trace.log("T14", "wakefulness onStartedWakingUp");
-                        detach();
-                    }
-                });
-                AliveLog.i(TAG, "aod wake cleanup hooked");
-            } else {
-                AliveLog.i(TAG, "no wakefulness observer for AOD cleanup");
-            }
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "aod wake cleanup hook failed", error);
-        }
     }
 
     static void installDoze(ClassLoader loader) {
@@ -81,41 +61,17 @@ final class HyperOsAod {
                 final android.app.Service svc = (android.app.Service) param.thisObject;
                 Trace.log("T07", "dreaming started");
                 injectAttempt = 0;
-                registerScreenOnCleanup(svc);
                 AodOverlay.show(svc);
             }
         });
         Xp.hookAllMethods(service, "onDreamingStopped", new Xp.MethodHook() {
-            @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 Trace.log("T08", "dreaming stopped");
                 injectAttempt = INJECT_RETRIES;
-                // before 而不是 after：2026-11-16 用户反馈"息屏→桌面"转场出现双层和残影，
-                // 越早把我们的 surface 从 AOD 层级里摘掉，转场越接近"锁屏→桌面"的单层效果。
                 AodOverlay.hide();
             }
         });
-        // 唤醒瞬间再补一道：ACTION_SCREEN_ON 通常比 doze 回调更早到。
-        // 注册放在 onDreamingStarted 里做（install 阶段 Xp.currentApplication() 常为 null）。
         AliveLog.i(TAG, "doze service hook installed");
-    }
-
-    private static boolean screenOnRegistered;
-
-    private static void registerScreenOnCleanup(android.content.Context context) {
-        if (screenOnRegistered || context == null) return;
-        screenOnRegistered = true;
-        try {
-            context.registerReceiver(new android.content.BroadcastReceiver() {
-                @Override public void onReceive(android.content.Context ctx, android.content.Intent intent) {
-                    if (android.content.Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
-                        detach();
-                    }
-                }
-            }, new android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON));
-            AliveLog.i(TAG, "aod screen-on cleanup registered");
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "aod screen-on cleanup failed", error);
-        }
     }
 
     private static java.lang.ref.WeakReference<ViewGroup> aodRoot;
@@ -220,8 +176,8 @@ final class HyperOsAod {
         liveSurface = null;
         if (surface == null) return;
         try {
-            // 先把这一层彻底"熄掉"再摘：TextureView 的最后一帧会留在图层里，
-            // 直接 removeView 会在转场后留下一块残影（2026-11-16 用户实测）。
+            // 先把这一层彻底"熄掉"再摘：TextureView 的最后一帧可能留在图层里，
+            // 直接 removeView 有几率在下一帧留残影。
             surface.setAlpha(0f);
             surface.setVisibility(View.INVISIBLE);
             if (surface.getParent() instanceof ViewGroup) {

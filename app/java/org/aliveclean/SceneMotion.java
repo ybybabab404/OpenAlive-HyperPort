@@ -193,6 +193,10 @@ final class SceneMotion {
         if(textureTracks){if(lock==1||lock==2)glass(tr,next);else if(lock==3)ground(tr,next);}
         blendFrom=new float[]{values[0],values[1],values[2]};blendNext=next;
         blendDuration=blendDuration(tr);blendCurve=tr==2||tr==3?EASE:LINEAR;
+        // 2026-11-16: 息屏→桌面 时，息屏层和桌面层默认会同时在场约 1 秒（诊断日志实测 ratio aod 0.43→0.11）。
+        // 锁屏选了纹理时，息屏层画面（玻璃扭曲那份）与桌面差别很大，这一秒就被看成"双层"。
+        // 锁屏没有纹理时两层几乎一样，所以只有选纹理才暴露。这里把 0->2 的叠加压到 150ms。
+        if(aod==0&&previous==0&&next==2&&lock>=1)blendDuration=150;
         playDelay=previous==0&&!interrupted?150:0;
         long end=blendDuration;
         for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);long e=k.delay+k.duration;if(e>end)end=e;}

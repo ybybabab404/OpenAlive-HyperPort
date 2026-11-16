@@ -1229,3 +1229,45 @@ adb shell "dumpsys wallpaper | grep -m3 mWallpaperComponent"
 2. 看 `HyperOsAod` 的 T04/T05/T13 日志，确认注入 surface 是否与 MIUI 自己的层同屏；
 3. 若是"MIUI 自己画两次"（切到系统壁纸、模块完全无关时也复现），那就不是本模块的问题，
    需要在 `KeyguardDepthHider` 里对全屏 AOD 场景做定向收敛，或干脆在 full AOD 下不注入。
+
+### 12.14 2026-11-16 21:16~21:47 **已修（用户确认）**：启航样式的唤醒转场不一致 / 锁屏残留模糊 / 双层
+
+**用户描述**（按时间）：
+1. 息屏→锁屏「有形变、无模糊」，息屏→桌面「无形变、有模糊」；希望两者统一为形变+模糊，
+   并且"去掉启航的桌面识别，让无论如何都认为是在锁屏"。
+2. 改完之后：**锁屏一直停在模糊**；桌面仍无形变。
+3. 再改之后：**无形变 + 有双层**；并指出"双层一直都在，只是没残影了就没提"；锁屏与桌面动画速率不同。
+
+**关键事实（读代码 + 渲染链路）**
+
+- 启航 = `cosmic==0 && aod==0`（`sail`）。它的锁屏构图取样自 **AOD 层**：
+  `renderer.rs::draw()` 里 blend 用 `u_aod_effect`（`targets[2]`），而 `aod_pass` 是
+  `blurred(targets[1], lens[0])` —— **`lens[0]` 在稳态也是被显示的参数**。
+  所以把 `lensState(1)[0]` 设成 16 就等于"锁屏永久模糊"（教训：`lensState` 是稳态目标，不是转场参数）。
+- 桌面那条本来就有专门映射：`if(aod==0&&previous==0&&next==2) tr=0`，但
+  `SceneMotion` 里还有一条为修双层加的 `blendDuration=150`（`aod==0&&previous==0&&next==2&&lock>=1`），
+  AOD 层 150ms 就退场 → 镜头形变来不及被看见。
+- 解锁瞬间 `keyguardHiding()` 会先 `cancelLockGrace()` 再 `send(2,true)`，
+  **在唤醒等待循环之前**就把转场定死成 0→2，所以只在等待循环里做路由是无效的。
+- 「双层」是构图层面的：mode 2 时 `lock_visible` 与 `home_visible` 同时为真，锁屏层与桌面层同屏。
+
+**最终修法（构建 `25dfb99`，链路见 `../features/03-壁纸场景与渲染管线.md` §转场）**
+
+1. `SceneMotion.lensState()`：`scene==1` 的模糊半径**回退为 0**（稳态清晰）。
+2. `SceneMotion.lens()` 的 `tr==0` 分支：模糊那一档 `ms[0]` 183 → **650ms**，
+   起 22(AOD 稳态)、终 0 —— 模糊只存在于转场期间，结束必为 0。
+3. `CleanWallpaper.send()`：启航时**拦掉 mode 2**
+   （`scene send 2 suppressed: 启航 always renders the lock composition`）——
+   双层消失、两种唤醒共用同一条时间线（速率必然一致）。
+4. `CleanWallpaper.keyguardHiding()`：启航时不再切桌面；若还在息屏（mode 0）就
+   `send(1,true)` 播锁屏那条动画。
+5. 删除上一版引入的 `settleSailHome()`（不再需要"动画后切桌面"）。
+6. `RenderLoop.render()`：`probeUntil` 过期后清零 —— 之前它永不清零，导致 **每帧** 写一行
+   `probe draw ...`，把关键日志冲出 logcat（这也是前面几次查不到现场日志的原因）。
+7. 预览同步（`RenderLoop.mode()` + `createScene()`）：启航时把请求的 mode 2 归一为 1，
+   主页「桌面」卡片与编辑页桌面页不再渲染真实不会出现的构图。
+
+**验证**：用户 21:46「可以了」= 【支持】（双层消失、两种唤醒动画一致）。
+锁屏残留模糊由 21:30「锁屏正常」确认修复。
+
+**回退**：单独回退任一项即可（①②参数、③④路由、⑥日志、⑦预览），不要叠加。

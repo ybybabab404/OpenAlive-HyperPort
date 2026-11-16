@@ -113,7 +113,10 @@ impl Scene {
         }
         self.quad.draw();
     }
-    fn aod_pass(&mut self,frame:&Frame,decor:u32) {
+    /// `lens_src` 是 aod==0（镜头）这一路要拿来做"模糊+镜头变形"的取样源：
+    /// 息屏→锁屏时是锁屏层（targets[1]），息屏→桌面时是桌面层（targets[3]）。
+    /// 用错源就会把"锁屏那份画面"和"桌面那份画面"两张不同的图叠在一起 —— 用户看到的双层。
+    fn aod_pass(&mut self,frame:&Frame,decor:u32,lens_src:u32) {
         if self.aod<0 {self.targets[2].bind();return;}
         if (1..=5).contains(&self.aod) {
             let Some(f)=self.frame else{self.targets[2].bind();return;};
@@ -147,7 +150,7 @@ impl Scene {
             p.texture("u_grayTex1",1,self.images[3].id);p.f("u_alpha1",frame.0[21]);self.quad.draw();return;
         }
         let l=frame.lens();
-        let source=self.blurred(self.targets[1].texture,l[0],12.);
+        let source=self.blurred(lens_src,l[0],12.);
         self.targets[2].bind();let p=&mut self.aod_program;p.bind();p.texture("u_photo",0,source);p.texture("u_lens_decorator",1,decor);
         p.f("u_lens_scale",l[1]);p.f("u_zoom",1./(l[1].min(0.5)*4.));p.f("u_aspect_ratio",self.h as f32/self.w as f32);p.f("u_aspect_ratio_reciprocal",self.w as f32/self.h as f32);
         p.f("u_distortion",l[2]/l[1]);p.f("u_decorator_alpha",l[3]);p.v3("u_translation",[l[5],l[6],0.]);p.f("u_dark_strength",0.);
@@ -184,15 +187,27 @@ impl Scene {
         let aod_visible=ratio[0]>0.;
         let lock_visible=ratio[1]>0.||(aod_visible&&self.aod>=0);
         let home_visible=ratio[2]>0.;
+        // 息屏→桌面：镜头层的取样源必须是桌面层，否则镜头里是"锁屏那份画面"、
+        // 外面是"桌面那份画面"，两张不同的图叠着淡出 = 双层。
+        let lens_from_home=self.aod==0&&aod_visible&&home_visible&&ratio[1]<=0.;
         if lock_visible||home_visible {self.copy(photo,0,aspect,true);}
-        if lock_visible{self.lock_pass(frame);}
-        if !(1..=5).contains(&self.aod)&&aod_visible{self.aod_pass(frame,decor);}
-        if home_visible||(1..=5).contains(&self.aod)&&aod_visible{
+        if lock_visible&&!lens_from_home{self.lock_pass(frame);}
+        // 先画目标层，镜头层才有东西可取样。
+        if home_visible&&lens_from_home{
+            let home=self.images[4];
+            if home.id!=0{self.copy(home.id,0,home.width as f32/home.height as f32,true);}
+            self.home_pass(frame);
+        }
+        if !(1..=5).contains(&self.aod)&&aod_visible{
+            let lens_src=if lens_from_home{self.targets[3].texture}else{self.targets[1].texture};
+            self.aod_pass(frame,decor,lens_src);
+        }
+        if home_visible&&!lens_from_home||(1..=5).contains(&self.aod)&&aod_visible{
             let home=if (1..=5).contains(&self.aod)&&self.images[5].id!=0{Image::default()}else{self.images[4]};
             if home.id!=0{self.copy(home.id,0,home.width as f32/home.height as f32,true);}
             self.home_pass(frame);
         }
-        if (1..=5).contains(&self.aod)&&aod_visible{self.aod_pass(frame,decor);}
+        if (1..=5).contains(&self.aod)&&aod_visible{self.aod_pass(frame,decor,self.targets[1].texture);}
         glBindFramebuffer(0x8D40,0);glViewport(0,0,self.w,self.h);self.blend.bind();
         self.blend.texture("u_aod_effect",0,self.targets[2].texture);self.blend.texture("u_lock_effect",1,self.targets[1].texture);self.blend.texture("u_launcher_effect",2,self.targets[3].texture);
         self.blend.v3("u_ratio",ratio);self.blend.f("u_dark_strength",frame.0[57]);self.blend.i("u_support_lock_launcher_blend",frame.0[58] as i32);

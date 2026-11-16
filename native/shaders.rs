@@ -2011,10 +2011,12 @@ void main() {
         vec3 launcherTex = texture(u_launcher_effect, v_texCoord0).rgb;
         contentColor = (lockTex * u_ratio.y + launcherTex * u_ratio.z) / (u_ratio.y + u_ratio.z);
     } else if (u_ratio.y < 0.000001) { // aod-launcher融合
-        vec3 aodTex = texture(u_aod_effect, v_texCoord0).rgb;
-        //vec3 launcherTex = texture(u_launcher_effect, v_texCoord0).rgb;
-        vec3 launcherTex = getLauncherColor();
-        contentColor = (aodTex * u_ratio.x + launcherTex * u_ratio.z) / (u_ratio.x + u_ratio.z);
+        // 2026-11-16：官方写法是把 launcher 裁在镜头圆内、圆外涂黑，再与 aod 层按比值混合。
+        // 息屏→桌面时 aod 层在缩放/模糊、launcher 层是原图，两份同时可见 = 用户看到的"双层"；
+        // 而息屏→锁屏之所以没有双层，是因为上面那条 aod-lock 分支**只画 aod 层**。
+        // 这里与 aod-lock 保持一致：转场期间只显示 aod 层（它自身在缩放、模糊、扭曲），
+        // 比值到 1 时自然会走首分支切到桌面层。
+        contentColor = texture(u_aod_effect, v_texCoord0).rgb;
     } else if (u_ratio.z < 0.000001) { // aod-lock融合
         contentColor = texture(u_aod_effect, v_texCoord0).rgb;
     } else { // aod-lock-launcher融合

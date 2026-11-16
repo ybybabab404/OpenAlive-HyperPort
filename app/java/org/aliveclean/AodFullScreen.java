@@ -1,5 +1,6 @@
 package org.aliveclean;
 
+import android.content.ContentResolver;
 import android.content.Context;
 
 import java.lang.ref.WeakReference;
@@ -68,6 +69,7 @@ final class AodFullScreen {
         loaderRef = loader;
         AodFullScreen.settingsProcess = settingsProcess;
         int hooks = 0;
+        hooks += hookFullAodSetting(loader);
         if (settingsProcess) {
             hooks += hookSupport(loader);
         } else {
@@ -201,6 +203,87 @@ final class AodFullScreen {
             AliveLog.warnOnce(TAG, "full aod hook " + name, "full aod hook failed: " + name, error);
             return 0;
         }
+    }
+
+    private static final ThreadLocal<Boolean> SETTING_OVERRIDE = new ThreadLocal<>();
+    private static long aliveCheckedAt;
+    private static boolean aliveValue;
+
+    /**
+     * 让「息屏显示模式 = 和锁屏样式一致」在**运行时**生效，而不去改用户存的设置。
+     *
+     * <p>{@code full_screen_aod_on} 是 {@code Settings.Secure} 的键：1 = 和锁屏样式一致（全屏 AOD），
+     * 0 = 自定义。用户先选过「自定义」，之后应用我们的壁纸时这个键仍是 0，MIUI 就按自定义去渲染，
+     * 息屏表现不对。但设置页里这一项已经被 {@link AodSettingsGuard} 就地替换成「AliveHS 样式」，
+     * 用户看不到「自定义」，所以把**读取结果**按 1 处理，既符合界面所见，也不污染用户的设置值。</p>
+     *
+     * <p>只在「壁纸是我们的 + 息屏显示开着」时改写；切回系统壁纸后自动恢复原生读取结果。</p>
+     */
+    private static int hookFullAodSetting(ClassLoader loader) {
+        Class<?> secure = Xp.findClassIfExists("android.provider.Settings$Secure", loader);
+        if (secure == null) {
+            AliveLog.warnOnce(TAG, "full aod setting", "full aod: Settings$Secure missing", null);
+            return 0;
+        }
+        int count = 0;
+        try {
+            Xp.findAndHookMethod(secure, "getInt", ContentResolver.class, String.class, int.class,
+                    new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            overrideFullAodRead(param);
+                        }
+                    });
+            count++;
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod setting getInt", "full aod: getInt hook failed", error);
+        }
+        try {
+            Xp.findAndHookMethod(secure, "getIntForUser",
+                    ContentResolver.class, String.class, int.class, int.class,
+                    new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            overrideFullAodRead(param);
+                        }
+                    });
+            count++;
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod setting getIntForUser", "full aod: getIntForUser hook failed", error);
+        }
+        return count;
+    }
+
+    private static void overrideFullAodRead(Xp.MethodHookParam param) {
+        if (Boolean.TRUE.equals(SETTING_OVERRIDE.get())) return;
+        if (param.args.length < 2 || !AodWallpaperMode.KEY_MODE.equals(param.args[1])) return;
+        Object current = param.getResult();
+        if (current instanceof Integer && ((Integer) current) == 1) return;
+        Context context = Xp.currentApplication();
+        if (context == null) return;
+        boolean force;
+        SETTING_OVERRIDE.set(Boolean.TRUE);
+        try {
+            force = aliveCached(context) && HyperOsAod.aodEnabled(context);
+        } finally {
+            SETTING_OVERRIDE.remove();
+        }
+        if (!force) return;
+        param.setResult(1);
+        AliveLog.warnOnce(TAG, "aod mode forced full",
+                "aod mode forced to 和锁屏样式一致 while our wallpaper is applied", null);
+    }
+
+    /** {@code alive()} 每次都要问 WallpaperManager，做 1 秒缓存，避免拖慢 Settings 读取路径。 */
+    private static boolean aliveCached(Context context) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - aliveCheckedAt > 1000L) {
+            aliveCheckedAt = now;
+            try {
+                aliveValue = AodWallpaperMode.alive(context);
+            } catch (Throwable error) {
+                aliveValue = false;
+            }
+        }
+        return aliveValue;
     }
 
     private static int hookManager(ClassLoader loader) {

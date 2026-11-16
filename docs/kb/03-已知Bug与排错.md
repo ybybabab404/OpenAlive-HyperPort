@@ -845,4 +845,33 @@ hook `com.android.keyguard.injector.DozeServiceHostInjector$mWakefulnessObserver
 
 - 注意：只有在**已解锁**状态下的唤醒才走"息屏→桌面"，锁屏态唤醒走的是锁屏，两者动画不同，别测错。
 
+### 12.4 2026-11-16 12:57 隔离实验：双层**不是**我们的注入造成的
+
+实验：把 `scene.xml` 的 `aod` 从 0 改成 **-1**（关掉息屏场景 → `attach()` 直接 detach，不注入任何 surface），
+重启 SystemUI 后由用户复测。
+
+结果（用户原话）："**球还在，效果还在，双层还在**"。
+
+结论：
+
+1. **息屏里的球是壁纸引擎自己画的**（`CleanWallpaper` 的 AOD 构图，`AOD frame lensScale=0.22 …`），
+   不是我们注入的 `AodSurface` —— 注入那层只是"当初全屏 AOD 没生效时的补丁"。
+2. 因此双层/残影与 `HyperOsAod`（注入链路、detach 时机、alpha）**无关**；
+   `586e7c2` 那三处改动方向是错的，保留但不再是主线。
+3. 真正的现场在壁纸引擎的**唤醒编排**：
+
+```text
+scene fingerprint … ambient=true mode=0 locked=true        ← 息屏（AOD 构图）
+scene send mode=0->2 animate=true …                        ← 唤醒先切到"锁屏"构图
+scene reconcile … mode=2->1 (suppressed, home for 70ms)    ← 再切"桌面"构图
+scene wake action=SCREEN_ON … mode=1
+```
+
+即 `mode 0(AOD) → 2(锁屏) → 1(桌面)` 三次构图切换，与系统转场不同步 → 视觉上就是两层叠着、逐渐收敛。
+
+- 实验后已把 `scene.xml` 从 `/data/local/tmp/scene.xml.bak` 复原（`aod=0`）并重启 SystemUI。
+- 下一步方向（待定）：查 `CleanWallpaper` 的 wake hold / `HOME_GRACE` / `send(mode)` 编排，
+  让息屏→桌面期间只发一次目标构图，或与系统转场时序对齐。这是**另一个子系统**（壁纸引擎），
+  不是这两天一直在改的 AOD 注入链路。
+
 

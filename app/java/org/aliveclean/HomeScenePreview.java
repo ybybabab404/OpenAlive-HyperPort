@@ -6,8 +6,9 @@ import android.view.*;
 import android.widget.*;
 
 /**
- * 主页卡片里的实时预览：每张卡一个 {@link RenderLoop}，只渲染对应 mode；
- * 小米素材卡片则退化成静态缩略图。
+ * 主页卡片里的实时预览：非小米卡时每张卡建一个 {@link RenderLoop}，只渲染对应 mode；
+ * 小米素材卡用静态缩略图代替 RenderLoop，但 mode 0（息屏）仍额外叠一层实时 AOD 时钟
+ * （{@link XiaomiHomePreview.Clock}，每分钟刷新 + 电量变化重绘）。
  */
 final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceTextureListener {
     private final TextureView texture;

@@ -9,6 +9,10 @@ import org.json.*;
 /**
  * 气泡壁纸的动画状态：装载 {@code bubble/v<variant>[_dark].json} 里的三套场景预设（0=息屏 1=锁屏 2=桌面），
  * 场景切换时对气泡的位置、半径、透明度与背景配色分别按各自的曲线插值。
+ *
+ * <p>注意：只有位置（i=0/1）、半径（i=3）、透明度（i=4）与背景配色各有独立曲线；
+ * z（i=2）、材质色（i=5..8）与三组光照参数（i=9..35）共用同一条 smooth 兜底曲线
+ * （延迟取该球三条 delay 的最小值）。</p>
  */
 final class BubbleMotion implements WallpaperMotion {
     static final int STRIDE=36,SIZE=STRIDE*3+52;

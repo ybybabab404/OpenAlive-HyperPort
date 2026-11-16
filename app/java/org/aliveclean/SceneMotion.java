@@ -84,10 +84,11 @@ final class SceneMotion {
     }
     private float[] lensState(int scene) {
         if(scene==0)return new float[]{22,.22f,9,1,0,aodX,aodY,1,0,Float.NaN};
-        // 注意：启航的锁屏稳态构图取样自 AOD 层（lens_blend 在镜头圆内直接用 u_aod_effect），
-        // 所以这里的模糊半径是"会被显示出来"的稳态值，必须为 0 —— 设成 16 会让锁屏一直糊。
-        // 转场期间的模糊由 lens() 里那一档的起始值 22 衰减到 0 提供。
-        return new float[]{scene==1?0:16,expandedScale,0,0,-149,0,0,0,1.24f,-360};
+        // 模糊半径是"动画结束后保留的值"，不是转场强度：
+        // 启航的锁屏构图取样自 AOD 层（lens_blend 镜头圆内直接用 u_aod_effect），
+        // 稳态带模糊=画面一直糊（16 那次就是这么糊掉的）。锁屏/桌面都取 0，
+        // 转场期间的模糊由 values[LENS+0] 从 AOD 的 22 衰减到 0 提供，两边参数完全一致。
+        return new float[]{0,expandedScale,0,0,-149,0,0,0,1.24f,-360};
     }
     private float[] glassState(int scene) {
         float width=scene==1?(lock==2?.05f:.04f):(lock==2?.072f:.076f);
@@ -194,6 +195,13 @@ final class SceneMotion {
         tracks.clear();groundMask=false;
         int previous=mode,tr=transition(previous,next);
         if(aod==0&&previous==0&&next==2){tr=0;AliveLog.i("AliveClean","scene sail lock animation 0->2 tr=0");}
+        {
+            // 每次转场只打一行：用来对比"息屏→锁屏"和"息屏→桌面"两条配置是否真的同参数。
+            float[] t=lensState(next);
+            AliveLog.i("AliveClean","scene transition "+previous+"->"+next+" tr="+tr
+                    +" lensTarget="+t[0]+","+t[1]+","+t[2]+","+t[3]
+                    +" glass="+glassState(next)[0]);
+        }
         if(aod==0)lens(tr,next);else if(aod==101)full(tr,next);
         if(textureTracks){if(lock==1||lock==2)glass(tr,next);else if(lock==3)ground(tr,next);}
         blendFrom=new float[]{values[0],values[1],values[2]};blendNext=next;

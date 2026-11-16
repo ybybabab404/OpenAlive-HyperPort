@@ -141,16 +141,6 @@ public final class CleanWallpaper extends WallpaperService {
             // 走的是 0→2 那条 150ms 的混合（AOD 层 150ms 就退场），镜头形变根本来不及出现 ——
             // 用户看到的就是"桌面无形变、只有一点模糊"。这里改成先完整播锁屏那条动画（0→1，
             // 含形变+模糊），动画结束后再无动画切到桌面构图。
-            if(renderer!=null&&renderer.sailScene()){
-                // 启航不识别桌面：解锁就让它停在锁屏构图，动画从头到尾只有一条。
-                if(lastSentMode==0){
-                    AliveLog.i(TAG,"scene keyguard hide on sail wake -> play lock animation");
-                    send(1,true);
-                }else{
-                    AliveLog.i(TAG,"scene keyguard hide on sail: keep lock composition mode="+lastSentMode);
-                }
-                return;
-            }
             cancelLockGrace();
             if(lastSentMode!=2)send(2,true);
         }
@@ -224,10 +214,7 @@ public final class CleanWallpaper extends WallpaperService {
                             if(token!=lockGraceToken||renderer==null)return;
                             long now=android.os.SystemClock.uptimeMillis();
                             long fp=fingerprintAt;
-                            // 启航样式：唤醒转场一律按"锁屏"处理 —— 不因为"已经解锁/有指纹"就切到
-                            // 桌面效果，也不再让指纹延长停留时间。这样指纹解锁和普通亮屏所见一致。
-                            boolean sail=renderer.sailScene();
-                            if(!sail&&!keyguardLocked()){
+                            if(!keyguardLocked()){
                                 lockGraceActive=false;
                                 AliveLog.i(TAG,"scene wake hold unlocked source="+cause
                                         +" mode="+lastSentMode+"->2 (applied) heldMs="+(now-start)
@@ -237,18 +224,12 @@ public final class CleanWallpaper extends WallpaperService {
                             }
 
                             long deadline=start+WAKE_DWELL;
-                            if(!sail&&fp!=0&&fp>start-FINGERPRINT_WINDOW)deadline=Math.max(deadline,fp+FINGERPRINT_WINDOW);
+                            if(fp!=0&&fp>start-FINGERPRINT_WINDOW)deadline=Math.max(deadline,fp+FINGERPRINT_WINDOW);
                             if(now>=deadline){
                                 lockGraceActive=false;
-                                if(sail&&lastSentMode==2){
-                                    // keyguardHiding 已经把画面切到桌面层了；这里不要再翻回锁屏，
-                                    // 否则用户回到桌面后会停在锁屏构图上。
-                                    AliveLog.i(TAG,"scene wake hold sail skip: already home heldMs="+(now-start));
-                                    return;
-                                }
                                 AliveLog.i(TAG,"scene wake hold dwell source="+cause
                                         +" displayOn="+displayOn()+" mode="+lastSentMode+"->1 (applied)"
-                                        +" heldMs="+(now-start)+" fpMs="+(fp==0?-1:now-fp)+" sail="+sail);
+                                        +" heldMs="+(now-start)+" fpMs="+(fp==0?-1:now-fp));
                                 send(1,true);
                                 return;
                             }
@@ -299,14 +280,6 @@ public final class CleanWallpaper extends WallpaperService {
         }
         private void send(int mode,boolean animate){
             cancelLockGrace();
-            // 启航：不识别桌面 —— 永远按锁屏构图渲染。
-            // 这一条同时解决两件事：①锁屏层与桌面层不会同屏（双层）；②两种唤醒共用同一条
-            // 动画时间线，速率必然一致。桌面/锁屏在启航样式里用的是同一张照片（lock=0,home=6），
-            // 所以画面本身没有区别，只是不再切构图。
-            if(mode==2&&renderer!=null&&renderer.sailScene()){
-                AliveLog.once(TAG,"sail-no-home","scene send 2 suppressed: 启航 always renders the lock composition");
-                return;
-            }
             if(skipAodMode(mode))return;
             int from=lastSentMode;
             boolean wasDark=panelDark;

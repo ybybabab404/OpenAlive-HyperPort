@@ -6,6 +6,9 @@ import android.util.Size;
 import java.lang.reflect.*;
 import java.util.*;
 
+/**
+ * 用动态代理实现厂商侧需要的纹理层回调（InvocationHandler），把渲染参数交给我们的引擎。
+ */
 final class VivoTextureLayer implements InvocationHandler,AutoCloseable {
     final Object proxy;
     private final ArrayList<Integer> images=new ArrayList<>();

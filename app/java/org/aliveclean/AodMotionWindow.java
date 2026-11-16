@@ -1,5 +1,10 @@
 package org.aliveclean;
 
+/**
+ * 息屏进入后的可动窗口：速度从 1 线性衰减到 0，窗口长度 {@value #DURATION_MS}ms。
+ *
+ * <p>用来限制 AOD 动画的总时长，避免息屏后一直动下去。</p>
+ */
 final class AodMotionWindow {
     static final int DURATION_MS=3000;
     private long start=-1;

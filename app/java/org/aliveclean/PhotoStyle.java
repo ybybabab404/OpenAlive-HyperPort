@@ -2,6 +2,11 @@ package org.aliveclean;
 
 import android.view.animation.*;
 
+/**
+ * 照片 AOD 的样式定义：帧序列、帧率、结束时刻与各转场的关键帧轨道（Track）。
+ *
+ * <p>轨道表在构造时一次性建好，运行期只读；{@code index()} 把时间映射到帧号。</p>
+ */
 final class PhotoStyle {
     final int id,size,frames,fps,endMicros;
     final String folder;

@@ -4,6 +4,12 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 模块统一的日志出口：固定 TAG 前缀，并支持 {@code once} 把高频路径压成一条。
+ *
+ * <p>只在有排查价值的低频事件上打日志；每帧打印会把 logcat 里真正有用的行冲掉
+ * （2026-11-16 就因为 probe 每帧一行，导致现场关键日志全部丢失）。</p>
+ */
 final class AliveLog {
     static final String TAG = "AliveHS";
     static final String APPLY = "AliveHS/Apply";

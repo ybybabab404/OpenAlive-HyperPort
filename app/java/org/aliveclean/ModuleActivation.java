@@ -4,6 +4,9 @@ import android.content.*;
 import android.net.Uri;
 import android.os.*;
 
+/**
+ * 模块激活状态：判断 AliveHS 是否已在当前开机里被系统真正加载，供 UI 与壁纸侧查询。
+ */
 final class ModuleActivation {
     static final String QUERY="org.aliveclean.QUERY_MODULE_ACTIVATION";
     private static final Uri STATUS=Uri.parse("content://org.aliveclean.clock.runtime");

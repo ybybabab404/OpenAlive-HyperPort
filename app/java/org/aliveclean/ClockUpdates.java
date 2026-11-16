@@ -5,6 +5,11 @@ import android.database.ContentObserver;
 import android.os.*;
 import android.provider.Settings;
 
+/**
+ * 时间变化的统一来源：监听系统的分钟/时区/日期变化并回调。
+ *
+ * <p>预览引擎没有系统广播可用，所以 {@code preview} 模式改成自己每分钟触发一次。</p>
+ */
 final class ClockUpdates {
     interface Listener {void refresh(long time);}
     private final Context context;

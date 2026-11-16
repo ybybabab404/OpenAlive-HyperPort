@@ -5,6 +5,9 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.widget.LinearLayout;
 
+/**
+ * 用系统主题管理器的 dialog 构建器创建对话框，保证外观与系统一致。
+ */
 final class OfficialDialogs {
     private final OfficialUi ui;
     private final java.util.ArrayList<Dialog> opened=new java.util.ArrayList<>();

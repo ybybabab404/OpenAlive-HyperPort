@@ -9,6 +9,9 @@ import android.view.LayoutInflater;
 import dalvik.system.DexClassLoader;
 import java.io.File;
 
+/**
+ * HyperOS 专用的"官方 UI 上下文"：在 {@link OfficialUi} 的基础上额外提供个性化/超级壁纸入口与系统字体。
+ */
 final class OfficialHyperOsUi extends ContextWrapper {
     private static ClassLoader sharedLoader;
     private static String sharedPath;

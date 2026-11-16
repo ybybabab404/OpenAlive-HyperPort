@@ -7,6 +7,9 @@ import android.view.*;
 import java.io.*;
 import java.security.MessageDigest;
 
+/**
+ * 以 ContextWrapper 的形式加载系统 ThemeManager 的资源与 ClassLoader，用完必须 {@code close}。
+ */
 final class OfficialUi extends ContextWrapper implements AutoCloseable {
     private final Resources resources;
     private final Resources.Theme theme;

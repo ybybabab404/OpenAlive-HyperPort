@@ -3,6 +3,10 @@ package org.aliveclean;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ * 单帧参数快照：把当帧的 FrameMotion / SceneMotion / TextureMotion uniform 打包进直接缓冲，
+ * 供渲染线程在异步阶段复用（避免边算边改）。
+ */
 final class FrameSample {
     final ByteBuffer effect=ByteBuffer.allocateDirect(36*4).order(ByteOrder.nativeOrder());
     final ByteBuffer base=ByteBuffer.allocateDirect(SceneMotion.COUNT*4).order(ByteOrder.nativeOrder());

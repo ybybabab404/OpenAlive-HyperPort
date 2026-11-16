@@ -11,6 +11,13 @@ import android.provider.Settings;
 
 import java.lang.reflect.Method;
 
+/**
+ * {@code full_screen_aod_on} 的唯一负责人：进入我们的壁纸时记下用户原值（capture），
+ * 切回别人的壁纸时按需还原（restore），行为需要时只 hook 读取、绝不写存储值。
+ *
+ * <p>判据分两个槽：{@code alive()} 看系统槽，{@link #lockShowsOurs} 看锁屏槽。
+ * 锁屏上真正显示的是锁屏槽，只用系统槽判断会误判成"我们的壁纸"（2026-11-16 的双层问题）。</p>
+ */
 final class AodWallpaperMode {
     static final String KEY_MODE = "full_screen_aod_on";
     static final String KEY_RESTORE = "alive_aod_restore_value";

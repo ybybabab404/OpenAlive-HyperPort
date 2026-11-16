@@ -4,6 +4,9 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.zip.*;
 
+/**
+ * 单帧主体蒙版的解码器（可关闭）。
+ */
 final class MaskDecoder implements AutoCloseable {
     private final Inflater inflater=new Inflater();
     private final byte[] input=new byte[32768],output=new byte[65536];

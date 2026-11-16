@@ -7,6 +7,9 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+/**
+ * 多帧主体蒙版序列：后台线程按需解码并上传纹理，带 LRU 缓存与失败计数。
+ */
 final class MaskFrames implements AutoCloseable {
     static final int SIZE=720,BYTES=SIZE*SIZE*3,START=61,END=62;
     private final AssetManager assets;

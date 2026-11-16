@@ -1,5 +1,10 @@
 package org.aliveclean;
 
+/**
+ * native 渲染器的 JNI 出口：创建场景、上传纹理、推帧参数、渲染与销毁。
+ *
+ * <p>方法签名与 {@code native/lib.rs} 一一对应，改名或改参数必须两边同时改。</p>
+ */
 final class NativeScene {
     static {
         try { System.loadLibrary("alive_clean"); }

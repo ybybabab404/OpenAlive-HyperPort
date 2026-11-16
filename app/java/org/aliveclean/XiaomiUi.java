@@ -9,6 +9,9 @@ import dalvik.system.DexClassLoader;
 import java.io.*;
 import java.lang.reflect.*;
 
+/**
+ * 小米侧的主题化 ContextWrapper：加载 ThemeManager 资源/类，并封装其 bundle 调用约定。
+ */
 final class XiaomiUi extends ContextWrapper {
     final ClassLoader loader; final Resources resources; final Resources.Theme theme;
     private LayoutInflater inflater;

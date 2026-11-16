@@ -7,6 +7,12 @@ import android.content.Context;
 import android.os.Looper;
 import java.lang.reflect.InvocationTargetException;
 
+/**
+ * root 侧应用壁纸：设置壁纸组件并校验系统槽与锁屏槽，锁屏槽不是我们的就把它清掉。
+ *
+ * <p>HyperOS 上 {@code setWallpaperComponentWithFlags(SYSTEM|LOCK)} 常常只落到系统槽，
+ * 锁屏槽仍是 MIUI 的静态图——只校验系统槽会让锁屏上出现两层（2026-11-16 修）。</p>
+ */
 public final class SceneApply {
     static void apply(Context context) throws Exception {
         if (android.os.Process.myUid() / 100000 != 0) throw new java.io.IOException("目前仅支持主用户");

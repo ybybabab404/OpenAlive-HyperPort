@@ -4,6 +4,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 
+/**
+ * system_server：亮屏瞬间把 DeviceIdle 的"无活动"状态转换推迟 1.2 秒。
+ *
+ * <p>目的只是给息屏 / 解锁动画留出时间，避免刚亮屏就被 Doze 拉回去。
+ * 只在 quick doze 且 state 为 ACTIVE(0) 时才拦截，其他情况一律放行。</p>
+ */
 public final class DeviceIdleDelayHook {
     private static final String TAG = "AliveHSHooks";
     private static final long DEFER_MS = 1200L;

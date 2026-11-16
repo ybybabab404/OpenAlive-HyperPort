@@ -1,5 +1,8 @@
 package org.aliveclean;
 
+/**
+ * 诊断总开关。发布包必须为 false，见 {@code docs/kb/ai/02-开发硬性要求.md} §6.1。
+ */
 final class Diagnostics {
     /**
      * 诊断开关。true 时 Trace.enabled() 无条件放行（打 T01..T13）。

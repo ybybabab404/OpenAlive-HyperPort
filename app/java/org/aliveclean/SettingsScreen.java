@@ -5,6 +5,9 @@ import android.graphics.drawable.Drawable;
 import android.view.*;
 import android.widget.*;
 
+/**
+ * 模块自带设置页的构建入口；拿不到官方上下文时降级为简单提示，不抛异常。
+ */
 final class SettingsScreen {
     static LinearLayout create(Activity activity,SettingsUi ui,String title)throws Exception{
         LinearLayout screen=new LinearLayout(activity);screen.setOrientation(LinearLayout.VERTICAL);

@@ -8,6 +8,11 @@ import android.os.IBinder;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
+/**
+ * 以系统 UID(1000) 反射调用平台 ContentProvider（IContentProvider.call）的客户端，用完必须关闭。
+ *
+ * <p>只有 system UID 能用；非 1000 构造时直接抛 SecurityException，这是平台约束不是缺陷。</p>
+ */
 final class PlatformProvider implements AutoCloseable {
     private final String authority;
     private final int user;

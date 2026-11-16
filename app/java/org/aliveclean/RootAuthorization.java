@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+/**
+ * root 授权的获取与监听：负责请求、投递结果，并在授权丢失后重新检查。
+ */
 final class RootAuthorization {
     enum Status {
         GRANTED("Root 已授权"),DENIED("Root 未授权"),UNAVAILABLE("Root 不可用"),TIMEOUT("Root 授权超时");

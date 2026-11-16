@@ -4,6 +4,9 @@ import android.app.Application;
 import android.content.*;
 import android.os.Build;
 
+/**
+ * 在被注入进程里上报"模块已激活"的 hook，配合 {@link ModuleActivation} 做状态回传。
+ */
 final class ModuleActivationHook {
     private static boolean registered;
     static void install(){

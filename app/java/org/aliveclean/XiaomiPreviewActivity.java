@@ -13,6 +13,9 @@ import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
 
+/**
+ * 小米超级壁纸的官方预览页：内嵌 Unity 播放器并按机型选择素材（Earth/Moon/…六个内部子类）。
+ */
 public class XiaomiPreviewActivity extends Activity implements SurfaceHolder.Callback {
     public static final class Earth extends XiaomiPreviewActivity {} public static final class Moon extends XiaomiPreviewActivity {}
     public static final class Mars extends XiaomiPreviewActivity {} public static final class Saturn extends XiaomiPreviewActivity {}

@@ -7,6 +7,9 @@ import java.nio.*;
 import java.util.*;
 import java.util.regex.*;
 
+/**
+ * 资源与着色器小工具：读 assets、编译/链接着色器、按名字找 uniform，实现 AutoCloseable。
+ */
 final class AssetGl implements AutoCloseable {
     final int id;
     private final HashMap<String,Integer> uniforms=new HashMap<>();

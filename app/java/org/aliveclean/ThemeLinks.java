@@ -5,6 +5,9 @@ import android.content.*;
 import android.content.pm.*;
 import android.widget.Toast;
 
+/**
+ * 主题商店/个性化页面的跳转解析：按平台挑对应的组件与 intent，失败时返回 false。
+ */
 final class ThemeLinks {
     static Intent resolve(Context context,boolean font){
         String[] actions=font?new String[]{"com.oplus.themestore.action.SET_FONT_INDIVIDUATION","com.oplus.themestore.action.SET_FONT","com.nearme.themespace.SET_FONT"}

@@ -14,6 +14,9 @@ import android.widget.Toast;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * 拉起系统壁纸选择器，并判断用户最终是不是选了我们的壁纸（含手动选择的兜底判断）。
+ */
 final class WallpaperPicker {
     private static final String[] PACKAGES={
         "com.oplus.wallpapers","com.android.wallpaper.livepicker",

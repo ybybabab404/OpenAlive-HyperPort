@@ -8,6 +8,9 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 
+/**
+ * 相框配对裁切页：在相框模板上取一块区域，保存成 {@code frame_pair}/{@code frame_photo} 配置。
+ */
 public final class FrameCropActivity extends Activity {
     private OfficialUi ui;
     private ImageView photo;

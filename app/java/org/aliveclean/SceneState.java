@@ -1,5 +1,10 @@
 package org.aliveclean;
 
+/**
+ * 壁纸三态的记账器：把系统给的 mode 信号按"相位"规则过滤后落地，并在信号过期时给出回退值。
+ *
+ * <p>{@code accept} 返回的是"模式是否变化"，不是"是否接受"；判据请用 {@link #mode()}。</p>
+ */
 final class SceneState {
     private int mode=1;
     private long timestamp=-1;

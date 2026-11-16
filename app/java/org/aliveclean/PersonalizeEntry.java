@@ -19,6 +19,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+/**
+ * 在系统"个性化"页面注入 AliveHS 入口卡片（hook 官方页面），点击进我们的主页。
+ */
 public final class PersonalizeEntry {
     private static final String TAG = "AliveHSHooks";
     private static final String HOST_PKG = "com.android.thememanager";

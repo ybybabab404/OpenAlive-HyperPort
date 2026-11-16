@@ -2,6 +2,9 @@ package org.aliveclean;
 
 import android.view.Surface;
 
+/**
+ * 向厂商播放器租借 Surface 的小对象：记录 retain/replace/destroy 时序，避免释放后又被取用。
+ */
 public final class XiaomiSurfaceLease {
     static { System.loadLibrary("alive_clean"); }
     private long handle;

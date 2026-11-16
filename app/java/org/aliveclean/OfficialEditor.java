@@ -10,6 +10,10 @@ import java.io.InputStream;
 import java.lang.reflect.*;
 import java.util.*;
 
+/**
+ * 借系统主题管理器（ThemeManager）的编辑布局做我们自己的编辑器：把 TextureView 与控件塞进官方布局，
+ * 从而拿到与系统一致的排版和交互。
+ */
 final class OfficialEditor implements AutoCloseable {
     interface Actions {
         void scene(int scene);

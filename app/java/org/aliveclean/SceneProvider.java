@@ -5,6 +5,10 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.*;
 
+/**
+ * 场景信号的 ContentProvider 通道（authority {@code org.aliveclean.scene}），
+ * 用 call/query 传递 mode 与配置，受 STATUS_BAR 权限保护。
+ */
 public final class SceneProvider extends ContentProvider {
     static final Uri CONFIGURATION=Uri.parse("content://org.aliveclean.scene/configuration");
     static void changed(Context context){context.getContentResolver().notifyChange(CONFIGURATION,null);}

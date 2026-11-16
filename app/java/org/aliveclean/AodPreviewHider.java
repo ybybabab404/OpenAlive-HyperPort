@@ -6,6 +6,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
+/**
+ * com.miui.aod：隐藏 AliveHS 自己的 AOD 预览页/标题，避免和系统 AOD 预览重复显示。
+ */
 public final class AodPreviewHider {
     private static final String TAG = "AliveHSHooks";
 

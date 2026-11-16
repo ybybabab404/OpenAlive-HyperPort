@@ -11,6 +11,12 @@ import android.os.ParcelFileDescriptor;
 import java.io.File;
 import java.io.FileNotFoundException;
 
+/**
+ * 给系统 AOD / 主题管理器读取"当前 AOD 图片"的 ContentProvider。
+ *
+ * <p>按 {@code preview} 与否分别取 draft / applied 偏好里的照片与模板缓存文件；
+ * 查不到就返回 null，由调用方决定回退。</p>
+ */
 public final class AodWallpaperProvider extends ContentProvider {
     static final String AUTHORITY = "org.aliveclean.aodwallpaper";
     static final Uri PHOTO = Uri.parse("content://" + AUTHORITY + "/photo");

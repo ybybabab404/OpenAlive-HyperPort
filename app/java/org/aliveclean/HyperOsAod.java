@@ -10,6 +10,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 
+/**
+ * 把 AliveHS 的 AOD 时钟注入系统 AODView：找内层 AOD 视图、attach/detach、并在
+ * 开机锁屏窗口被销毁重建时靠 {@code supervise} 重新挂上。
+ *
+ * <p>约束：AODView 实例必须跨"开机锁屏窗口"保留（缓存 root、detach 不清），
+ * 场景未知时按 2s×15 重试；注入失败才退回 {@link AodOverlay}。</p>
+ */
 final class HyperOsAod {
     private static final String TAG = "AliveHSAod";
     private static java.lang.ref.WeakReference<AodSurface> liveSurface;

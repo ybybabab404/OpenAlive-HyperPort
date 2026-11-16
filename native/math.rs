@@ -1,3 +1,5 @@
+//! 4×4 矩阵小工具（列主序，与 OpenGL 一致）：缩放、平移、旋转，以及照片与镜头两套取样矩阵。
+//! 这里只做纯数学，不碰 GL 状态；单元测试验证的是"裁切坐标是否落到 UV" 这类形状性质。
 pub type Mat=[f32;16];
 pub const ID:Mat=[1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.];
 pub fn mul(a:Mat,b:Mat)->Mat {let mut c=[0.;16];for col in 0..4{for row in 0..4{for k in 0..4{c[col*4+row]+=a[k*4+row]*b[col*4+k];}}}c}

@@ -5,6 +5,9 @@ import android.app.WallpaperManager;
 import android.content.ComponentName;
 import android.os.Build;
 
+/**
+ * 判断当前生效的壁纸是不是我们的：系统槽与锁屏槽分别判断，二者可能不同步。
+ */
 final class AppliedWallpaper {
     static WallpaperInfo lock(WallpaperManager manager){
         WallpaperInfo info=Build.VERSION.SDK_INT>=34

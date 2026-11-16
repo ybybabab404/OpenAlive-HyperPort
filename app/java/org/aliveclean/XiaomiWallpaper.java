@@ -9,6 +9,10 @@ import android.view.*;
 import java.io.File;
 import java.util.*;
 
+/**
+ * 小米超级壁纸的 WallpaperService：管理显示切换与播放器生命周期，
+ * 六个内部子类（Earth/Moon/…）分别对应一个内置包，由 AndroidManifest 声明。
+ */
 public class XiaomiWallpaper extends WallpaperService implements DisplayManager.DisplayListener {
     public static final class Earth extends XiaomiWallpaper {} public static final class Moon extends XiaomiWallpaper {}
     public static final class Mars extends XiaomiWallpaper {} public static final class Saturn extends XiaomiWallpaper {}

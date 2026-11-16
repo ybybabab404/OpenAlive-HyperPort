@@ -10,6 +10,9 @@ import dalvik.system.DexClassLoader;
 import java.io.*;
 import java.security.MessageDigest;
 
+/**
+ * 设置页用的主题化 ContextWrapper：负责 inflate 系统布局与取主题属性。
+ */
 final class SettingsUi extends ContextWrapper {
     private static final String PACKAGE="com.meizu.wallpapersetting";
     private final Resources resources;

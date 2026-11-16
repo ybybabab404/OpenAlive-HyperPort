@@ -3,6 +3,12 @@ package org.aliveclean;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+/**
+ * 诊断采样通道（T01..T13 等标记）。
+ *
+ * <p>只有 {@link Diagnostics#TRACE} 为 true 时才真正写日志；发布包保持关闭，
+ * 否则等于把内部布局/时序细节暴露在 logcat 里。</p>
+ */
 final class Trace {
     static final String TAG = "AliveHSAod";
     private static final String PREFS = "trace";

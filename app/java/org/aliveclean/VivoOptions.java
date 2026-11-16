@@ -3,6 +3,9 @@ package org.aliveclean;
 import org.json.*;
 import java.util.ArrayList;
 
+/**
+ * Vivo 样式的参数模型：家族（液态/光栅/闪卡）、裁切、子样式与视频等，负责与 JSON 互转并提供默认值。
+ */
 final class VivoOptions {
     static final int LIQUID=1,RASTER=2,FLASH=3;
     int family,style=1,area=4,refraction=1,sensitivity;

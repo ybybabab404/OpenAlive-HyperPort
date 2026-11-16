@@ -4,6 +4,9 @@ import android.content.Context;
 import android.os.*;
 import java.util.LinkedHashSet;
 
+/**
+ * 跨进程场景通道：SystemUI 侧与壁纸/模块侧交换场景信号与命令，避免各自维护一套状态。
+ */
 final class SceneChannel {
     interface Listener {void scene(int mode,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask);void region(AodRegion area);void disconnected();default void backdrop(boolean covered){}default void touch(int action,float x,float y){}default void fingerprint(long time){}default void keyguardHiding(long time){}}
     private static final LinkedHashSet<Listener> listeners=new LinkedHashSet<>();

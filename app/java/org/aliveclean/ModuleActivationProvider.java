@@ -9,6 +9,10 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Process;
 
+/**
+ * 对外暴露激活状态的 ContentProvider（authority {@code org.aliveclean.clock.runtime}），
+ * 由 AndroidManifest 声明，供系统侧跨进程查询。
+ */
 public final class ModuleActivationProvider extends ContentProvider {
     private IBinder module;
     @Override public boolean onCreate(){return true;}

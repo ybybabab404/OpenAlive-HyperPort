@@ -3,6 +3,9 @@ package org.aliveclean;
 import android.content.res.AssetManager;
 import java.io.IOException;
 
+/**
+ * 渲染器公共接口：{@link RenderLoop} 只依赖它（创建/关闭/动画句柄），具体实现按样式分文件。
+ */
 interface WallpaperRenderer extends AutoCloseable {
     WallpaperMotion motion();
     void render();

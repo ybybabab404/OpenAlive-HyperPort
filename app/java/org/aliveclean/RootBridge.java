@@ -5,6 +5,11 @@ import java.io.*;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 
+/**
+ * 以 root（{@code su 1000}）拉起 {@code PlatformApply} 的桥，命令在这里拼装与转义。
+ *
+ * <p>只有非 HyperOS 的 ColorOS 息屏配置需要它；HyperOS 走系统接口，不经过 root。</p>
+ */
 final class RootBridge {
     static String prepareAod(Context context)throws Exception {
 

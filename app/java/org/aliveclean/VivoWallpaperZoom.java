@@ -1,5 +1,8 @@
 package org.aliveclean;
 
+/**
+ * Vivo 壁纸的缩放状态：跟随场景模式推进缩放，供渲染层取样。
+ */
 final class VivoWallpaperZoom {
     private double value=1.05,velocity,target=1.05,omega=2*Math.PI/.5;
     private long previous;

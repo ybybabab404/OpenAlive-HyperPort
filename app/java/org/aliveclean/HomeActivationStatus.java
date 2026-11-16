@@ -7,6 +7,9 @@ import android.os.*;
 import android.view.*;
 import android.widget.*;
 
+/**
+ * 主页顶部的"模块是否激活"指示条：查询激活状态，未激活时给出重启/勾选作用域的引导。
+ */
 final class HomeActivationStatus {
     private final Activity activity;
     private final TextView moduleLabel,rootLabel;

@@ -1,5 +1,11 @@
 package org.aliveclean;
 
+/**
+ * 系统上报的 AOD 区域（displayId、屏幕尺寸、矩形），换算成场景坐标并提供合法性校验。
+ *
+ * <p>{@code sceneX/sceneY} 返回的是以屏幕中心为原点、按屏幕尺寸归一化后的坐标，
+ * 直接喂给渲染层；{@code fits} 用来拒绝分辨率已变化时上报的过期区域。</p>
+ */
 final class AodRegion {
     final int displayId,screenWidth,screenHeight,left,top,right,bottom;
     private AodRegion(int displayId,int width,int height,int left,int top,int right,int bottom){

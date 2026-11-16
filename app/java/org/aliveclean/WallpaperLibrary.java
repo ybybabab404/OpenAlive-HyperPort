@@ -10,6 +10,9 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 
+/**
+ * 内置壁纸列表：给 ListView 提供适配器与预览图。
+ */
 final class WallpaperLibrary {
     interface Selection { void choose(String asset); }
     private static final class Entry {

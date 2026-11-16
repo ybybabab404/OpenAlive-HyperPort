@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 
+/**
+ * native 时钟运行时：把随包的 so/字体解压到私有目录并加载，供原生时钟使用。
+ */
 final class NativeClockRuntime {
     static synchronized File unpack(Context host,String name)throws Exception{
         if(!"hyperos".equals(name))throw new IllegalArgumentException("Unknown original clock runtime");

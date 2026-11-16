@@ -9,6 +9,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * 把系统侧（ThemeManager / 个性化 / UF 系列页面）的 AOD 壁纸缩略图与预览图
+ * 换成我们用同一份场景参数实时渲染出来的图，避免"预览与真机不一致"。
+ */
 public final class AodWallpaperPreview {
     private static final String TAG = "AliveHSHooks";
     private static final String TEMPLATE_DIR =

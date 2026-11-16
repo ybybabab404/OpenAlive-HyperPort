@@ -3,6 +3,9 @@ package org.aliveclean;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ * 锁屏/桌面纹理选择的插值器：场景切换时在旧纹理与新纹理的参数之间过渡。
+ */
 final class TextureMotion {
     private final SceneMotion lock,home;
     private final boolean shared;

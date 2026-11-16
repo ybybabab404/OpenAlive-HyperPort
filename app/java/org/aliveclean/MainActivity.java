@@ -9,6 +9,10 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 
+/**
+ * 编辑主界面：左侧 TextureView 实时预览，右侧是参数面板；照片选择/裁切/样式调整都在这里，
+ * 结果写进 draft（{@code scene.preview}），应用时再整体保存到 applied。
+ */
 public final class MainActivity extends Activity implements TextureView.SurfaceTextureListener {
     private RenderLoop renderer;
     private SharedPreferences draft;

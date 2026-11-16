@@ -8,6 +8,10 @@ import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 
+/**
+ * 兜底渲染窗口：当系统 AODView 注入这条路走不通时，用 WindowManager 上的 SurfaceView
+ * 自己画息屏动画。由 {@link HyperOsAod} 决定何时启用（正常路径不用它）。
+ */
 final class AodOverlay {
     private static final String TAG = "AliveHSAod";
     private static SurfaceView view;

@@ -8,6 +8,9 @@ import android.net.Uri;
 import android.os.*;
 import java.util.*;
 
+/**
+ * 小米壁纸运行状态上报（ContentProvider）：当前选了哪个包、锁屏时钟、区域与连接状态。
+ */
 public final class XiaomiState extends ContentProvider {
     static final Uri URI=Uri.parse("content://org.aliveclean.xiaomi/state");
     private final Handler main=new Handler(Looper.getMainLooper());

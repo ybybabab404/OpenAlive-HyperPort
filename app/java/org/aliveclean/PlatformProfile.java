@@ -3,6 +3,9 @@ package org.aliveclean;
 import android.content.Context;
 import android.content.pm.PackageManager;
 
+/**
+ * 平台识别：区分 HyperOS / MIUI / 其它，并记录平台组件是否安装，决定后续走哪条实现。
+ */
 final class PlatformProfile {
     static final int UNKNOWN=0;
     static final int HYPEROS=2;

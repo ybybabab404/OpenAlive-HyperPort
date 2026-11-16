@@ -8,6 +8,9 @@ import android.widget.FrameLayout;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 用官方时钟模板 inflate 出来的 HyperOS 时钟控件（注入 AOD/预览时用它保持与系统一致的样式）。
+ */
 final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseable {
     private final String template;
     private final int style;

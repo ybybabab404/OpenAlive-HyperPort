@@ -9,6 +9,12 @@ import android.view.*;
 import android.widget.*;
 import java.util.*;
 
+/**
+ * 我们自己绘制的 AOD 时钟面：时间、日期、农历三行，随窗口可见性停启刷新。
+ *
+ * <p>作为 {@link AodClockFace} 的实现注入系统 AODView；注意它是普通 View，不是系统时钟，
+ * 所以刷新节奏由 {@link ClockUpdates} 驱动，不要自己起定时器。</p>
+ */
 final class AodClockView extends AodClockFace {
     private final LinearLayout content;
     private final TextView time,date,lunar;

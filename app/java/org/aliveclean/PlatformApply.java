@@ -8,6 +8,10 @@ import android.os.Looper;
 import android.os.Process;
 import org.json.JSONObject;
 
+/**
+ * 平台侧"应用壁纸"的独立入口（{@code app_process} 起，跑在系统 UID 下），
+ * 由 {@link RootBridge} 在需要时拉起。
+ */
 public final class PlatformApply {
     private static final String PROVIDER="com.oplus.aod.AodMachineHelperProvider";
     public static void main(String[] args) {

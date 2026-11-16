@@ -11,6 +11,9 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 
+/**
+ * 动态素材库：列出内置的动态壁纸/示例项供用户挑选。
+ */
 public final class DynamicLibraryActivity extends Activity {
     private final ExecutorService decoder=Executors.newSingleThreadExecutor();
     private final ArrayList<Entry> entries=new ArrayList<>();

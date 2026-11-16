@@ -7,6 +7,9 @@ import android.view.animation.*;
 import java.nio.*;
 import java.util.ArrayList;
 
+/**
+ * 相框模式（frame_pair）的动画：在"相框位"与"全屏位"之间插值照片变换，并给出当帧的 uniform 包。
+ */
 final class FrameMotion {
 
     final float[] values=new float[8];

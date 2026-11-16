@@ -6,6 +6,13 @@ import android.os.Bundle;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 
+/**
+ * 我们的 WallpaperService：把系统给的三态信号（息屏 0 / 锁屏 1 / 桌面 2）翻译成 {@link RenderLoop}
+ * 的 mode，并处理唤醒、解锁、壁纸应用后的状态同步与 grace 窗口。
+ *
+ * <p>唤醒这一刻 {@code scenesState.mode()} 可能仍是 0，判断"是否已切换"只能看自己
+ * {@code lastSentMode}；{@code send()} 首行会取消 grace 并自增 token，登记延时任务要用自增后的 token。</p>
+ */
 public final class CleanWallpaper extends WallpaperService {
 
     static final String TAG="AliveHSHooks";

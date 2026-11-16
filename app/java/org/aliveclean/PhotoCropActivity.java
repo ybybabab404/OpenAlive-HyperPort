@@ -9,6 +9,9 @@ import android.view.*;
 import android.widget.*;
 import java.io.*;
 
+/**
+ * 单图裁切页：拖动/缩放取景框，导出裁好的图片供照片 AOD 使用。
+ */
 public final class PhotoCropActivity extends Activity {
     private final PhotoViewport viewport=new PhotoViewport();
     private String source;

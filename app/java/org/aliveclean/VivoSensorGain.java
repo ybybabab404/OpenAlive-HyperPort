@@ -8,6 +8,9 @@ import android.os.SystemClock;
 
 import java.util.WeakHashMap;
 
+/**
+ * Vivo 液态样式的陀螺仪增益：把传感器数据平滑成渲染层要的乘数，带引用计数按需开关传感器。
+ */
 final class VivoSensorGain implements SensorEventListener,AutoCloseable {
     private static final String TAG="AliveClean";
     private static final long WATCHDOG_MS=2000L;

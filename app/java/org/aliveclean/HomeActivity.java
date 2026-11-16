@@ -7,6 +7,9 @@ import android.view.*;
 import android.widget.*;
 import java.util.ArrayList;
 
+/**
+ * 启动页：三张预览卡（息屏/锁屏/桌面）加底部操作入口，点卡片进编辑页；小米素材走官方预览页。
+ */
 public class HomeActivity extends Activity {
     private SettingsUi ui;
     private HomeActivationStatus activation;

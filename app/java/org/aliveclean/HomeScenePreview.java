@@ -5,6 +5,10 @@ import android.graphics.*;
 import android.view.*;
 import android.widget.*;
 
+/**
+ * 主页卡片里的实时预览：每张卡一个 {@link RenderLoop}，只渲染对应 mode；
+ * 小米素材卡片则退化成静态缩略图。
+ */
 final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceTextureListener {
     private final TextureView texture;
     private final int mode;

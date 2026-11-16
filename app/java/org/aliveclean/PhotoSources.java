@@ -4,6 +4,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 
+/**
+ * 照片来源解析：相册、文档 provider、厂商媒体库（vivo）各走一条路径，并给出是否可用。
+ */
 final class PhotoSources {
     static final int MIUI=0,GALLERY=1,FILES=2;
     static final String[] LABELS={"小米相册","通用相册","Android 文件"};

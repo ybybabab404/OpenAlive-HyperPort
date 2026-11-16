@@ -12,6 +12,11 @@ import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam;
 
+/**
+ * LSPosed 模块入口：按作用域把各个 hook 装到对应进程，并逐步记录每一步的安装结果。
+ *
+ * <p>某一步失败只影响该功能，不应该让整个模块加载失败——所以这里都是 step 包裹而不是直接抛。</p>
+ */
 public final class CleanHooks extends XposedModule {
     private static final String TAG = "AliveHSHooks";
     private static final String SERVER_KEY = "system_server";

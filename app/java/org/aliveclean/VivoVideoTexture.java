@@ -7,6 +7,9 @@ import android.opengl.GLES30;
 import android.view.Surface;
 import java.io.File;
 
+/**
+ * 视频纹理渲染：把解码出的帧上传成 GL 纹理并按参数绘制（自带 program 与关闭清理）。
+ */
 final class VivoVideoTexture implements AutoCloseable {
     private final MediaPlayer player=new MediaPlayer();
     private SurfaceTexture stream;

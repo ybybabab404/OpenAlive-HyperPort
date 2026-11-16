@@ -1,5 +1,8 @@
 package org.aliveclean;
 
+/**
+ * 视口参数夹紧：把缩放与偏移限制在合法范围内，并挡掉 NaN/Inf。
+ */
 final class PhotoViewport {
     private float imageAspect=1,viewAspect=1,zoom=1,x=.5f,y=.5f;
     private boolean measured;

@@ -1159,3 +1159,60 @@ adb shell settings get secure full_screen_aod_on                  # 应回到应
 ```
 
 **边界**：只在应用壁纸时捕获；用户在模块生效期间改的模式不会被记为"原值"；清模块数据会重新捕获当前值。
+
+### 12.13 2026-11-16 20:38 **待验证**：选「和锁屏样式一致」时，景深层上下重叠（两层）
+
+**用户描述**：使用「和锁屏样式一致」时出现两个系统壁纸景深上层上下重叠；属于以前解决过的问题，
+不确定哪个版本引入，高概率是最近版本。截图 `Screenshot_2026-11-16-20-36-35-635_lockscreen.jpg`
+（已 pull 到 `.tmp/screenshots/depth-dup-2036.jpg`）。
+
+**历史记载**：`docs/port/AOD-ALIVEHS-20261114.md` §2「自定义模式景深双上层 / 亮屏抖动」——
+根因是 `KeyguardDepthHider.isOurWallpaper()` 优先读锁屏壁纸，锁屏残留项目壁纸时仍去清空/重设
+MIUI 景深层。该问题已由 `3075eb7` 修掉（只认系统壁纸 + 非 ours 时直接 return），且现在代码里
+`isOurWallpaper()` 用的就是 `AodWallpaperMode.alive()`（系统槽唯一判据）。**本次不是它复发。**
+
+**只读取证（2026-11-16 20:20–20:43，TCP adb）**：
+
+```text
+dumpsys wallpaper
+  which=1(SYSTEM) mWallpaperComponent=org.aliveclean/CleanWallpaper        ← 我们的
+  which=2(LOCK)   mWallpaperComponent=com.miui.miwallpaper/ImageWallpaper  ← MIUI 的！
+settings get secure
+  full_screen_aod_on=1  support=1  doze_always_on=1
+  alive_aod_restore_set=null  alive_aod_restore_value=null
+logcat
+  20:42 systemui "aod foreign confirmed x5"     ← 还原探针跑了，但没有捕获值可还原
+```
+
+20:36 之后用户切回了系统壁纸，20:42 的 dumpsys 已是 system=MIUI 静态图、lock=MIUI 画报
+（`MiuiKeyguardPictorialWallpaper`）。
+
+**主要假设**：`SceneApply`/`XiaomiApply` 里 `setWallpaperComponentWithFlags(SYSTEM|LOCK)`
+在 HyperOS 上**有时只落到系统槽**，锁屏槽仍是 MIUI 的静态图/画报；而 `SceneApply` 只校验系统槽
+（`manager.getWallpaperInfo()`），于是"应用成功"但锁屏槽不是我们的。此时选「和锁屏样式一致」
+（全屏 AOD），MIUI 会用**它自己的锁屏壁纸**合成再叠一层景深，和我们注入的 AOD surface 重叠 →
+"两个景深上层上下重叠"。
+
+**已落地的改动（构建 `154eb27`，未装机）**：
+
+- `SceneApply.apply()`：系统槽校验通过后，再校验 `FLAG_LOCK`；不是我们的就
+  `manager.clear(WallpaperManager.FLAG_LOCK)`（让锁屏跟随系统壁纸=我们的），并打印
+  `lock slot after clear=…`。
+- `XiaomiApply`：原来锁屏槽校验不过是**直接抛错**（用户看到"应用失败"），改为同样 clear + 继续。
+
+**验证方法（设备连上后）**：
+
+```bash
+# 1) 应用项目壁纸，日志应有这两行之一
+adb logcat -d -s AliveHSApply:* | grep -E "lock wallpaper is not ours|lock slot after clear="
+# 2) 应用后确认两个槽都是我们
+adb shell "dumpsys wallpaper | grep -m3 mWallpaperComponent"
+# 3) 息屏（和锁屏样式一致）看是否仍有两层
+```
+
+**若验证后两层仍在**，则假设不成立，下一步按这个顺序排查：
+
+1. 对比 `aod=-1`（关息屏场景）时是否还有两层 —— 判断是不是我们的注入层；
+2. 看 `HyperOsAod` 的 T04/T05/T13 日志，确认注入 surface 是否与 MIUI 自己的层同屏；
+3. 若是"MIUI 自己画两次"（切到系统壁纸、模块完全无关时也复现），那就不是本模块的问题，
+   需要在 `KeyguardDepthHider` 里对全屏 AOD 场景做定向收敛，或干脆在 full AOD 下不注入。

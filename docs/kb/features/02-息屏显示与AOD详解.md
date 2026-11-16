@@ -1171,6 +1171,67 @@ vs 217–236KB（有球）也是快速判据（`02-*` §9.5 证据 3）。
 
 ---
 
+## 7.5 强制「和锁屏样式一致」：运行时改写读取结果（2026-11-16 新增）
+
+**需求原话**：应用项目壁纸前如果是「自定义」显示模式，应用后仍是「自定义」，导致显示不对；
+应当在应用项目壁纸后**强制按「和锁屏样式一致」**运行，但设置页里显示的仍然是「AliveHS 样式」。
+
+### 7.5.1 为什么不能靠"写设置"
+
+`full_screen_aod_on` 是 `Settings.Secure` 的键（1=和锁屏样式一致，0=自定义）。直接写它会：
+①需要 `WRITE_SECURE_SETTINGS`（普通应用拿不到，只能走 root 命令）；
+②**改动用户的原值**，切回系统壁纸后无法诚实还原（这正是 `3d1dd48` 放弃旧方案的原因）。
+
+### 7.5.2 采用的做法：只改"读取"，不改"存储"
+
+在 SystemUI 与 `com.miui.aod` 两个进程里 hook 读取入口，条件是**壁纸是我们的 + 息屏显示开着**：
+
+```java
+// AodFullScreen.hookFullAodSetting()
+Class<?> secure = Xp.findClassIfExists("android.provider.Settings$Secure", loader);
+Xp.findAndHookMethod(secure, "getInt", ContentResolver.class, String.class, int.class, hook);
+Xp.findAndHookMethod(secure, "getIntForUser", ContentResolver.class, String.class, int.class, int.class, hook);
+```
+
+```java
+// AodFullScreen.overrideFullAodRead()
+if (param.args.length < 2 || !AodWallpaperMode.KEY_MODE.equals(param.args[1])) return;  // 只认这一个键
+Object current = param.getResult();
+if (current instanceof Integer && ((Integer) current) == 1) return;                    // 已是 1 不动
+...
+force = aliveCached(context) && HyperOsAod.aodEnabled(context);                        // 我们的壁纸 + AOD 开着
+if (force) param.setResult(1);
+```
+
+要点：
+
+- **防递归**：条件里要读壁纸状态，而读取路径又会被同一个 hook 拦到，因此用 `ThreadLocal SETTING_OVERRIDE`
+  在求值期间放行原始结果。
+- **防拖慢**：`alive()` 每次都要问 `WallpaperManager`，用 1 秒缓存（`aliveCached`）。
+- **可回退**：切回系统壁纸后 `alive()` 为 false，读取立刻恢复原生值，不残留任何改动。
+- 配合已有的字段级强制（`forceManager()` 里 `mAodFullScreenEnable=true`）双保险：设置读取给
+  `MiuiSettingObserver` / `Utils.getFsAodStyle()` 用，字段给 doze 会话判定用。
+
+### 7.5.3 影响面（读这条结论前先看）
+
+| 读取方 | 位置 | 结果 |
+|---|---|---|
+| `com.miui.aod.Utils.getFsAodStyle()` | `Utils.java:523` | 返回 1 → 设置页 Spinner 选中 index 1，而 index 1 已被 `AodSettingsGuard` 换成本项目标签「AliveHS 样式」 |
+| `MiuiSettingObserver(full_screen_aod_on)` | `MiuiFullAodManager.java:594` | 观察到 1 → `mAodFullScreenEnable=true` |
+| `MiuiSettingsUtils.fullAodEnable()` | 锁屏编辑器 | 返回 true → 编辑器按全屏 AOD 渲染 |
+| `ShortcutManager` / `AnalyticManager` | `com.miui.aod` | 同样看到 1（前者决定快捷方式可用性，后者只做埋点文案） |
+| 我们自己的 `AodWallpaperMode.wantsFullAod()` | 本模块 | 看到 1 → 持续补足全屏 AOD 能力（符合预期） |
+
+### 7.5.4 验证（构建 `95ef0fe`，**尚未在设备上验证**）
+
+```bash
+# 1) 存储值必须没被改（应仍是用户原来的 0）
+adb shell settings get secure full_screen_aod_on
+# 2) 应用项目壁纸后，日志里应出现一次
+adb logcat -d -s AliveHSHooks:* | grep -F "aod mode forced to 和锁屏样式一致"
+# 3) 息屏后行为应为"和锁屏样式一致"，设置页仍显示「AliveHS 样式」
+```
+
 ## 8. 未解决 / 待验证
 
 | # | 事项 | 现状 |

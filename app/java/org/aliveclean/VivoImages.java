@@ -33,13 +33,35 @@ final class VivoImages implements AutoCloseable {
             return images;
         }catch(IOException|RuntimeException e){images.close();throw e;}
     }
-    /** 只读首张照片的尺寸（不解码像素）：调用方原来为了拿宽高把整套图片都解码了一遍。 */
-    static int[] size(Context host,VivoOptions options)throws IOException{
-        if(options.photos.isEmpty())throw new IOException("No photo selected");
-        int[] edge=PhotoDecode.bounds(new File(host.getFilesDir(),options.photos.get(0)));
+    /**
+     * 只读首张照片的尺寸（不解码像素）：调用方原来为了拿宽高把整套图片都解码了一遍。
+     *
+     * 注意：`photos` 为空是**正常状态**——液态/光栅/闪卡在没有导入照片时用的就是内置默认图
+     * （`VivoImages.load()` 会回退到 `vivo/default/*.jpg`）。这里必须走同样的大小写回退，
+     * 否则进入页面就会抛 "No photo selected"，用户看到 "照片加载失败" 的 toast，
+     * 而画面上默认壁纸其实是正常显示的。
+     */
+    static int[] size(Context host,VivoEngineRuntime runtime,VivoOptions options)throws IOException{
+        int[] edge;
+        if(options.photos.isEmpty()){
+            String name=options.family==VivoOptions.LIQUID?"vivo/default/liquid.jpg"
+                    :options.family==VivoOptions.FLASH?"vivo/default/flash.jpg"
+                    :"vivo/default/raster-0.jpg";
+            edge=assetSize(runtime,name);
+        }else{
+            edge=PhotoDecode.bounds(new File(host.getFilesDir(),options.photos.get(0)));
+        }
+        // load() 对 RASTER 家族（无论图片是用户选的还是默认图）都会按 slots[0].rotation 旋转，
+        // 所以这里也必须交换宽高，否则裁切框比例会错。
         boolean swap=options.family==VivoOptions.RASTER&&options.slots.length>0
                 &&Math.floorMod(options.slots[0].rotation,2)==1;
         return swap?new int[]{edge[1],edge[0]}:edge;
+    }
+    private static int[] assetSize(VivoEngineRuntime runtime,String name)throws IOException{
+        BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;
+        try(InputStream in=runtime.getAssets().open(name)){BitmapFactory.decodeStream(in,null,options);}
+        if(options.outWidth<=0||options.outHeight<=0)throw new IOException("默认图片不可用："+name);
+        return new int[]{options.outWidth,options.outHeight};
     }
     static Bitmap asset(VivoEngineRuntime runtime,String name)throws IOException{
         try(InputStream in=runtime.getAssets().open(name)){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid Vivo image: "+name);return b;}

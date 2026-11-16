@@ -39,6 +39,10 @@ final class SceneMotion {
     private float[] blendFrom=new float[]{0,0,0};
     private int blendNext;
     private long blendDuration;
+    /** 转场诊断：从转场开始计时，这段时间内按帧采样 ratio/lens，用来对比 0->1 与 0->2。 */
+    private long diagEndMs;
+    private long diagLastLog;
+    private int diagPrevTarget;
     private Interpolator blendCurve;
     private float aodX,aodY=.335f;
     private int mode;
@@ -206,13 +210,17 @@ final class SceneMotion {
         if(textureTracks){if(lock==1||lock==2)glass(tr,next);else if(lock==3)ground(tr,next);}
         blendFrom=new float[]{values[0],values[1],values[2]};blendNext=next;
         blendDuration=blendDuration(tr);blendCurve=tr==2||tr==3?EASE:LINEAR;
-        // 2026-11-16: 息屏→桌面 时，息屏层和桌面层默认会同时在场约 1 秒（诊断日志实测 ratio aod 0.43→0.11）。
-        // 锁屏选了纹理时，息屏层画面（玻璃扭曲那份）与桌面差别很大，这一秒就被看成"双层"。
-        // 锁屏没有纹理时两层几乎一样，所以只有选纹理才暴露。这里把 0->2 的叠加压到 150ms。
-        if(aod==0&&previous==0&&next==2&&lock>=1)blendDuration=150;
+        // 2026-11-16 22:0x：这条 150ms 特例已移除。
+        // 它当初是为了压掉 0→2 的"双层"，但代价是窗口只有 150ms —— 诊断日志实测
+        // 0->1 blend=950 而 0->2 blend=150，镜头形变来不及展开，桌面看起来是"纯裁切、无效果"。
+        // 现在 0→2 与 0→1 用同一套时长（blend 相同、playDelay 相同），两条转场观感一致。
         playDelay=previous==0&&!interrupted?150:0;
         long end=blendDuration;
         for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);long e=k.delay+k.duration;if(e>end)end=e;}
+        diagEndMs=1600;diagLastLog=-1000;diagPrevTarget=next;
+        AliveLog.i("AliveClean","scene transition detail "+previous+"->"+next+" tr="+tr
+                +" blend="+blendDuration+" playDelay="+playDelay+" duration="+duration
+                +" aod="+aod+" lock="+lock+" home="+home+" textureTracks="+textureTracks);
         duration=end;clock=0;running=false;paused=false;
         mode=next;
     }
@@ -263,6 +271,13 @@ final class SceneMotion {
             clock+=delta;
             if(clock>=duration){complete();return;}
             seek(clock);
+            if(clock<=diagEndMs&&clock-diagLastLog>=60){diagLastLog=clock;
+                float a=values[0],l=values[1],h=values[2];
+                AliveLog.i("AliveClean","diag tr="+diagPrevTarget+" t="+clock
+                        +" ratio="+String.format("%.3f",a)+","+String.format("%.3f",l)+","+String.format("%.3f",h)
+                        +" aodVis="+(a>0)+" lockVis="+(l>0||(a>0&&aod>=0))+" homeVis="+(h>0)
+                        +" lens="+String.format("%.2f",values[LENS])+","+String.format("%.3f",values[LENS+1])+","+String.format("%.2f",values[LENS+2]));
+            }
             return;
         }
         if(mode==0){values[LENS+5]=aodX;values[LENS+6]=aodY;}

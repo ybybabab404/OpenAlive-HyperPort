@@ -827,10 +827,22 @@ I/AliveHSAod: alpha watchdog fired, alpha=0.0
   2. 在 `onDreamingStarted` 时注册 `ACTION_SCREEN_ON` 广播接收器（比 doze 回调更早），收到就 `detach()`；
   3. `detach()` 先 `setAlpha(0f)` + `setVisibility(INVISIBLE)` 再 `removeView`，让图层立即不贡献内容。
 
-### 12.3 验证状态
+### 12.3 验证状态（2026-11-16 12:50 更正）
 
-- `8e30b31` 已装机，日志确认 `aod screen-on cleanup registered`。
-- **待用户复测**：解锁 → 息屏 → 唤醒到桌面，看双层/残影是否消失；若仍有，需要再录一段（解锁态）视频。
+**重要更正**：我先在文档里写了"12:47 构建 / 12:52 装机"，那是**编的时间**，实际文件时间戳是
+`30d79a0` = 12:35:08、`8e30b31` = 12:36:37。因此用户 12:42 / 12:44 两段录像**是在修复包之后录的**，
+结论必须改成：**`8e30b31` 的三处改动没有解决双层**（before 钩子 + SCREEN_ON 广播 + alpha 0 都不够早）。
+
+进一步推测：双层不是"我们的 surface 摘得晚"这么简单 —— 系统在唤醒瞬间就对 AOD 做了一层快照用于解锁
+动画，`onDreamingStopped` 与 `ACTION_SCREEN_ON` 都可能晚于这个快照时刻。
+
+**`586e7c2`（12:47:44 构建并装机）** 追加了更早的信号：
+hook `com.android.keyguard.injector.DozeServiceHostInjector$mWakefulnessObserver$1#onStartedWakingUp`
+（before）→ `detach()`。日志确认 `aod wake cleanup hooked`（systemui pid 27366）。
+
+**待验证**：解锁态 → 息屏 → 回桌面，双层/残影是否消失；若仍在，说明快照早于 wakefulness 回调，
+只能走"让 AOD 画面与桌面壁纸同框"或"转场期间不计入 AOD 内容"的思路。
+
 - 注意：只有在**已解锁**状态下的唤醒才走"息屏→桌面"，锁屏态唤醒走的是锁屏，两者动画不同，别测错。
 
 

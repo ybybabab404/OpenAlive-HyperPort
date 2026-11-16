@@ -51,6 +51,26 @@ final class HyperOsAod {
             installed = true;
         }
         if (!installed) AliveLog.i(TAG, "no AOD view class in this process");
+        // 唤醒最早的一道信号：DozeServiceHostInjector 的 wakefulness 观察者。
+        // onDreamingStopped / ACTION_SCREEN_ON 都可能晚于系统"截图并开始解锁动画"，
+        // 于是 AOD 里的球被一起带进转场，看起来就是双层（2026-11-16 实测录像确认修复不到位）。
+        try {
+            Class<?> observer = Xp.findClassIfExists(
+                    "com.android.keyguard.injector.DozeServiceHostInjector$mWakefulnessObserver$1", loader);
+            if (observer != null) {
+                Xp.findAndHookMethod(observer, "onStartedWakingUp", new Xp.MethodHook() {
+                    @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                        Trace.log("T14", "wakefulness onStartedWakingUp");
+                        detach();
+                    }
+                });
+                AliveLog.i(TAG, "aod wake cleanup hooked");
+            } else {
+                AliveLog.i(TAG, "no wakefulness observer for AOD cleanup");
+            }
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "aod wake cleanup hook failed", error);
+        }
     }
 
     static void installDoze(ClassLoader loader) {

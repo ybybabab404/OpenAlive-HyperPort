@@ -1004,3 +1004,35 @@ if(aod==0&&previous==0&&next==2&&lock>=1)blendDuration=150;
 **回退基线**：若 150ms 观感不佳，只需调整这个数值（或去掉该 `if` 即回到原行为）。
 
 
+
+### 12.9 2026-11-16 17:2x **已修**：主页/编辑页的"息屏预览"显示成锁屏
+
+**现象**：主页（`HomeActivity`）三张卡片里，「息屏」和「锁屏」是同一张画面；点进编辑页（`MainActivity`，`scene=0`）同样是整屏壁纸，而真机息屏明明是「黑底 + 顶部一个球 + 日期时钟」。
+
+**取证**：
+
+1. 截图差分：三张卡片裁切后 `aod vs lock` 平均差 4.17，`aod vs home` 14.74 —— 息屏与锁屏几乎逐像素相同。
+2. 真机息屏实拍（`input keyevent 26` → `mState=DOZE` → `screencap`）：黑底 + 椭圆球 + 时钟，球的位置与 `HyperOsAod` 的 `BALL_CENTER_Y=0.165 / BALL_RADIUS=0.22` 一致。
+3. 代码定位：`RenderLoop.createScene()` 中 cosmic 分支
+   ```java
+   int palette = mode==0 ? 1 : mode;   // 85cfa94 引入
+   ```
+   而 `CosmicMotion` 内置三套调色板：
+   ```java
+   String[] names = {"aod", "keyguard", "unlock"};
+   float[][] geometry = {{0,.325f,.22f,1,1},{.764f,-.206f,1.181f,.8f},{0,0,1.55f,.6f,1}};
+   ```
+   **aod 那套几何就是「缩放 0.22 的球」**。旧代码把 mode 0 强行映射到 keyguard 调色板 → 息屏预览永远是整屏壁纸 = 锁屏。
+   主页卡片（`HomeScenePreview`）与编辑页（`MainActivity` 的 `renderer`）共用同一个 `RenderLoop`，所以两处一起错。
+
+**修法**：`RenderLoop.createScene()` 的 cosmic 分支改回 `int palette=mode;`（共 1 行逻辑 + 注释）。
+
+**验证**（装机 `f2630bc`）：
+
+- 主页「息屏」卡片 = 黑底 + 球；「锁屏」仍是整屏壁纸；两者不再相同。
+- 编辑页 `scene=0` 预览 = 黑底 + 球，与卡片一致。
+- 真机息屏（同代码的实验包 `db90144` 实测）：仍然是球，只是球比 85cfa94 时代的略小 —— 因为现在画的是 AOD 调色板自带的球，而不是「keyguard 整屏 + SystemUI 椭圆裁剪」。用户确认"正常了"。
+
+**回退**：把 `int palette=mode;` 改回 `mode==0?1:mode` 即回到 85cfa94 的行为（息屏预览与锁屏相同）。
+
+**顺带确认的历史结论**：`85cfa94` 的注释说"AOD 调色板是琥珀色、和预览不一致"——那是它把预览固定成 keyguard 造成的单向不一致；让预览也走 aod 调色板，两边就一致了，代价是放弃"息屏跟锁屏长得一样"这个非目标。

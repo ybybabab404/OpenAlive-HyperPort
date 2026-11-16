@@ -21,7 +21,6 @@ final class VivoMaskEditor {
     private boolean saving,disposed;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final TextView status,done;
-    private VivoSubjectMask.Job segmentation;
     VivoMaskEditor(Activity host,Bitmap photo,Bitmap existing,boolean subject,Saved saved){
         this.host=host;this.saved=saved;this.subject=subject;
         dialog=new Dialog(host,android.R.style.Theme_Material_NoActionBar);
@@ -47,7 +46,7 @@ final class VivoMaskEditor {
         SeekBar size=new SeekBar(host);size.setMax(95);size.setProgress(25);body.addView(size,new LinearLayout.LayoutParams(-1,dp(38)));
         size.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){}public void onProgressChanged(SeekBar s,int value,boolean user){canvas.brush=(value+5)/1000f;}});
         FrameLayout insets=new FrameLayout(host);insets.addView(body,new FrameLayout.LayoutParams(-1,-1));VivoUi.fitSystemBars(insets);
-        dialog.setContentView(insets);dialog.setOnDismissListener(d->{disposed=true;if(segmentation!=null)segmentation.cancel();canvas.close();});
+        dialog.setContentView(insets);dialog.setOnDismissListener(d->{disposed=true;canvas.close();});
         dialog.show();dialog.getWindow().setLayout(-1,-1);dialog.getWindow().setStatusBarColor(0xff101114);dialog.getWindow().setNavigationBarColor(0xff101114);
         if(subject&&existing==null)generate();
     }
@@ -57,18 +56,18 @@ final class VivoMaskEditor {
     private TextView action(String text,Runnable action){TextView v=label(text,15);v.setOnClickListener(w->{if(!saving)action.run();});return v;}
     private void addTool(LinearLayout row,String text,Runnable action){row.addView(action(text,action),new LinearLayout.LayoutParams(0,-1,1));}
     private void generate(){
-        if(saving)return;saving=true;done.setEnabled(false);canvas.setEnabled(false);status.setText("正在本机识别主体…");
+        if(saving)return;saving=true;done.setEnabled(false);canvas.setEnabled(false);status.setText("正在识别主体（MIUI 景深引擎）…");
         final Bitmap input=canvas.photo.copy(Bitmap.Config.ARGB_8888,false);final RectF box=new RectF(canvas.box);
-        final VivoSubjectMask.Job job=new VivoSubjectMask.Job();segmentation=job;
         new Thread(()->{Bitmap result=null;Exception failure=null;
-            try{result=job.generate(host.getApplicationContext(),input,box);}catch(Exception|LinkageError e){failure=new Exception(e);}finally{input.recycle();}
+            try{result=SubjectEngine.subjectMask(host.getApplicationContext(),input,box);}catch(Exception|LinkageError e){failure=new Exception(e);}finally{input.recycle();}
             final Bitmap ready=result;final Exception error=failure;
             main.post(()->{if(disposed){if(ready!=null)ready.recycle();return;}saving=false;done.setEnabled(true);canvas.setEnabled(true);
                 if(error!=null){status.setText("生成失败，请手动涂抹："+error.getMessage());return;}
+                if(ready==null){status.setText("本机未识别出主体，请框选后重试或手动涂抹");return;}
                 canvas.snapshot();new Canvas(canvas.mask).drawBitmap(ready,null,new Rect(0,0,canvas.mask.getWidth(),canvas.mask.getHeight()),null);ready.recycle();canvas.boxMode=false;canvas.invalidate();
                 status.setText("已生成主体蒙版；请检查边缘，画笔添加、擦除修整");
             });
-        },"VivoSubjectMask").start();
+        },"SubjectMask").start();
     }
     private void save(){
         if(saving)return;saving=true;done.setEnabled(false);canvas.setEnabled(false);

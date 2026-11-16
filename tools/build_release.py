@@ -194,26 +194,6 @@ def main(argv) -> None:
     if not xposed.exists():
         fail("Xposed API 102 jar missing: " + str(xposed))
 
-    ort = ROOT / "vendor/onnxruntime"
-    ort_jar = ort / "classes.jar"
-    ort_native = [ort / "jni/arm64-v8a" / name for name in ("libonnxruntime.so", "libonnxruntime4j_jni.so")]
-    for directory, required in ((ort, ["classes.jar", *[p.relative_to(ort).as_posix() for p in ort_native]]),
-                                (ROOT / "app/assets/vivo/models", ["u2netp.onnx"])):
-        metadata = json.loads((directory / "source.json").read_text(encoding="utf8"))
-        for name in required:
-            if sha256(directory / name) != metadata["files"][name]:
-                fail("segmentation input checksum mismatch: " + name)
-    for library in ort_native:
-        data = library.read_bytes()
-        if data[:6] != b"\x7fELF\x02\x01":
-            fail("expected little-endian ELF64: " + library.name)
-        phoff = struct.unpack_from("<Q", data, 32)[0]
-        entry_size, count = struct.unpack_from("<HH", data, 54)
-        for index in range(count):
-            offset = phoff + index * entry_size
-            if struct.unpack_from("<I", data, offset)[0] == 1 and struct.unpack_from("<Q", data, offset + 48)[0] < 16384:
-                fail("native runtime must support 16 KB pages: " + library.name)
-
     if not skip_checks:
         for script in CHECKS:
             run([sys.executable, ROOT / "tools" / script])
@@ -260,14 +240,14 @@ def main(argv) -> None:
                + sorted((OUT / "xz-source").rglob("*.java")))
     javac(OUT / "app.args", ["-encoding", "UTF-8", "-source", "8", "-target", "8",
                              "-bootclasspath", str(ANDROID) + os.pathsep + str(BT / "core-lambda-stubs.jar"),
-                             "-classpath", os.pathsep.join(map(str, [xposed, OUT / "ui-api", ort_jar])),
+                             "-classpath", os.pathsep.join(map(str, [xposed, OUT / "ui-api"])),
                              "-d", OUT / "classes", *sources])
 
     d8 = OUT / "d8.args"
     d8.write_text("\n".join(json.dumps(arg_path(a), ensure_ascii=False) for a in [
         "-cp", BT / "lib/d8.jar", "com.android.tools.r8.D8", "--min-api", "28", "--lib", ANDROID,
         "--classpath", xposed, "--classpath", OUT / "ui-api", "--output", OUT / "dex",
-        ort_jar, *sorted((OUT / "classes").rglob("*.class"))]), encoding="utf8")
+        *sorted((OUT / "classes").rglob("*.class"))]), encoding="utf8")
     run([JDK / ("java" + EXE), "@" + str(d8)])
 
     with zipfile.ZipFile(OUT / "base.apk") as base, zipfile.ZipFile(OUT / "unsigned.apk", "w", zipfile.ZIP_DEFLATED, compresslevel=9) as package:
@@ -282,10 +262,6 @@ def main(argv) -> None:
         write_entry(package, "classes.dex", (OUT / "dex/classes.dex").read_bytes())
         write_entry(package, "classes2.dex", (VENDOR / "editor-ui.dex").read_bytes())
         write_entry(package, "lib/arm64-v8a/libalive_clean.so", native.read_bytes())
-        for library in ort_native:
-            write_entry(package, "lib/arm64-v8a/" + library.name, library.read_bytes())
-        for name in ("LICENSE.txt", "ThirdPartyNotices.txt"):
-            write_entry(package, "assets/licenses/onnxruntime/" + name, (ort / name).read_bytes())
     native_tool(BT / ("zipalign" + EXE), "-f", "-p", RESOURCE_ALIGNMENT, OUT / "unsigned.apk", OUT / "aligned.apk")
 
     key = Path(os.environ.get("ALIVEHS_KEYSTORE", ROOT / "local/development.jks"))
@@ -325,7 +301,6 @@ def main(argv) -> None:
             "libalive_clean.so": sha256(native),
         },
     }
-    report["executables"].update({p.name: sha256(p) for p in ort_native})
     (DIST / "build-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf8", newline="\n")
     (DIST / "SHA256SUMS").write_text(report["sha256"] + "  " + apk.name + "\n", encoding="ascii", newline="\n")
     (DIST / "MD5SUMS").write_text(md5(apk) + "  " + apk.name + "\n", encoding="ascii", newline="\n")

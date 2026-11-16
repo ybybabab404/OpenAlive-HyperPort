@@ -930,4 +930,46 @@ AodWallpaperMode/AodFullScreen/AodSettingsGuard = B/C 修复；RenderLoop = vsyn
 
 - 回归自查：息屏球仍在（球区域亮像素 128/800，max 78）。
 
+### 12.7 2026-11-16 14:1x **锁屏纹理 → 桌面双层**（未解决，卡在设备断开）
+
+用户补充的关键对照（14:15）：
+
+| 配置 | 结果 |
+|---|---|
+| 锁屏=长虹/波浪/雾花，桌面=无 | 息屏→桌面 **有双层** |
+| 锁屏=无，桌面=任意 | 正常 |
+| 锁屏和桌面选同一个纹理 | 正常 |
+| 编辑器里 桌面 预览 | 正常（预览不经过转场） |
+
+代码路径（已读到原生实现）：
+
+- Java：`TextureMotion` 每帧输出 20 个 float（锁屏组 10 + 桌面组 10）→ `NativeScene.effects()`。
+  只选锁屏纹理时 `home` 轨道为 null（`track()` 对 style<1 返回 null）。
+- 原生 `native/renderer.rs`：
+  ```rust
+  let ratio = frame.ratio();        // values[0..3] = (aod, lock, home)，Java 里 values[mode]=1
+  let lock_visible = ratio[1] > 0. || (aod_visible && self.aod >= 0);
+  let home_visible = ratio[2] > 0.;
+  if lock_visible { self.lock_pass(frame); }              // 用 self.lock 的 style 选程序
+  if home_visible { ... self.home_pass(frame); }           // home style==0 时直接输出底图
+  blend: u_ratio = ratio, u_lock_effect = targets[1] ...   // 三层按 ratio 合成
+  ```
+  即：**锁屏层是否用 glass 程序，由 `options.lock` 决定，与那 20 个 float 无关**；
+  那 20 个 float 只控制 glass 的形状参数。
+
+试过但**无效**的三次改动（均已回退）：
+
+1. 桌面组写锁屏那组的值 → 桌面仍双层；
+2. 桌面组写"玻璃关闭"中性值 → 仍双层；
+3. 桌面模式下两组都写中性值 → 仍双层。
+
+结论：问题不在 Java 侧参数，而在原生合成（`ratio` 在 0→2 期间如何演变 / `lock_visible` 在 AOD 淡出期恒真）。
+下一步要验证需要一版**每帧打印 `ratio` 与 `textureMotion.mode` 的诊断包**，跑一次 息屏→桌面 取日志；
+该诊断补丁已写好但**设备在此刻断连，未装机**。
+
+**规避（用户已验证可行）**：桌面也选一个纹理，双层不出现。
+
+**当前装机**：`966b05e`（含三次无效尝试中的最后一次，源码已回退到 `7bad717` 的基线状态，
+重建哈希与 `7bad717` 相同；下次连机重装即回到干净状态）。
+
 

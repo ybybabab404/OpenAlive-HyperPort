@@ -1114,3 +1114,48 @@ adb logcat -d -s AliveClean:* | grep -i "照片加载失败\|No photo selected\|
 
 **教训**：把"整对象加载"换成"只取一部分"的优化，必须把原来隐含的**回退/默认值分支**一起搬过来。
 `VivoImages.load()` 里的 `if(options.photos.isEmpty())` 是默认图回退，不是错误条件。
+
+### 12.12 2026-11-16 20:25 **已修**：切回系统壁纸后，息屏显示模式不恢复成应用前的样子
+
+**现象**：应用项目壁纸后强制「和锁屏样式一致」；再切回系统壁纸，息屏仍是「和锁屏样式一致」，
+回不到应用前的「自定义」。用户明确说"和本次变更无关，至少上个版本就有这个问题"。
+
+**取证（只读）**：
+
+```text
+dumpsys wallpaper   → mWallpaperComponent=org.aliveclean/CleanWallpaper（桌面仍是我们）
+settings get secure → full_screen_aod_on=1  support=1  doze_always_on=1
+logcat 20:20        → "aod mode enter skipped: user setting is authoritative (custom)"
+```
+
+即：应用壁纸那一刻读到的还是 `custom`(0)，之后存储值变成了 1 —— 是 MIUI 侧写的（设置页被锁在
+index 1 = 和锁屏样式一致），而模块**没有留底、也没有还原路径**。
+
+**根因**：`3d1dd48` 把 `AodWallpaperMode.enter()` 改成只打日志，**顺带删掉了"捕获用户原值"**，
+于是 `alive_aod_restore_set` 全仓没有写入点 → `restore()` 第一行 `if (KEY_HAS_RESTORE!=1) return;`
+永远成立 → 整条还原链不可达（`restoreWhenForeign` 的 5 次确认逻辑一直在空转）。
+
+**修法**：`enter()` 里恢复"只捕获、不改写"的语义；`restore()` 保持不变（补了"值相同就不写"和日志）。
+
+```java
+static void enter(Context context) {
+    capture(context);      // 只记下用户此刻的真实值，不写 full_screen_aod_on
+    AliveLog.i(TAG, "aod mode enter skipped: user setting is authoritative (…)");
+}
+```
+
+触发还原的路径是既有的：`AodWallpaperModeHook.postCheck` → `restoreWhenForeign()`（连续 5 次确认
+壁纸不是我们，间隔 1s）→ `restore()`。
+
+**为什么捕获的是真实值**：`enter()` 跑在模块 app 进程，`getInt` 对 `isModuleApp` 走
+`su 0 settings get secure`，不经过 `AodFullScreen` 里新增的"读取即返回 1" hook。
+
+**验证（构建 `22c626d`，已装机）**：
+
+```bash
+adb logcat -d -s AliveHSHooks:* | grep -F "aod mode captured="    # 应用壁纸后应出现一次
+adb logcat -d -s AliveHSHooks:* | grep -F "aod mode restored="    # 切回系统壁纸后应出现
+adb shell settings get secure full_screen_aod_on                  # 应回到应用前的值
+```
+
+**边界**：只在应用壁纸时捕获；用户在模块生效期间改的模式不会被记为"原值"；清模块数据会重新捕获当前值。

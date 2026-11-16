@@ -1232,6 +1232,54 @@ adb logcat -d -s AliveHSHooks:* | grep -F "aod mode forced to 和锁屏样式一
 # 3) 息屏后行为应为"和锁屏样式一致"，设置页仍显示「AliveHS 样式」
 ```
 
+### 7.5.5 切回系统壁纸时要还原用户原来的模式（2026-11-16 补）
+
+**现象**：强制全屏 AOD 之后，切回系统壁纸，息屏仍停留在"和锁屏样式一致"，回不到应用前的"自定义"。
+
+**根因不是我们写坏了值，而是没人留底 + MIUI 自己会写**：
+
+1. `3d1dd48` 删掉了 `AodWallpaperMode.enter()` 里的写入，同时**连"捕获用户原值"也一起删了**
+   → `alive_aod_restore_set` 从此没有写入点 → `restore()` 第一行就 return，永远不可达。
+2. 设置页那一行被 `AodSettingsGuard` 就地锁在 index 1（"和锁屏样式一致" → 显示成"AliveHS 样式"），
+   MIUI 自己的流程会把 `full_screen_aod_on=1` 写进存储；没有任何机制把它写回用户原来的 0。
+
+**修法**（`AodWallpaperMode`）：只补"留底"，不抢用户的选择。
+
+```java
+static void enter(Context context) {
+    capture(context);                    // 记下用户此刻的真实值
+    AliveLog.i(TAG, "aod mode enter skipped: user setting is authoritative (…)");
+}
+
+private static void capture(Context context) {
+    if (getInt(context, KEY_HAS_RESTORE, 0) == 1) return;   // 只捕获一次，多次应用都还原到最初选择
+    int current = getInt(context, KEY_MODE, UNSET);
+    putInt(context, KEY_RESTORE, current);
+    putInt(context, KEY_HAS_RESTORE, 1);
+}
+```
+
+`restore()` 本体保持原样，只补了"值没变就不写"和日志；它由既有的
+`AodWallpaperModeHook.postCheck` → `restoreWhenForeign()`（连续 5 次确认壁纸不是我们）触发。
+
+**为什么捕获到的是真实值**：`enter()` 在模块 app 进程里执行，`AodWallpaperMode.getInt` 对
+`isModuleApp` 走 `su 0 settings get secure`，**不经过** 7.5.2 那个"读取即返回 1"的 hook。
+
+**验证（构建 `22c626d`）**：
+
+```bash
+# 应用项目壁纸后应出现一次
+adb logcat -d -s AliveHSHooks:* | grep -F "aod mode captured="
+# 切回系统壁纸后应出现
+adb logcat -d -s AliveHSHooks:* | grep -F "aod mode restored="
+# 存储值应回到应用前的那个数（例如 0）
+adb shell settings get secure full_screen_aod_on
+```
+
+**已知边界**：
+- 只在**应用壁纸时**捕获。如果用户是在我们已生效期间改的模式，那次改动不会被记为"原值"。
+- 若 marker 被外部清掉（例如清除模块数据），下一次应用会重新捕获当前值（可能已是 1）。
+
 ## 8. 未解决 / 待验证
 
 | # | 事项 | 现状 |

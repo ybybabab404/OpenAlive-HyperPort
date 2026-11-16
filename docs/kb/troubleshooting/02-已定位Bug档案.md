@@ -1063,3 +1063,54 @@ if(aod==0&&previous==0&&next==2&&lock>=1)blendDuration=150;
 - **验证**：Vivo 导入 ~3s → ~10ms；裁切页解码 1.1–1.5s → 0.25s；用户确认"很快，且画质没问题"。
 - **详见**：`features/06-照片解码与导入性能.md`。
 - **回退**：把调用点换回 `ImageDecoder`；Vivo 侧把 `importPhoto()` 的复制分支去掉、改回 `write(PhotoDecode.decode(...))`。
+
+### 12.11 2026-11-16 19:47 **已修（源码，未装机验证）**：Vivo 液态/光栅/闪卡用默认壁纸时提示"照片加载失败：No photo selected"
+
+**现象**：进入 Vivo Alive 壁纸的液态(1)/光栅(2)/闪卡(3)编辑页，画面里默认壁纸显示正常，但弹出 toast
+`照片加载失败：No photo selected`。只在"没有导入过照片、用内置默认图"时出现。
+
+**根因**：这是 12.10.2 那次导入提速改动引入的**回归**（`a218f47`）。
+为了让 `loadImageSize()` 不再为拿宽高把整套图解码一遍，新增了 `VivoImages.size()`，其第一行是
+
+```java
+if(options.photos.isEmpty())throw new IOException("No photo selected");   // ← 错在这里
+```
+
+但 **`photos` 为空是正常状态**：`VivoImages.load()` 在没有用户照片时会回退到内置默认图
+（`vivo/default/liquid.jpg` / `flash.jpg` / `raster-0.jpg`，来自 `textures.zip` 里的
+`assets/vivo/default/*`）。所以画面正常、只有"取尺寸"这条辅助路径抛异常，被
+`VivoEditorActivity.loadImageSize()` 的 catch 接到 → `toast("照片加载失败：" + e.getMessage())`。
+
+**修法**（`VivoImages.size()`，签名加上 `runtime`）：
+
+```java
+int[] edge;
+if(options.photos.isEmpty()){
+    String name=options.family==VivoOptions.LIQUID?"vivo/default/liquid.jpg"
+            :options.family==VivoOptions.FLASH?"vivo/default/flash.jpg"
+            :"vivo/default/raster-0.jpg";
+    edge=assetSize(runtime,name);          // 只读资源头，几毫秒
+}else{
+    edge=PhotoDecode.bounds(new File(host.getFilesDir(),options.photos.get(0)));
+}
+// RASTER 家族无论用户图还是默认图都会按 slots[0].rotation 旋转 → 宽高要交换
+boolean swap=options.family==VivoOptions.RASTER&&options.slots.length>0
+        &&Math.floorMod(options.slots[0].rotation,2)==1;
+return swap?new int[]{edge[1],edge[0]}:edge;
+```
+
+调用点：`VivoEditorActivity.java:91` 改为 `VivoImages.size(this,runtime,selected)`（`runtime` 此时已就绪）。
+
+**验证状态**：构建 `071700e` 编译通过；构建时设备离线（用户不在电脑旁），
+**未装机验证**。下次连上设备后按以下步骤确认：
+
+```bash
+# 逐个家族进页面，看是否还有该 toast / 异常日志
+su 0 am start -n org.aliveclean/.VivoEditorActivity --ei family 1   # 液态
+su 0 am start -n org.aliveclean/.VivoEditorActivity --ei family 2   # 光栅
+su 0 am start -n org.aliveclean/.VivoEditorActivity --ei family 3   # 闪卡
+adb logcat -d -s AliveClean:* | grep -i "照片加载失败\|No photo selected\|默认图片不可用"
+```
+
+**教训**：把"整对象加载"换成"只取一部分"的优化，必须把原来隐含的**回退/默认值分支**一起搬过来。
+`VivoImages.load()` 里的 `if(options.photos.isEmpty())` 是默认图回退，不是错误条件。

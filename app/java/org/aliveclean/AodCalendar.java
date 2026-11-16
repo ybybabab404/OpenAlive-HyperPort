@@ -6,7 +6,7 @@ import android.icu.util.TimeZone;
 import java.util.Locale;
 
 /**
- * 农历日期换算（走 Android ICU 的 ChineseCalendar），给 AOD 时钟第二行用。
+ * 农历日期换算（走 Android ICU 的 ChineseCalendar），给时钟第三行用。
  */
 final class AodCalendar {
     static String lunar(long now,String zone){

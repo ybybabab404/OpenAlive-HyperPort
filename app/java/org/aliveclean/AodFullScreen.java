@@ -409,9 +409,9 @@ final class AodFullScreen {
                     Context context = contextOf(param.thisObject);
                     if (controlsFullAod(context)) {
                         forceManager(param.thisObject, context);
-                        // Native updateSettings writes full_screen_aod_on=0 when its
-                        // support calculation fails (doodle lock screen, video depth).
-                        // Repair the key right after the native write.
+                        // 原生 updateSettings 在支持性计算失败时（涂鸦锁屏、视频景深）会把
+                        // full_screen_aod_on 写成 0。这里**不再改写该键**——它归用户所有；
+                        // ensureEnabled() 如今只记一行日志（旧实现会把它"修回 1"，正是 Bug B 的表象）。
                         if ("updateSettings".equals(name)) {
                             AodWallpaperMode.ensureEnabled(context);
                         }

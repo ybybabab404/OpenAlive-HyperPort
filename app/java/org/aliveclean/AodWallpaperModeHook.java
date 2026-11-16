@@ -9,7 +9,8 @@ import android.os.Looper;
  * WallpaperManagerService.  The old implementation only hooked
  * bindWallpaperComponentLocked, so a switch back to a static system wallpaper could
  * leave full_screen_aod_on=1 until the next process restart.  Hook the public mutation
- * entry points as well; all of them funnel through one deduplicated check.
+ * entry points as well; each one posts the same delayed check, and the restore probe
+ * inside it is deduplicated, so a burst of mutations costs one real check.
  */
 final class AodWallpaperModeHook {
     private static final String TAG = "AliveHSHooks";

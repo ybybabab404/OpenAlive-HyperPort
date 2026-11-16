@@ -7,7 +7,7 @@ import android.widget.Toast;
 
 /**
  * 主题商店跳转：{@code resolve} 依次探测两个 ColorOS 主题商店包，命中返回 Intent、都不在返回 null；
- * {@code open} 直接把 Intent 交给 Activity（失败由调用方兜）。不区分 HyperOS 与其它平台。
+ * {@code open} 直接把 Intent 交给 Activity（异常与找不到目标都在内部 catch 并提示，调用方无需处理）。不区分 HyperOS 与其它平台。
  */
 final class ThemeLinks {
     static Intent resolve(Context context,boolean font){

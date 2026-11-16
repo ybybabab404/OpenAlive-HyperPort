@@ -108,11 +108,6 @@ final class HyperOsAod {
         return current != null ? current : cached;
     }
 
-    static boolean hasInjectedView() {
-        ViewGroup root = aodRoot == null ? null : aodRoot.get();
-        return root != null && root.findViewWithTag(TAG) != null;
-    }
-
     static boolean injectIntoAod() {
         ViewGroup root = rootView();
         if (root == null) {

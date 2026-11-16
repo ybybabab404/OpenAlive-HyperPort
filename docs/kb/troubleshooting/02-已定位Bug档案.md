@@ -1379,11 +1379,13 @@ self.aod_pass(frame, decor, lens_src);
 
 ### 13.3 `PlatformApply` 的 `local-aod` 参数无调用方
 
-- 证据：全仓唯一调用是 `RootBridge.java:20` 传 `panoramic-aod`；`PlatformApply.java:23` 仍接受 `local-aod`，
+- 证据：全仓唯一调用是 `RootBridge.java:20` 传 `panoramic-aod`；`PlatformApply.java:24` 仍接受 `local-aod`，
   且 SDK<31 的提示文案只提 "Local AOD adapter"。属保留入口，不是死码，但容易误解。**未实施**。
 
 ### 13.4 `setReadOnly()` 先于写入（靠已打开的写 FD 才成功）
 
-- 位置：`VivoEngineRuntime`（解包 so）、`XiaomiPlayer`（解包 so）。
-- 现状行为正确（先 open 出写 FD、再 chmod 只读、继续写该 FD），但顺序反直觉：
-  若将来改成"先 chmod 再 open"会立刻失败。**未实施**（只是提醒，不是缺陷）。
+- 位置（全仓 9 处，均为"先 open 出写 FD → `setReadOnly()` → 继续用该 FD 写完"）：
+  `VivoEngineRuntime.java:53/95/107`、`XiaomiPlayer.java:54`、`NativeClockRuntime.java:45`、
+  `OfficialUi.java:33`、`SettingsUi.java:34`、`XiaomiBuiltinPacks.java:36`、`XiaomiUi.java:27`。
+- 现状行为正确（写入靠已打开的 FD），但顺序反直觉：若将来改成「先 chmod 再 open」会立刻失败。
+  **未实施**（只是提醒，不是缺陷）。

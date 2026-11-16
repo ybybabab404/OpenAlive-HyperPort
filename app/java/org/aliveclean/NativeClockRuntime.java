@@ -9,7 +9,8 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 
 /**
- * native 时钟运行时：把随包的 so/字体解压到私有目录并加载，供原生时钟使用。
+ * 官方时钟的运行时素材：把 {@code runtime.apk}（原生时钟的代码/资源）与 {@code MiSansVF.ttf}
+ * 解压到私有目录并按随包 sha256 校验，返回文件给调用方去加载；本类自己不做加载。
  */
 final class NativeClockRuntime {
     static synchronized File unpack(Context host,String name)throws Exception{

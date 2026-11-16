@@ -218,12 +218,32 @@ final class AodWallpaperMode {
     }
 
     static void enter(Context context) {
-        // 2026-11-16：不再写 full_screen_aod_on。
-        // 旧设计在应用壁纸时把它强写成 1，导致「用户选自定义 → 切壁纸后又变回全屏 AOD」，
-        // 而且一旦 marker 被误清就无法还原用户原值。现在模块完全尊重用户的选择，
-        // 需要全屏 AOD 时由 AodFullScreen 去补足设备能力（本机 MiuiConfigs 原生是 false）。
+        // 2026-11-16：应用壁纸时不再写 full_screen_aod_on（用户的选择是权威），
+        // 但要**记下用户当时的值**：设置页被我们锁在 index 1（"AliveHS 样式" = 和锁屏样式一致），
+        // MIUI 自己会把这个 1 写进存储；切回系统壁纸时若不留底，就永远回不到用户原来的模式。
+        capture(context);
         AliveLog.i(TAG, "aod mode enter skipped: user setting is authoritative ("
                 + (wantsFullAod(context) ? "full" : "custom") + ")");
+    }
+
+    /**
+     * 记下用户当前的真实值，供 {@link #restore(Context)} 使用。
+     *
+     * <p>只捕获一次（marker 已存在就不覆盖），因此多次应用壁纸始终还原到用户最初的选择。
+     * 模块 app 进程里的 {@link #getInt} 走 root `settings get`，拿到的是**真实存储值**，
+     * 不会被 {@code AodFullScreen} 那个"读取即返回 1"的 override 影响。</p>
+     */
+    private static void capture(Context context) {
+        if (context == null) return;
+        try {
+            if (getInt(context, KEY_HAS_RESTORE, 0) == 1) return;
+            int current = getInt(context, KEY_MODE, UNSET);
+            putInt(context, KEY_RESTORE, current);
+            putInt(context, KEY_HAS_RESTORE, 1);
+            AliveLog.i(TAG, "aod mode captured=" + current);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "aod mode capture failed", error);
+        }
     }
 
     /**
@@ -301,15 +321,16 @@ final class AodWallpaperMode {
         try {
             if (getInt(context, KEY_HAS_RESTORE, 0) != 1) return;
             int original = getInt(context, KEY_RESTORE, UNSET);
+            int current = getInt(context, KEY_MODE, UNSET);
             if (original == UNSET) {
-                putString(context, KEY_MODE, null);
-            } else {
+                if (current != UNSET) putString(context, KEY_MODE, null);
+            } else if (current != original) {
                 putInt(context, KEY_MODE, original);
             }
             putString(context, KEY_RESTORE, null);
             putString(context, KEY_HAS_RESTORE, null);
             putString(context, KEY_ACTIVE, null);
-            AliveLog.i(TAG, "aod mode restored=" + original);
+            AliveLog.i(TAG, "aod mode restored=" + original + " (was " + current + ")");
         } catch (Throwable error) {
             AliveLog.w(TAG, "aod mode restore failed", error);
         }

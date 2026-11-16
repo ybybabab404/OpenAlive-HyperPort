@@ -5,6 +5,12 @@ import android.util.Half;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ * 把蒙版位图转成带符号距离场，输出 RGBA_F16 位图（距离、x/y 梯度、1）给引擎的 SDK 着色器使用。
+ *
+ * <p>距离用可分离的平方距离变换逐行/逐列算出，再做 9 抽头两遍平滑；计算过程中按行检查线程中断，
+ * 取消时抛 CancellationException，避免大图计算占住页面切换。</p>
+ */
 final class VivoGlyphDistanceField {
     static Bitmap create(Bitmap mask) {
         return create(mask,1f);

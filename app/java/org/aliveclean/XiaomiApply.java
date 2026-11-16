@@ -8,6 +8,16 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 小米超级壁纸的应用入口：把目标 WallpaperService 组件设成系统与锁屏壁纸并校验结果，
+ * 校验不过就把 AOD 模式恢复回去；本类的 main() 是那个提权子进程的入口。
+ *
+ * <p>必须起 uid 1000 的独立 app_process 来干活：setWallpaperComponentWithFlags 是 @hide，
+ * 且改壁纸组件只有 system uid 有权，本进程直接调必然 SecurityException。锁屏槽则是有意的宽限：
+ * SDK 34+ 上如果锁屏槽没落到我们的组件，这里不报错，而是 clear(FLAG_LOCK) 让锁屏跟随系统壁纸，
+ * 否则 MIUI 会拿自己的锁屏壁纸合成景深，和注入层叠成两层（见
+ * docs/kb/troubleshooting/02-已定位Bug档案.md §12.13）。</p>
+ */
 public final class XiaomiApply {
     static void apply(Context c,XiaomiPacks.Pack p)throws Exception {
         if(android.os.Process.myUid()/100000!=0)throw new IOException("目前仅支持主用户");

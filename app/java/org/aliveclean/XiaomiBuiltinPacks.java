@@ -7,6 +7,14 @@ import java.security.MessageDigest;
 import org.json.*;
 import org.tukaani.xz.XZInputStream;
 
+/**
+ * 内置壁纸包的解包与落盘：按 assets/xiaomi/packs.json 清单把按 sha256 命名的 xz 分块解压、
+ * 拼接、逐块与整体校验后，在 files/xiaomi-packs 下生成一份可加载的 apk。
+ *
+ * <p>解出来的包会被当成代码加载（起原版渲染器），所以清单校验、分块 sha256、总字节数和最终
+ * sha256 都是安全边界，任何一处不符直接抛错而不是凑合使用；同一个 digest 的解包靠目录下的
+ * .lock 文件锁串行化，避免多个进程同时写同一个 apk。</p>
+ */
 final class XiaomiBuiltinPacks {
     private static final int CHUNK_LIMIT=4*1024*1024;
     private XiaomiBuiltinPacks(){}

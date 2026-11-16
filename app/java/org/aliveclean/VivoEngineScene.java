@@ -7,6 +7,14 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.*;
 
+/**
+ * 一个引擎场景实例：用反射创建 Vivo 的预渲染器（液态/光栅/闪卡）、图层与控制器，
+ * 并负责可见性、帧驱动、裁切与触摸事件，以及关闭时的释放。
+ *
+ * <p>厂商控制器在进程内是共享的（XxxPrePluginManger 单例的 iEffectPreCtrl 字段），所以每帧都要把
+ * 自己的控制器 pin 回去、清理残留实例留下的陈旧控制器，并用心跳检测帧回调是否卡死；液态家族由引擎
+ * 自己持续回调渲染，光栅/闪卡没有这回调，只能由主线程每 16ms 主动泵帧。</p>
+ */
 final class VivoEngineScene implements AutoCloseable {
     static final String BASE="com.vivo.livewallpaper.box.personalization.",R="com.vivo.livewallpaper.sdk.r2d.render.";
     private final VivoCalls api;

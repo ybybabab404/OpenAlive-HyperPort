@@ -6,6 +6,10 @@ import android.opengl.Matrix;
 import java.io.IOException;
 import java.nio.*;
 
+/**
+ * 气泡壁纸的 GLES3 渲染器：先铺一层渐变背景网格，再按固定顺序叠画三组球体，
+ * 球体的位置、透明度和三组光照参数全部取自 {@link BubbleMotion} 的参数数组。
+ */
 final class BubbleRenderer implements WallpaperRenderer {
     final BubbleMotion motion;
     private AssetGl bubble,background;

@@ -3,6 +3,10 @@ package org.aliveclean;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 
+/**
+ * 调节液态壁纸的灵敏度：在引擎的传感器回调对象外面套一层动态代理，把回调收到的三个分量乘以增益，
+ * 关闭时把原来的回调对象装回传感器。
+ */
 final class VivoLiquidSensitivity implements AutoCloseable {
     private final VivoCalls api;
     private final Object sensor,original;

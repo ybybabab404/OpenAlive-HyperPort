@@ -2,6 +2,10 @@ package org.aliveclean;
 
 import android.opengl.*;
 
+/**
+ * Cosmic 壁纸专用的 EGL 配置挑选：先要求 2x 多重采样，不支持时退回不带 MSAA 的配置，
+ * 两者都固定 8 位 RGBA 与 16 位深度，挑不到就抛异常让调用方失败。
+ */
 final class CosmicEgl {
     static EGLConfig choose(EGLDisplay display,int surfaceType){
         EGLConfig[] configs=new EGLConfig[1];int[] count=new int[1];

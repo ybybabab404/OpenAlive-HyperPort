@@ -6,6 +6,10 @@ import android.os.Bundle;
 import android.view.*;
 import android.widget.*;
 
+/**
+ * 壁纸库入口页：先异步准备引擎运行时，再列出液态、趣味光栅、闪卡三类壁纸，
+ * 点选后带 family 参数进入编辑页。
+ */
 public final class VivoLibraryActivity extends Activity {
     @Override public void onCreate(Bundle state){
         super.onCreate(state);getWindow().setStatusBarColor(0xff000000);getWindow().setNavigationBarColor(0xff000000);

@@ -9,6 +9,14 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.lang.reflect.Method;
 
+/**
+ * 接管小米原版 AOD 布局里的电量控件：把原版图标与百分比文字搬进自己的容器，
+ * 订阅 ACTION_BATTERY_CHANGED 刷新电量与充电状态，取不到原版控件时整体隐藏并降级。
+ *
+ * <p>图标控件来自 com.miui.aod，刷新要调它的隐藏方法 update(int,boolean×5)，遮罩 Path 字段
+ * 在部分版本上是空的，得用 com.miui.aod 资源里的 pathData 重建 —— 所以这里全是反射，
+ * 且任何一步失败都只让电量显示消失，不能让整个 AOD 预览挂掉。</p>
+ */
 final class XiaomiAodBattery extends LinearLayout {
     private final Context host;
     private final View container,icon;

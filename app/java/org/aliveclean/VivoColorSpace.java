@@ -4,6 +4,13 @@ import android.graphics.*;
 import android.opengl.*;
 import android.view.Surface;
 
+/**
+ * 广色域处理：查询 EGL 是否支持 Display P3 直通，据此创建窗口表面、判断当前表面的色彩空间，
+ * 以及在位图与目标色彩空间之间做转换。
+ *
+ * <p>P3 直通是可选扩展（EGL_EXT_gl_colorspace_display_p3_passthrough），设备不支持或创建失败时
+ * 必须退回普通的 eglCreateWindowSurface，否则连画面都起不来。</p>
+ */
 final class VivoColorSpace {
 
     private static final int EGL_GL_COLORSPACE_KHR=0x309D,EGL_GL_COLORSPACE_DISPLAY_P3_PASSTHROUGH_EXT=0x3490;

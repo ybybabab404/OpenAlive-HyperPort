@@ -5,6 +5,12 @@ import android.graphics.*;
 import java.io.*;
 import java.util.*;
 
+/**
+ * 一次性加载渲染要用的图片素材（照片、主体蒙版、涂抹蒙版），并在关闭时统一回收。
+ *
+ * <p>没有导入照片时会回退到 assets 里的 vivo/default 内置图；RASTER 家族还会按槽位旋转角
+ * 预先旋转位图，所以取尺寸时宽高可能要与文件本身相反（见 size()）。</p>
+ */
 final class VivoImages implements AutoCloseable {
     final ArrayList<Bitmap> photos=new ArrayList<>();
     Bitmap subject,paint;

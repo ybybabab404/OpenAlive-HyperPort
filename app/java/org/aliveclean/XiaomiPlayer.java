@@ -17,6 +17,16 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.zip.*;
 
+/**
+ * 把小米原版超级壁纸跑起来：解出包里的 .so、用 DexClassLoader 加载原版类，把 Surface 和事件串
+ * （SysRes/Refresh/Land…）转发给 Unity/MrePlayer/n2 那套原版渲染器，并管理它的初始化、
+ * 就绪、暂停与销毁。
+ *
+ * <p>原版渲染器不是编译期依赖，类名与方法全部按字符串反射：Unity 家族靠 UnitySendMessage 转发，
+ * 雪山家族走 n2.a#b 且要用 XiaomiSurfaceLease 保住 Surface 引用（见
+ * docs/notes/xiaomi-surface-lifecycle-20261021.md）。同一个进程只允许存在一个 Runtime ——
+ * Unity 的 native 库只能初始化一次，换包必须换进程。</p>
+ */
 public final class XiaomiPlayer implements AutoCloseable {
     private static final Map<String,Runtime> runtimes=new HashMap<>();
     public static final class Runtime {

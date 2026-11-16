@@ -8,6 +8,15 @@ import android.view.LayoutInflater;
 import android.view.View;
 import java.lang.reflect.*;
 
+/**
+ * 离屏渲染一张小米 AOD 预览图：把 com.miui.aod 的样式控制器与缩略图布局装出来后测量、
+ * 布局、画进 Bitmap；内部的 Renderer 也被实时预览视图复用来刷新时钟。
+ *
+ * <p>原版类与资源 id 都通过小米 UI 包的 ClassLoader 反射取得，并且必须先把
+ * AODApplication.sInstance / sysuiContext 指向这个 ContextWrapper，原版代码才肯继续初始化；
+ * 日期/城市文字用 assets/native-clock/runtime/hyperos/fonts/MiSansVF.ttf 覆盖，
+ * 因为宿主里没有小米的字体资源。</p>
+ */
 final class XiaomiAodPreview {
     static Bitmap render(Context host,Bundle metadata,int width,int height)throws Exception {
         Renderer renderer=new Renderer(host,metadata);

@@ -13,6 +13,14 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.Locale;
 
+/**
+ * 引擎的运行时宿主环境：把 assets 里的 engine.apk、textures.zip 与 libpag/libffavc 释放到缓存目录，
+ * 再拿它们拼出 DexClassLoader 与 Resources，包装成一个 Context 交给厂商代码。
+ *
+ * <p>厂商的 so 必须先落到磁盘并设为只读才能被加载（DexClassLoader 需要 native 库搜索路径），
+ * 释放时按随包的 .sha256 校验，命中损坏的缓存就删掉重写；同一个 engine.apk 路径共用一个类加载器，
+ * 避免同一份厂商类被加载成两份而互相不认。prepare() 把这套耗时步骤放到后台线程。</p>
+ */
 final class VivoEngineRuntime extends ContextWrapper {
     private static final String PREFIX = "vivo/runtime/";
     private static ClassLoader sharedLoader;

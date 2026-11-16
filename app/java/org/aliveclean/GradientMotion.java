@@ -4,6 +4,10 @@ import android.content.res.AssetManager;
 import org.json.*;
 import java.io.IOException;
 
+/**
+ * 渐变壁纸（damos / jiguang / yuanhai）的动画：没有场景过渡，逐帧用正弦波改写六条样条的纵坐标，
+ * 再交给 {@link GradientSpline} 求出交给着色器的分段三次系数。
+ */
 final class GradientMotion implements WallpaperMotion {
     static final String[] COLORS={"a_inner","b_inner","a_cp1","b_cp1","a_cp2","b_cp2",
         "a_cp3","b_cp3","a_cp4","b_cp4","a_cp5","b_cp5","a_cp6","b_cp6","a_outer","b_outer"};

@@ -2,6 +2,13 @@ package org.aliveclean;
 
 import android.opengl.GLES30;
 
+/**
+ * 独立的压暗通道：用一个全屏三角形把黑色按 alpha=1-brightness 叠在整个画面上，
+ * 用于深色壁纸/息屏模式整体压低壁纸亮度。
+ *
+ * <p>它会临时接管一片 GL 状态（着色器程序、VAO、帧缓冲、混合参数、视口、颜色掩码与各 cap），
+ * 画完必须原样还原，否则会破坏厂商渲染器留下的状态。</p>
+ */
 final class VivoDimPass implements AutoCloseable {
     private int program,vao,level;
     private final int[] state=new int[13],viewport=new int[4];

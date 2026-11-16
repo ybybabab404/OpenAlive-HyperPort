@@ -8,6 +8,13 @@ import java.security.MessageDigest;
 import java.util.*;
 import org.json.*;
 
+/**
+ * 壁纸包目录与定位：读 assets/xiaomi/catalog.json 得到内置包清单（id、标题、sha256、字节数、
+ * 横屏变体数），并负责查找、校验、取包内资源以及读写每个包的横屏选择。
+ *
+ * <p>find 的查找顺序是有意的：先用 files 下已解出的包，再用系统里已安装的同包名 apk，
+ * 最后才从 assets 解包 —— 用户装了原版包时就不必再解出几百兆。</p>
+ */
 final class XiaomiPacks {
     static final class Pack {
         final String id,title,digest; final long bytes; final int lands;

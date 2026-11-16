@@ -3,6 +3,14 @@ package org.aliveclean;
 import java.lang.reflect.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 对 Vivo 引擎（打包在 engine.apk 里的厂商代码）的反射调用封装：按类名加载类型、构造实例，
+ * 并缓存 Method 来调用它的成员。
+ *
+ * <p>引擎里的成员大多是包私有或被隐藏的，方法/字段又常常声明在父类上，所以这里不能直接 new 或强转：
+ * 每次都要从具体类沿父类链查找声明，再 setAccessible(true)；构造与调用抛出的
+ * InvocationTargetException 还要拆出原始异常，上层才能按引擎自己的异常类型处理。</p>
+ */
 final class VivoCalls {
     private final ClassLoader loader;
     private final ConcurrentHashMap<String,Method> methods=new ConcurrentHashMap<>();

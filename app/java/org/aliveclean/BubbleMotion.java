@@ -6,6 +6,10 @@ import android.view.animation.PathInterpolator;
 import java.io.IOException;
 import org.json.*;
 
+/**
+ * 气泡壁纸的动画状态：装载 {@code bubble/v<variant>.json} 里的三套场景预设（0=息屏 1=锁屏 2=桌面），
+ * 场景切换时对气泡的位置、半径、透明度与背景配色分别按各自的曲线插值。
+ */
 final class BubbleMotion implements WallpaperMotion {
     static final int STRIDE=36,SIZE=STRIDE*3+52;
     final float[] values=new float[SIZE],from=new float[SIZE];

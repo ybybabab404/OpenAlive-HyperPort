@@ -11,6 +11,10 @@ import java.io.FileOutputStream;
 import java.util.ArrayDeque;
 import java.util.UUID;
 
+/**
+ * 蒙版编辑对话框：显示照片和半透明蒙版，提供画笔、擦除、撤销、清空，主体模式下还能框选后调用
+ * 景深引擎自动识别，最后把蒙版存成 PNG 并回调文件名。
+ */
 final class VivoMaskEditor {
     interface Saved {void save(String file);}
     private final Activity host;

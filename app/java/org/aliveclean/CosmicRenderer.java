@@ -9,6 +9,10 @@ import android.graphics.BitmapFactory;
 import java.io.*;
 import java.nio.*;
 
+/**
+ * Cosmic 球体壁纸的 GLES3 渲染器：先铺一层渐变背景，再绘制预烘焙的球体网格
+ * （Phoenix 变体换用 phoenix.bin 并额外挂一张噪点纹理），所有外观参数都按固定偏移从 {@link CosmicMotion} 取值。
+ */
 final class CosmicRenderer implements WallpaperRenderer {
     final CosmicMotion motion;
     private AssetGl sphere,background;

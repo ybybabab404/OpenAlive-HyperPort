@@ -5,6 +5,13 @@ import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.WindowManager;
 
+/**
+ * 决定小米 AOD/预览渲染该用多少 dpi：优先采用 miuix 自动密度算出的目标值，
+ * 拿不到就按屏幕物理尺寸与基线自己折算一个。
+ *
+ * <p>platformDefaultDpi 只对 OPPO/OnePlus ROM 生效（靠 ro.build.version.oplusrom/opporom 判断），
+ * 作用是拿到系统"初始 dpi"当基线来纠正 miuix 的目标值；其他机型直接返回 0，走 phoneDensity。</p>
+ */
 final class XiaomiAodDensity {
     static int resolve(Context host,ClassLoader loader){
         Display display=((WindowManager)host.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();

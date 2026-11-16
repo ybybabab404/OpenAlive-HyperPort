@@ -11,6 +11,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 
+/**
+ * Flyme 视频壁纸的解码器：从 asset 里的 mp4 解出视频轨，按调用方给出的目标时间戳选帧并渲染到传入的 Surface。
+ *
+ * <p>解码是拉模式、最多两个在途帧：取哪一帧完全由 {@link FlymeVideoMotion} 的播放时钟决定，
+ * 不能让 MediaCodec 自由按实时帧率出帧，否则慢放时会不停丢帧。</p>
+ */
 final class FlymeVideoDecoder implements AutoCloseable {
     private final Surface surface;
     private final Handler handler;

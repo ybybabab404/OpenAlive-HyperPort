@@ -17,6 +17,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
+/**
+ * Flyme 视频壁纸的 GLES3 渲染器：把解码器输出的外部纹理画满屏幕，第一帧解码出来之前先显示静态缩略图。
+ */
 final class FlymeVideoRenderer implements WallpaperRenderer {
     private static final String BASE="flyme-video/";
     private final int width,height;

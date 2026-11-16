@@ -11,6 +11,14 @@ import java.io.*;
 import java.lang.reflect.*;
 import java.util.*;
 
+/**
+ * 小米超级壁纸的选择页：加载小米 UI 资源、搭出 miuix action bar + RecyclerView 的列表界面，
+ * 把内置包渲染成小米主题管理器风格的列表项，点选后跳到对应的预览页。
+ *
+ * <p>列表项布局与 binder 都来自 com.android.thememanager（随小米 UI 包加载，编译期无法直接引用），
+ * 所以 k()/toq() 和 kotlin Function1 回调只能用反射加动态代理构造；任何失败统一交给 failure()
+ * 记日志并弹系统 AlertDialog，保证界面对用户有反馈。</p>
+ */
 public final class XiaomiLibraryActivity extends Activity {
     private XiaomiUi ui; private boolean busy;
     private int openRequest; private ProgressDialog preparing;

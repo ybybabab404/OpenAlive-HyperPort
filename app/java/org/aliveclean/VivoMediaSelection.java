@@ -7,6 +7,13 @@ import android.net.Uri;
 import java.io.*;
 import java.util.*;
 
+/**
+ * 素材导入：把用户从相册选中的图片/视频复制成应用私有文件，折算进 VivoOptions 的照片、视频与槽位字段，
+ * 并记录本次新建的文件，放弃时统一删除。
+ *
+ * <p>图片优先原样复制而不重新编码——没有二次压缩损失，也只要几毫秒，解码交给引擎按需采样；
+ * 只有复制过来的文件确实解不开时，才退回解码后重新压缩。</p>
+ */
 final class VivoMediaSelection {
     static final int WALLPAPER=10,VIDEO=11,COVER=12,ALBUM=13,COVER_VIDEO=14,ALBUM_VIDEO=15;
     static final int SLOT_IMAGE=30,SLOT_VIDEO=33;

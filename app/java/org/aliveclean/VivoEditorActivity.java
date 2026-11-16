@@ -12,6 +12,13 @@ import java.io.*;
 import java.util.*;
 import org.json.*;
 
+/**
+ * 壁纸编辑页：在 TextureView 上实时预览 Vivo 引擎效果，提供壁纸/装饰选项、灵敏度、裁切与素材导入，
+ * 负责把编辑结果应用成锁屏壁纸，并在之后配置息屏显示。
+ *
+ * <p>应用分两条路：HyperOS 上走 SceneApply，其余走系统壁纸选择器；只有确认壁纸真的被替换后才提交草稿
+ * （SceneOptions APPLIED），否则用户会看到"已应用"而实际没换。</p>
+ */
 public final class VivoEditorActivity extends Activity implements TextureView.SurfaceTextureListener {
     private VivoOptions options;
     private VivoEngineRuntime runtime;

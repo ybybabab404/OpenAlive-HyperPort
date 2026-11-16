@@ -7,6 +7,13 @@ import android.view.animation.PathInterpolator;
 import org.json.*;
 import java.io.*;
 
+/**
+ * Cosmic 球体壁纸的动画状态：装载 {@code cosmic/v<variant>.json} 里的三套场景参数（0=息屏 1=锁屏 2=桌面），
+ * 场景切换时按位置、缩放、材质色、背景渐变与 Phoenix 的相机/流动/噪点分组分别插值。
+ *
+ * <p>Phoenix 变体（variant 101–105）的专有参数压在同一数组第 62 项之后，
+ * 非 Phoenix 配置从不写这些槽位，因此它们在渲染时恒为 0。</p>
+ */
 final class CosmicMotion implements WallpaperMotion {
     static final int SIZE=95;
     final float[] values=new float[SIZE];

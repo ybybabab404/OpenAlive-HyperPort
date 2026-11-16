@@ -6,6 +6,13 @@ import android.opengl.Matrix;
 import java.io.IOException;
 import java.nio.*;
 
+/**
+ * 渐变壁纸的 GLES3 渲染器：用一条 100 列的三角带铺满屏幕，把六条样条的系数和 16 个控制点颜色灌进片元着色器。
+ *
+ * <p>uniform 名是拼字符串拼出来的（{@code u_splineN.funcM.coefficients}），必须与
+ * {@code app/assets/shader/gradient/gradient.vert} 里 {@code PolynomialSpline}/{@code PolynomialFunction}
+ * 的成员名逐字一致（字段声明在顶点着色器里，不在 .frag）；改名要两边同时改，否则取到 -1 会静默失效。</p>
+ */
 final class GradientRenderer implements WallpaperRenderer {
     private static final int COLUMNS=100;
     final GradientMotion motion;

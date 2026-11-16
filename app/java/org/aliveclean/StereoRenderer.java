@@ -12,6 +12,9 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
+/**
+ * 立体壁纸的 GLES3 渲染器：先用主图加深度图把位移结果画进离屏纹理，再连同原图按缩放裁剪合成为最终画面。
+ */
 final class StereoRenderer implements WallpaperRenderer {
     final StereoMotion motion;
     private AssetGl split,compose;

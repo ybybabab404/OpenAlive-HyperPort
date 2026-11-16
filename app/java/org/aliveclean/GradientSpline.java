@@ -1,5 +1,9 @@
 package org.aliveclean;
 
+/**
+ * 自然三次样条求解：用追赶法把一组递增节点的 y 值化成每段 4 个系数（常数项到三次项），
+ * 这 4 个分量就是 {@link GradientRenderer} 直接上传给着色器的 vec4 布局。
+ */
 final class GradientSpline {
     final float[] knots,coefficients;
     private final double[] span,upper,rhs,curvature;

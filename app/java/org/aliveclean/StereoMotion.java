@@ -1,5 +1,9 @@
 package org.aliveclean;
 
+/**
+ * 立体壁纸的动画状态：把陀螺仪角速度积成球面上的朝向向量，换算成主图的视差位移，
+ * 并在息屏/锁屏/桌面之间按各自的时长过渡缩放。
+ */
 final class StereoMotion implements WallpaperMotion {
     private int scene;
     private float scale,fromScale,targetScale,elapsed,duration;

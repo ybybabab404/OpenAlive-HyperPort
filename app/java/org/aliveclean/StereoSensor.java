@@ -7,6 +7,9 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Handler;
 
+/**
+ * 陀螺仪取数封装：只在 setActive(true) 期间注册监听，把采样连同时间戳转给 {@link Listener}，供立体壁纸驱动视差。
+ */
 final class StereoSensor implements SensorEventListener,AutoCloseable {
     interface Listener {void onGyroscope(float x,float y,float z,long timestamp);}
     private final SensorManager manager;

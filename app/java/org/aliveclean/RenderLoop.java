@@ -261,7 +261,11 @@ final class RenderLoop {
         if(options.cosmic!=0){
             boolean dark=(context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
 
-            int palette=mode==0?1:mode;
+            // CosmicMotion ships three palettes (aod/keyguard/unlock); the aod one draws the
+            // wallpaper as a small sphere on black, which is exactly what the always-on screen
+            // shows. Forcing the keyguard palette here (85cfa94) made every AOD preview -- the
+            // home cards and the editor's 息屏 page -- render the lock screen instead of the ball.
+            int palette=mode;
             cosmic=WallpaperRenderer.create(context.getAssets(),options.cosmic,dark,width,height,palette,options.cosmicKeepLock,this::schedule);
             if(cosmic instanceof StereoRenderer)((StereoRenderer)cosmic).configure(options.stereoSensitivity,options.stereoAodAnimation);
             if(cosmic instanceof StereoRenderer)stereoSensor=new StereoSensor(context,handler,(x,y,z,time)->{

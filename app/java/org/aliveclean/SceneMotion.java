@@ -36,7 +36,6 @@ final class SceneMotion {
     private float positionStartX,positionStartY;
     private long lastFrame,clock,playDelay,duration;
     private boolean running,paused,groundMask;
-    private boolean instantNext;
     private float[] blendFrom=new float[]{0,0,0};
     private int blendNext;
     private long blendDuration;
@@ -109,7 +108,8 @@ final class SceneMotion {
         long[] ms={1000,1000,1000,1000,1000,1000,1000,1000,1000,1000};
         Interpolator[] curves={DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT,DEFAULT};
         long rippleDelay=0;
-        float angleStart=values[LENS+9];        if(tr==0||tr==2) {
+        float angleStart=values[LENS+9];
+        if(tr==0||tr==2) {
             ms[0]=183;curves[0]=EASE;ms[3]=33;curves[3]=EASE;
             ms[1]=ms[5]=ms[6]=tr==0?950:1000;
             curves[1]=curves[5]=curves[6]=tr==0?EXPAND:path(0,0,0,1);
@@ -133,8 +133,8 @@ final class SceneMotion {
             ms[9]=24;curves[9]=ROTATE;ms[7]=0;
         }
 
-        if(instantNext){for(int i=0;i<ms.length;i++)ms[i]=0;rippleDelay=0;}
-        for(int i:new int[]{0,1,2,8,3,4,5,6,7,9}) {            if(Float.isNaN(target[i])) continue;
+        for(int i:new int[]{0,1,2,8,3,4,5,6,7,9}) {
+            if(Float.isNaN(target[i])) continue;
             Track animator=i==9?new Track(LENS+9,angleStart,target[9],0,ms[i],curves[i]):track(LENS+i,target[i],ms[i],curves[i]);
             if(i==8)animator.delay=rippleDelay;
             if(i==5){positionX=animator;positionStartX=values[LENS+5];}
@@ -189,16 +189,11 @@ final class SceneMotion {
         tracks.clear();groundMask=false;
         int previous=mode,tr=transition(previous,next);
         if(aod==0&&previous==0&&next==2){tr=0;AliveLog.i("AliveClean","scene sail lock animation 0->2 tr=0");}
-        // 2026-11-16: 启航(aod==0) 从息屏回到桌面/锁屏时不要做镜头转场。
-        // 系统的唤醒动画本身已经是一层缩放，壁纸再自己播 650~1000ms 的镜头收缩，
-        // 两层叠在一起就是用户看到的"双层 + 残影"（只有启航样式有，其它样式不走 lens）。
-        instantNext=aod==0&&previous==0&&next!=0;
-        if(instantNext)AliveLog.i("AliveClean","scene sail wake instant "+previous+"->"+next);
         if(aod==0)lens(tr,next);else if(aod==101)full(tr,next);
         if(textureTracks){if(lock==1||lock==2)glass(tr,next);else if(lock==3)ground(tr,next);}
         blendFrom=new float[]{values[0],values[1],values[2]};blendNext=next;
         blendDuration=blendDuration(tr);blendCurve=tr==2||tr==3?EASE:LINEAR;
-        playDelay=previous==0&&!interrupted&&!instantNext?150:0;
+        playDelay=previous==0&&!interrupted?150:0;
         long end=blendDuration;
         for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);long e=k.delay+k.duration;if(e>end)end=e;}
         duration=end;clock=0;running=false;paused=false;

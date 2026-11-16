@@ -33,6 +33,14 @@ final class VivoImages implements AutoCloseable {
             return images;
         }catch(IOException|RuntimeException e){images.close();throw e;}
     }
+    /** 只读首张照片的尺寸（不解码像素）：调用方原来为了拿宽高把整套图片都解码了一遍。 */
+    static int[] size(Context host,VivoOptions options)throws IOException{
+        if(options.photos.isEmpty())throw new IOException("No photo selected");
+        int[] edge=PhotoDecode.bounds(new File(host.getFilesDir(),options.photos.get(0)));
+        boolean swap=options.family==VivoOptions.RASTER&&options.slots.length>0
+                &&Math.floorMod(options.slots[0].rotation,2)==1;
+        return swap?new int[]{edge[1],edge[0]}:edge;
+    }
     static Bitmap asset(VivoEngineRuntime runtime,String name)throws IOException{
         try(InputStream in=runtime.getAssets().open(name)){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid Vivo image: "+name);return b;}
     }
@@ -47,11 +55,7 @@ final class VivoImages implements AutoCloseable {
     private static Bitmap file(Context host,String name)throws IOException{
         File f=new File(host.getFilesDir(),name);
         if(!name.matches("vivo-[A-Za-z0-9._-]+"))throw new IOException("Invalid image path");
-        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(f),(decoder,info,s)->{
-            float scale=Math.min(1,2560f/Math.max(info.getSize().getWidth(),info.getSize().getHeight()));
-            decoder.setTargetSize(Math.max(1,Math.round(info.getSize().getWidth()*scale)),Math.max(1,Math.round(info.getSize().getHeight()*scale)));
-            decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-        });
+        return PhotoDecode.decode(f,2560);
     }
     @Override public void close(){for(Bitmap b:photos)b.recycle();photos.clear();if(subject!=null)subject.recycle();if(paint!=null)paint.recycle();subject=paint=null;}
 }

@@ -41,10 +41,7 @@ public final class PhotoCropActivity extends Activity {
         TextView hint=text("双指缩放，拖动调整位置",14);hint.setTextColor(0xffbbbbbb);root.addView(hint,new LinearLayout.LayoutParams(-1,dp(36)));
         TextView reset=button("复位",false);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(86),dp(38));rp.gravity=Gravity.CENTER;rp.bottomMargin=dp(18);root.addView(reset,rp);reset.setOnClickListener(v->{if(!saving){viewport.reset();cropView.invalidate();}});
         new Thread(()->{try{
-            Bitmap decoded=ImageDecoder.decodeBitmap(ImageDecoder.createSource(new File(getFilesDir(),source)),(decoder,info,input)->{
-                int w=info.getSize().getWidth(),h=info.getSize().getHeight();float scale=Math.min(1,2048f/Math.max(w,h));
-                decoder.setTargetSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-            });
+            Bitmap decoded=PhotoDecode.decode(new File(getFilesDir(),source),1440);
             runOnUiThread(()->{if(isDestroyed()||isFinishing()){decoded.recycle();return;}bitmap=decoded;viewport.dimensions(bitmap.getWidth(),bitmap.getHeight(),screenWidth,screenHeight);done.setEnabled(true);cropView.invalidate();});
         }catch(Exception e){runOnUiThread(()->{if(!isDestroyed()){Toast.makeText(this,"无法读取照片："+e.getMessage(),Toast.LENGTH_LONG).show();finish();}});}},"PhotoCropDecode").start();
     }
@@ -92,17 +89,18 @@ public final class PhotoCropActivity extends Activity {
     }
     static Bitmap export(File input,PhotoViewport selection,int outWidth,int outHeight)throws IOException{
         final float left=selection.left(),top=selection.top(),width=selection.width(),height=selection.height();
-        Bitmap decoded=ImageDecoder.decodeBitmap(ImageDecoder.createSource(input),(decoder,info,source)->{
-            int w=info.getSize().getWidth(),h=info.getSize().getHeight();
-            float scale=Math.min(1,Math.max(outWidth/(w*width),outHeight/(h*height)));
-            scale=Math.min(scale,8192f/Math.max(w,h));
-            int tw=Math.max(1,Math.round(w*scale)),th=Math.max(1,Math.round(h*scale));
-            decoder.setTargetSize(tw,th);
-            int l=Math.max(0,Math.min(tw-1,Math.round(left*tw))),t=Math.max(0,Math.min(th-1,Math.round(top*th)));
-            int r=Math.max(l+1,Math.min(tw,Math.round((left+width)*tw))),b=Math.max(t+1,Math.min(th,Math.round((top+height)*th)));
-            decoder.setCrop(new Rect(l,t,r,b));decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-        });
-        Bitmap result=Bitmap.createScaledBitmap(decoded,outWidth,outHeight,true);if(result!=decoded)decoded.recycle();return result;
+        int[] size=PhotoDecode.bounds(input);
+        float scale=Math.min(1,Math.max(outWidth/(size[0]*width),outHeight/(size[1]*height)));
+        scale=Math.min(scale,8192f/Math.max(size[0],size[1]));
+        int targetWidth=Math.max(1,Math.round(size[0]*scale)),targetHeight=Math.max(1,Math.round(size[1]*scale));
+        Bitmap decoded=PhotoDecode.decode(input,Math.max(targetWidth,targetHeight),false);
+        int l=Math.max(0,Math.min(decoded.getWidth()-1,Math.round(left*decoded.getWidth())));
+        int t=Math.max(0,Math.min(decoded.getHeight()-1,Math.round(top*decoded.getHeight())));
+        int r=Math.max(l+1,Math.min(decoded.getWidth(),Math.round((left+width)*decoded.getWidth())));
+        int b=Math.max(t+1,Math.min(decoded.getHeight(),Math.round((top+height)*decoded.getHeight())));
+        Bitmap cropped=Bitmap.createBitmap(decoded,l,t,r-l,b-t);
+        if(cropped!=decoded)decoded.recycle();
+        Bitmap result=Bitmap.createScaledBitmap(cropped,outWidth,outHeight,true);if(result!=cropped)cropped.recycle();return result;
     }
     private void save(){
         if(bitmap==null||saving)return;saving=true;done.setEnabled(false);done.setText("保存中");

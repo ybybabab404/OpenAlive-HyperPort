@@ -87,8 +87,9 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         });
     }
     private void updateCrop(){options.x=crop.centerX();options.y=crop.centerY();options.zoom=crop.zoom();if(options.family==VivoOptions.RASTER&&!options.video.isEmpty()){for(VivoOptions.Slot slot:options.slots){slot.x=options.x;slot.y=options.y;slot.zoom=options.zoom;}}if(renderer!=null)renderer.vivoCrop(options.x,options.y,options.zoom);}
-    private void loadImageSize(){final VivoOptions selected=VivoOptions.parse(options.json());new Thread(()->{try(VivoImages images=VivoImages.load(this,runtime,selected)){
-        int w=images.photos.get(0).getWidth(),h=images.photos.get(0).getHeight();runOnUiThread(()->{if(isDestroyed()||!selected.json().equals(options.json()))return;imageWidth=w;imageHeight=h;configureCrop();});
+    private void loadImageSize(){final VivoOptions selected=VivoOptions.parse(options.json());new Thread(()->{try{
+        int[] edge=VivoImages.size(this,selected);int w=edge[0],h=edge[1];
+        runOnUiThread(()->{if(isDestroyed()||!selected.json().equals(options.json()))return;imageWidth=w;imageHeight=h;configureCrop();});
     }catch(Exception e){runOnUiThread(()->toast("照片加载失败："+e.getMessage()));}},"VivoPhotoSize").start();}
     private void configureCrop(){if(preview==null||preview.getWidth()==0)return;crop.dimensions(imageWidth,imageHeight,preview.getWidth(),preview.getHeight());crop.restore(options.x,options.y,options.zoom);}
     private void saveDraft(){

@@ -49,14 +49,8 @@ final class VivoMediaSelection {
             result.x=result.y=.5f;result.zoom=1;return;
         }
         ArrayList<String> selected=new ArrayList<>();
-        for(Uri uri:uris){
-            Bitmap bitmap=ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.getContentResolver(),uri),(decoder,info,source)->{
-                float ratio=Math.min(1,2560f/Math.max(info.getSize().getWidth(),info.getSize().getHeight()));
-                decoder.setTargetSize(Math.max(1,Math.round(info.getSize().getWidth()*ratio)),Math.max(1,Math.round(info.getSize().getHeight()*ratio)));
-                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-            });
-            try{selected.add(write(bitmap));}finally{bitmap.recycle();}
-        }
+        long importStart=System.currentTimeMillis();
+        for(Uri uri:uris)selected.add(importPhoto(uri));
         if(kind==COVER){
             ensureRasterPhotos(runtime);
             result.photos.set(0,selected.get(0));
@@ -69,6 +63,7 @@ final class VivoMediaSelection {
             result.rasterVideos.clear();for(int i=0;i<selected.size();i++)result.rasterVideos.add("");
             result.subject="";result.paint="";result.area=4;
         }
+        AliveLog.i("AliveClean","vivo import total "+(System.currentTimeMillis()-importStart)+"ms for "+uris.size()+" item(s)");
         result.x=result.y=.5f;result.zoom=1;
     }
     private void importSlot(VivoEngineRuntime runtime,int index,boolean movie,List<Uri> uris)throws Exception{
@@ -86,12 +81,7 @@ final class VivoMediaSelection {
             result.videoFrames=previous.videoFrames;result.videoRate=previous.videoRate;
             result.photos.set(index,poster);result.rasterVideos.set(index,clip);
         }else{
-            Bitmap b=ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.getContentResolver(),uris.get(0)),(decoder,info,source)->{
-                float ratio=Math.min(1,2560f/Math.max(info.getSize().getWidth(),info.getSize().getHeight()));
-                decoder.setTargetSize(Math.max(1,Math.round(info.getSize().getWidth()*ratio)),Math.max(1,Math.round(info.getSize().getHeight()*ratio)));
-                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-            });
-            try{result.photos.set(index,write(b));result.rasterVideos.set(index,"");}finally{b.recycle();}
+            result.photos.set(index,importPhoto(uris.get(0)));result.rasterVideos.set(index,"");
         }
         result.slots[index]=new VivoOptions.Slot();
         if(index>0)clearLegacyVideo();
@@ -116,11 +106,63 @@ final class VivoMediaSelection {
         result.rasterVideos.clear();result.rasterVideos.add(coverVideo);result.rasterVideos.addAll(clips);
     }
     private void clearLegacyVideo(){result.video="";result.videoFirstFrame="";result.videoDuration=0;result.videoFrames=0;}
-    private String write(Bitmap bitmap)throws IOException{
-        String name="vivo-"+UUID.randomUUID()+".png";created.add(name);
-        try(FileOutputStream out=context.openFileOutput(name,0)){
-            if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("照片编码失败");
+    /**
+     * 导入一张图片：优先"原封不动复制"，不重新编码——既没有二次压缩损失，也只要几毫秒。
+     * 引擎加载时会按需采样解码（本来就要解一次），所以这里不需要预缩。
+     * 只有复制过来的文件无法解码（少见的格式）时，才回退到解码 + JPEG(100) 重新编码。
+     */
+    private String importPhoto(Uri uri)throws Exception{
+        long start=System.currentTimeMillis();
+        String base="vivo-"+UUID.randomUUID();
+        String extension=extension(uri);
+        String name=base+extension;created.add(name);
+        try(InputStream in=context.getContentResolver().openInputStream(uri);
+            FileOutputStream out=context.openFileOutput(name,0)){
+            if(in==null)throw new IOException("无法读取照片");
+            byte[] buffer=new byte[65536];
+            for(int n;(n=in.read(buffer))!=-1;)out.write(buffer,0,n);
+            out.getFD().sync();
         }
+        try{
+            PhotoDecode.bounds(new File(context.getFilesDir(),name));
+            AliveLog.i("AliveClean","vivo import copy "+name+" "+(System.currentTimeMillis()-start)+"ms");
+            return name;
+        }catch(IOException notDecodable){
+            context.deleteFile(name);
+            created.remove(name);
+            Bitmap bitmap=PhotoDecode.decode(context.getContentResolver(),uri,2560);
+            try{return write(bitmap);}finally{bitmap.recycle();}
+        }
+    }
+
+    private String extension(Uri uri){
+        String type=null;
+        try{type=context.getContentResolver().getType(uri);}catch(RuntimeException ignored){}
+        if(type!=null){
+            if(type.contains("png"))return ".png";
+            if(type.contains("webp"))return ".webp";
+            if(type.contains("heic")||type.contains("heif"))return ".heic";
+        }
+        String path=uri.getPath();
+        if(path!=null){int dot=path.lastIndexOf('.');
+            if(dot>=0){String ext=path.substring(dot).toLowerCase(Locale.ROOT);
+                if(ext.matches("\\.(jpg|jpeg|png|webp|heic|heif)"))return ext;}}
+        return ".jpg";
+    }
+
+    private String write(Bitmap bitmap)throws IOException{
+        // 照片没有透明通道时用 JPEG：同样 2560 边长，编码比 PNG 快一个数量级，文件也小得多。
+        // 蒙版之类需要 alpha 的位图仍然走 PNG。
+        boolean opaque=!bitmap.hasAlpha();
+        String name="vivo-"+UUID.randomUUID()+(opaque?".jpg":".png");created.add(name);
+        long start=System.currentTimeMillis();
+        try(FileOutputStream out=context.openFileOutput(name,0)){
+            boolean ok=bitmap.compress(opaque?Bitmap.CompressFormat.JPEG:Bitmap.CompressFormat.PNG,100,out);
+            if(!ok)throw new IOException("照片编码失败");
+            out.getFD().sync();
+        }
+        AliveLog.i("AliveClean","vivo import "+bitmap.getWidth()+"x"+bitmap.getHeight()
+                +(opaque?" jpeg":" png")+" "+(System.currentTimeMillis()-start)+"ms");
         return name;
     }
     private void video(Uri uri)throws Exception{

@@ -167,12 +167,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
                     byte[] buffer=new byte[65536];long total=0;
                     for(int n;(n=in.read(buffer))!=-1;){total+=n;if(total>100L*1024*1024)throw new IOException("照片不能超过 100 MB");out.write(buffer,0,n);}
                 }
-                Bitmap probe=ImageDecoder.decodeBitmap(ImageDecoder.createSource(image),(decoder,info,input)->{
-                    int w=info.getSize().getWidth(),h=info.getSize().getHeight();
-                    float scale=Math.min(1f,64f/Math.max(w,h));
-                    decoder.setTargetSize(Math.max(1,(int)(w*scale)),Math.max(1,(int)(h*scale)));
-                    decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-                });
+                Bitmap probe=PhotoDecode.decode(image,64);
                 probe.recycle();
                 File completed=image;
                 runOnUiThread(()->{

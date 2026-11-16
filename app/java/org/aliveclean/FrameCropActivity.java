@@ -29,10 +29,7 @@ public final class FrameCropActivity extends Activity {
         new Thread(()->{
             Bitmap decoded=null;
             try{
-                decoded=ImageDecoder.decodeBitmap(ImageDecoder.createSource(new File(getFilesDir(),source)),(decoder,info,input)->{
-                    int w=info.getSize().getWidth(),h=info.getSize().getHeight();float scale=Math.min(1,2048f/Math.max(w,h));
-                    decoder.setTargetSize(Math.max(1,Math.round(w*scale)),Math.max(1,Math.round(h*scale)));decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-                });
+                decoded=PhotoDecode.decode(new File(getFilesDir(),source),2048);
                 decoded.setDensity(Bitmap.DENSITY_NONE);Bitmap ready=decoded;
                 runOnUiThread(()->{if(isDestroyed()||isFinishing()){ready.recycle();return;}bitmap=ready;try{setup();}catch(Exception e){fail(e);}});
             }catch(Exception e){if(decoded!=null)decoded.recycle();runOnUiThread(()->fail(e));}

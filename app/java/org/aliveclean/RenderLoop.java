@@ -341,14 +341,11 @@ final class RenderLoop {
     private int loadPhoto(String name,boolean primary){
         File file=new File(context.getFilesDir(),name);
 
-        if(primary){
-            try(android.content.res.AssetFileDescriptor descriptor=context.getContentResolver()
-                    .openAssetFileDescriptor(AodWallpaperProvider.PHOTO,"r")){
-                if(descriptor!=null){
-                    Bitmap fromProvider=BitmapFactory.decodeFileDescriptor(descriptor.getFileDescriptor());
-                    if(fromProvider!=null){AliveLog.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();int id=upload(fromProvider);fromProvider.recycle();return id;}
-                    else AliveLog.w("AliveClean","aod provider returned no bitmap");
-                }
+        if(primary&&!preview){
+            try{
+                Bitmap fromProvider=PhotoDecode.decode(context.getContentResolver(),AodWallpaperProvider.PHOTO,2048);
+                if(fromProvider!=null){AliveLog.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();int id=upload(fromProvider);fromProvider.recycle();return id;}
+                else AliveLog.w("AliveClean","aod provider returned no bitmap");
             }catch(Throwable failure){AliveLog.w("AliveClean","aod provider read failed",failure);}
 
             File external=context.getExternalFilesDir(null);
@@ -361,7 +358,7 @@ final class RenderLoop {
         }
         AliveLog.i("AliveClean","loadPhoto "+file.getAbsolutePath()+" exists="+file.isFile()+" mode="+mode+" primary="+primary);
         Bitmap bitmap=null;
-        if(file.exists())try{android.graphics.ImageDecoder.Source source=android.graphics.ImageDecoder.createSource(file);bitmap=android.graphics.ImageDecoder.decodeBitmap(source,(decoder,info,s)->{int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);});}catch(IOException e){AliveLog.e("AliveClean","Photo decode failed",e);}
+        if(file.exists())try{bitmap=PhotoDecode.decode(file,2048);}catch(IOException e){AliveLog.e("AliveClean","Photo decode failed",e);}
         if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);p.setShader(new LinearGradient(0,0,720,1440,new int[]{0xff183955,0xffce865c,0xff5b526e},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);p.setColor(0xffe6b282);canvas.drawCircle(490,480,230,p);p.setColor(0xff254452);canvas.drawOval(-220,800,930,1880,p);}
         if(primary)aspect=(float)bitmap.getWidth()/bitmap.getHeight();else{homeWidth=bitmap.getWidth();homeHeight=bitmap.getHeight();}int id=upload(bitmap);bitmap.recycle();return id;
     }

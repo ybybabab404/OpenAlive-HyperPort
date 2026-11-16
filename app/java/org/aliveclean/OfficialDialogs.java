@@ -6,7 +6,8 @@ import android.content.DialogInterface;
 import android.widget.LinearLayout;
 
 /**
- * 用系统主题管理器的 dialog 构建器创建对话框，保证外观与系统一致。
+ * 用官方（Flyme UI）dialog 构建器与官方 dialog 主题创建对话框；注意这里固定传 {@code forceDark=true}，
+ * 所以外观恒为深色，并不跟随系统浅色模式。
  */
 final class OfficialDialogs {
     private final OfficialUi ui;

@@ -4,7 +4,10 @@ import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 
-/** 与 com.xiaomi.aicr.vision.VisionAttribute 完全一致的线格式。 */
+/**
+ * 手写的 Parcel 代理：字段顺序按反编译得到的 {@code com.xiaomi.aicr.vision.VisionAttribute} 排列。
+ * 改字段顺序或类型会与 ROM 侧解析错位，跨进程直接崩。
+ */
 public final class VisionAttribute implements Parcelable {
     public static final Creator<VisionAttribute> CREATOR = new Creator<VisionAttribute>() {
         @Override public VisionAttribute createFromParcel(Parcel parcel) { return new VisionAttribute(parcel); }

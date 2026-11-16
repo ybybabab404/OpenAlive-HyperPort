@@ -10,8 +10,9 @@ import android.os.IBinder;
 import android.os.Process;
 
 /**
- * 对外暴露激活状态的 ContentProvider（authority {@code org.aliveclean.clock.runtime}），
- * 由 AndroidManifest 声明，供系统侧跨进程查询。
+ * 激活状态的 ContentProvider（authority {@code org.aliveclean.clock.runtime}，Manifest 声明）：
+ * SystemUI 通过 {@code hookAnnounce} 上报「模块已注入」的 binder（只允许 com.android.systemui），
+ * 本模块自己用 {@code hookStatus} 读回状态（要求调用方 uid 与本进程相同）。
  */
 public final class ModuleActivationProvider extends ContentProvider {
     private IBinder module;

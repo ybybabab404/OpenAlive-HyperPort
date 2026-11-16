@@ -6,7 +6,11 @@ import android.os.Parcelable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 与 com.xiaomi.aicr.vision.imagesegment.SegmentResult 完全一致的线格式。 */
+/**
+ * 手写的 Parcel 代理：字段顺序按反编译得到的
+ * {@code com.xiaomi.aicr.vision.imagesegment.SegmentResult} 排列。
+ * 改字段顺序或类型会与 ROM 侧解析错位，跨进程直接崩。
+ */
 public final class SegmentResult implements Parcelable {
     public static final Creator<SegmentResult> CREATOR = new Creator<SegmentResult>() {
         @Override public SegmentResult createFromParcel(Parcel parcel) { return new SegmentResult(parcel); }

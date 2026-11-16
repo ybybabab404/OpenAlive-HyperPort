@@ -4,10 +4,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 /**
- * 诊断采样通道（T01..T13 等标记）。
+ * 诊断采样通道（标记 T01、T03–T13；T02 是空号）。
  *
- * <p>只有 {@link Diagnostics#TRACE} 为 true 时才真正写日志；发布包保持关闭，
- * 否则等于把内部布局/时序细节暴露在 logcat 里。</p>
+ * <p>两个开关任一为真就写日志：编译期的 {@link Diagnostics#TRACE}，或运行期的
+ * {@code SharedPreferences("trace").enabled}。发布包两个都要关。
+ * {@code enabled()} 首次判定后会缓存，改 pref 需重启进程或调 {@link #reset()} 才生效。</p>
  */
 final class Trace {
     static final String TAG = "AliveHSAod";

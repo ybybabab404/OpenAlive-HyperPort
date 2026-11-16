@@ -9,7 +9,10 @@ import android.os.*;
 import java.util.*;
 
 /**
- * 小米壁纸运行状态上报（ContentProvider）：当前选了哪个包、锁屏时钟、区域与连接状态。
+ * 小米壁纸运行状态上报（ContentProvider）：当前选了哪个包、锁屏时钟、落地页与连接状态。
+ *
+ * <p>{@code call()} 只回 {@code land}；{@code region()} 目前是空实现（AOD 区域没有在这里转发）。
+ * {@code selected}/{@code lockClock} 是同进程内的 static 辅助方法，不是 provider 字段。</p>
  */
 public final class XiaomiState extends ContentProvider {
     static final Uri URI=Uri.parse("content://org.aliveclean.xiaomi/state");

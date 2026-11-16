@@ -1,7 +1,10 @@
 package org.aliveclean;
 
 /**
- * 息屏进入后的可动窗口：速度从 1 线性衰减到 0，窗口长度 {@value #DURATION_MS}ms。
+ * AOD 的可动窗口：速度从 1 线性衰减到 0，窗口长度 {@value #DURATION_MS}ms。
+ *
+ * <p>每次 {@code mode==0} 重新可见时都会 {@code enter()} 重置（见 {@code RenderLoop}），
+ * 不只是「息屏进入」那一刻。</p>
  *
  * <p>用来限制 AOD 动画的总时长，避免息屏后一直动下去。</p>
  */

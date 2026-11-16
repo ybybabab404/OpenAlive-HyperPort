@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * 照片解码：BitmapFactory + inSampleSize（先取边界，再按 2 的幂抽样，最后精确缩放）。
+ * 照片解码：BitmapFactory + inSampleSize（先取边界，再按 2 的幂抽样；不做精确缩放，多出的分辨率交给 GPU 纹理）。
  *
  * 不用 ImageDecoder 是因为实测它在同一张大图上慢 3-4 倍，且目标尺寸压到 64px 也要 1 秒
  * 多——它基本是整幅解码后再缩。实测（9248×6944 JPEG，26MB）：
@@ -98,7 +98,7 @@ final class PhotoDecode {
 
     private static Bitmap finish(Bitmap bitmap) throws IOException {
         if (bitmap == null) throw new IOException("无法解码照片");
-        // 采样已经保证长边落在 [maxEdge, 2*maxEdge)；不再做精确缩放：
+        // allowBelow=true（显示用）时长边落在 0.7~1.4 倍 maxEdge；导出用 false 时不低于 maxEdge。不做精确缩放：
         // 多出的一点分辨率对 GPU 纹理无害，而 createScaledBitmap 要多一遍全图插值。
         return bitmap;
     }

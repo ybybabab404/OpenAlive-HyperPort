@@ -3,7 +3,9 @@ package org.aliveclean;
 /**
  * native 渲染器的 JNI 出口：创建场景、上传纹理、推帧参数、渲染与销毁。
  *
- * <p>方法签名与 {@code native/renderer.rs} 一一对应，改名或改参数必须两边同时改。</p>
+ * <p>方法签名与 {@code native/renderer.rs} 的 {@code Java_org_aliveclean_NativeScene_*} 一一对应，
+ * 改名或改参数必须两边同时改。三个直接缓冲还有容量契约：{@code frame}=36 float/144 B、
+ * {@code effects}=20 float/80 B、{@code render}=60 float/240 B，超了 Rust 侧会拒绝。</p>
  */
 final class NativeScene {
     static {

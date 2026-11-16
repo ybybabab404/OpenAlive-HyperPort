@@ -13,8 +13,9 @@ import java.nio.ByteBuffer;
  * 渲染循环与场景装配中枢：按 {@link SceneOptions} 建出具体渲染器（native/Cosmic/Vivo/…），
  * 在渲染线程上驱动每帧，管理 surface 生命周期、可见性节流与 mode 变化带来的转场。
  *
- * <p>所有 {@code mode()} 调用都 post 到同一个 handler，因此调用顺序即执行顺序；
- * 想让某一帧生效的时序改动，必须在这里排队，而不是在调用方加 sleep。</p>
+ * <p>所有 {@code mode()} 调用都 post 到同一个 handler，因此它们之间顺序即执行顺序
+ * （{@code cropTask}、{@code attach} 重试与 watchdog 走的是 postDelayed，整体队列不是严格 FIFO）；
+ * 想让某一帧生效的时序改动，必须在这里排队，而不是在调用方加 sleep。{@code forceFrame} 可以绕过可见性门控。</p>
  */
 final class RenderLoop {
     private final Context context;

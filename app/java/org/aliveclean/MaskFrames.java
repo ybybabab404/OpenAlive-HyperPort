@@ -8,7 +8,8 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 /**
- * 多帧主体蒙版序列：后台线程按需解码并上传纹理，带 LRU 缓存与失败计数。
+ * 多帧主体蒙版序列：PhotoMask 后台线程按需解码（zlib 解包到直接缓冲），由渲染线程在
+ * {@code upload()} 里上传纹理；带 LRU 缓存与失败计数（连续 3 次失败即停用）。
  */
 final class MaskFrames implements AutoCloseable {
     static final int SIZE=720,BYTES=SIZE*SIZE*3,START=61,END=62;

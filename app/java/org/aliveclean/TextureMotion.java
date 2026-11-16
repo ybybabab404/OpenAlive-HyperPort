@@ -4,7 +4,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * 锁屏/桌面纹理选择的插值器：场景切换时在旧纹理与新纹理的参数之间过渡。
+ * 锁屏/桌面两条纹理轨的分发与打包（真正的插值在 SceneMotion.change/advance 里做）：
+ * 每轨 8 个 GLASS + 2 个 MASK 共 20 个 float，供 native 的 effects 包使用。
  */
 final class TextureMotion {
     private final SceneMotion lock,home;

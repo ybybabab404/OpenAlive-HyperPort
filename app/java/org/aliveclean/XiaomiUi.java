@@ -10,7 +10,8 @@ import java.io.*;
 import java.lang.reflect.*;
 
 /**
- * 小米侧的主题化 ContextWrapper：加载 ThemeManager 资源/类，并封装其 bundle 调用约定。
+ * 小米侧的主题化 ContextWrapper：解包并校验 ThemeManager 的 ui.apk，建 DexClassLoader 加载其资源/类，
+ * 并封装反射调用工具（{@code call()}）与 ThemeApplication 的 attach。
  */
 final class XiaomiUi extends ContextWrapper {
     final ClassLoader loader; final Resources resources; final Resources.Theme theme;

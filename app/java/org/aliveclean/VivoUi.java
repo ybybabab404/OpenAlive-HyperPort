@@ -9,7 +9,8 @@ import android.view.*;
 import android.widget.*;
 
 /**
- * Vivo 编辑器用的主题化 ContextWrapper：inflate 厂商布局、取厂商资源与主题。
+ * Vivo 编辑器与壁纸库（{@link VivoLibraryActivity}）用的主题化 ContextWrapper：
+ * inflate 厂商布局、取厂商资源与主题。
  */
 final class VivoUi extends ContextWrapper {
     final VivoEngineRuntime runtime;

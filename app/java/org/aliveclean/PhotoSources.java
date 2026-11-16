@@ -5,7 +5,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 
 /**
- * 照片来源解析：相册、文档 provider、厂商媒体库（vivo）各走一条路径，并给出是否可用。
+ * 照片来源解析：小米相册（回落 ColorOS/OPPO 相册）、通用相册 chooser、Android 文件（documentsui）
+ * 三条路径，不可用返回 null。{@code vivoMedia()} 是给 Vivo 编辑器复用的通用 picker，
+ * 优先同一批厂商相册，找不到回落 OPEN_DOCUMENT。
  */
 final class PhotoSources {
     static final int MIUI=0,GALLERY=1,FILES=2;

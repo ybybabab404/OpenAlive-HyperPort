@@ -3,7 +3,7 @@ package org.aliveclean;
 import android.opengl.Matrix;
 
 /**
- * 场景矩阵计算：把照片的裁切、缩放、平移折算成 3×3 矩阵，供 native 与 Java 渲染共用同一套数值。
+ * 场景矩阵计算：把照片的裁切、缩放、平移折算成 4×4 列主序矩阵（含旋转与 (0,±200) 旋转支点），供 native 与 Java 渲染共用同一套数值。
  */
 final class SceneMatrices {
     private final float width,height;

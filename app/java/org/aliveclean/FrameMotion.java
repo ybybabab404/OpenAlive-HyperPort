@@ -8,7 +8,8 @@ import java.nio.*;
 import java.util.ArrayList;
 
 /**
- * 相框模式（frame_pair）的动画：在"相框位"与"全屏位"之间插值照片变换，并给出当帧的 uniform 包。
+ * 照片在“相框位”与“全屏位”之间的变换动画（样式 1 的 frame_pair 与样式 2–5 都用它），
+ * 每帧给出 36 个 float 的 uniform 包。
  */
 final class FrameMotion {
 

@@ -12,7 +12,7 @@ import java.util.*;
 /**
  * 我们自己绘制的时钟面：时间、日期、农历三行。
  *
- * <p>目前**唯一**使用方是编辑器预览（{@link EditorClockView}，{@code preview=true}）；
+ * <p>使用方只有 {@link EditorClockView}（{@code preview=true}）：编辑器与桌面预览各一处；
  * 系统 AODView 里显示的仍是 MIUI 自己的时钟，{@code HyperOsAod} 只往里注入渲染 surface。
  * 刷新节奏由 {@link ClockUpdates} 驱动，不要自己起定时器。</p>
  */

@@ -7,7 +7,9 @@ import java.lang.reflect.*;
 import java.util.*;
 
 /**
- * 用动态代理实现厂商侧需要的纹理层回调（InvocationHandler），把渲染参数交给我们的引擎。
+ * 用动态代理实现厂商渲染器要求的纹理层契约（{@code IVAGLayer}）：厂商反过来调它取
+ * 纹理 id、尺寸、裁切矩形与视频渲染参数（{@code renderParams()} 用厂商的编解码器产出 JSON），
+ * 我们只负责按契约<b>回给</b>厂商并在关闭时释放自持纹理。
  */
 final class VivoTextureLayer implements InvocationHandler,AutoCloseable {
     final Object proxy;

@@ -5,10 +5,14 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 模块统一的日志出口：固定 TAG 前缀，并支持 {@code once} 把高频路径压成一条。
+ * 模块统一的日志出口，并支持 {@code once} 把高频路径压成一条。
+ *
+ * <p>标签约定（并非统一前缀）：hook 侧 {@code AliveHS*}/{@code AliveHSAod}/{@code AliveHSHooks}/
+ * {@code AliveHSDepth}，宿主进程（App 与壁纸）{@code AliveClean}，独立子模块
+ * {@code OpenAliveXiaomi}/{@code OpenAliveModule}。抓日志时按这些前缀一起过滤。</p>
  *
  * <p>只在有排查价值的低频事件上打日志；每帧打印会把 logcat 里真正有用的行冲掉
- * （2026-11-16 就因为 probe 每帧一行，导致现场关键日志全部丢失）。</p>
+ * （2026-11-16 就因为探针每帧一行，导致现场关键日志全部丢失）。</p>
  */
 final class AliveLog {
     static final String TAG = "AliveHS";

@@ -1,8 +1,9 @@
 package org.aliveclean;
 
 /**
- * Flyme 视频壁纸的播放时钟：按当前帧率算出该显示的源时间戳供解码器取帧，
- * 交互后正常速度播放约 7 秒，之后逐步降到三分之一速度直到停住。
+ * Flyme 视频壁纸的播放时钟：按当前帧率算出该显示的源时间戳供解码器取帧。
+ * 交互后正常速度播放约 7 秒，随后 1 秒内降到三分之一速度并停住；
+ * {@code continuous=true}（桌面常驻）时速度恒为 1，永不减速。
  */
 final class FlymeVideoMotion implements WallpaperMotion {
     private static final long NORMAL=7_000_000_000L,END=8_000_000_000L;

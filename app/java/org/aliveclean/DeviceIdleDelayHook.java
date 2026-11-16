@@ -5,10 +5,14 @@ import android.os.Looper;
 import android.os.SystemClock;
 
 /**
- * system_server：亮屏瞬间把 DeviceIdle 的"无活动"状态转换推迟 1.2 秒。
+ * system_server：想在亮屏后把 DeviceIdle 的「无活动」状态转换推迟 1.2 秒，给息屏/解锁动画留时间。
+ * 拦截条件是 quick doze + state=ACTIVE(0)，其他情况一律放行。
  *
- * <p>目的只是给息屏 / 解锁动画留出时间，避免刚亮屏就被 Doze 拉回去。
- * 只在 quick doze 且 state 为 ACTIVE(0) 时才拦截，其他情况一律放行。</p>
+ * <p><b>当前实现并不生效</b>：{@code beforeHookedMethod} 在 {@code mScreenOn==true} 时 {@code arm()}，
+ * 而同一方法（{@code updateInteractivityLocked}）的 {@code afterHookedMethod} 在<b>同一条件</b>下
+ * {@code cancel()}，刚装上的延时任务立刻被撤掉。要真正推迟，after 的取消条件应改成息屏
+ * （{@code mScreenOn==false}），或只在 false→true 的边沿 arm。已记在
+ * {@code docs/kb/troubleshooting/02-已定位Bug档案.md} §13.5，尚未修改。</p>
  */
 public final class DeviceIdleDelayHook {
     private static final String TAG = "AliveHSHooks";

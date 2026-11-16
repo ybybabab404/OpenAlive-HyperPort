@@ -6,7 +6,8 @@ import android.view.*;
 import android.widget.*;
 
 /**
- * Vivo 多槽位（多张照片）的裁切编辑器：在预览上拖动/缩放取景框，回写每个槽位的裁切参数。
+ * 单个槽位的裁切编辑器：取景框是固定的屏幕比例居中框，拖动/双指缩放的是图片本身；
+ * 保存时回写该槽位的 x/y/zoom 与 rotation（每槽位各建一个实例）。
  */
 final class VivoSlotCropEditor implements AutoCloseable {
     interface Saved {void save(VivoOptions.Slot slot);}

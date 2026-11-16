@@ -1,7 +1,7 @@
 package org.aliveclean;
 
 /**
- * Vivo 壁纸的亮度压暗参数（AOD/锁屏过渡时使用）。
+ * Vivo 壁纸的压暗值弹簧过渡：AOD 遮罩（mode 0）与深色壁纸两级来源都汇到这里，供 VivoDimPass 每帧取样。
  */
 final class VivoWallpaperDim {
     private double value=1,target=1,velocity,omega=2*Math.PI/.5;

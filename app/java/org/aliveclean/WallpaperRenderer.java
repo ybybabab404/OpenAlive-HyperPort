@@ -4,7 +4,10 @@ import android.content.res.AssetManager;
 import java.io.IOException;
 
 /**
- * 渲染器公共接口：{@link RenderLoop} 只依赖它（创建/关闭/动画句柄），具体实现按样式分文件。
+ * 渲染器公共接口：{@link RenderLoop} 主要通过它驱动（创建/关闭/动画句柄/可见性），实现按样式分文件。
+ *
+ * <p>例外：Stereo 与 Flyme 视频两条路径 {@code RenderLoop} 会直接 {@code instanceof} 强转——
+ * 调 {@code StereoRenderer.configure()}、{@code StereoMotion.gyroscope()}，并据此判断“自带计时”。</p>
  */
 interface WallpaperRenderer extends AutoCloseable {
     WallpaperMotion motion();

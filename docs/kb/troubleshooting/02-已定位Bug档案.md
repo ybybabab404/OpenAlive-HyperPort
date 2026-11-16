@@ -1389,3 +1389,14 @@ self.aod_pass(frame, decor, lens_src);
   `OfficialUi.java:33`、`SettingsUi.java:34`、`XiaomiBuiltinPacks.java:36`、`XiaomiUi.java:27`。
 - 现状行为正确（写入靠已打开的 FD），但顺序反直觉：若将来改成「先 chmod 再 open」会立刻失败。
   **未实施**（只是提醒，不是缺陷）。
+
+### 13.5 `DeviceIdleDelayHook` 的 arm / cancel 条件相同 → 延时任务刚装就被撤（**功能等于没做**）
+
+- 代码：`beforeHookedMethod(mScreenOn==true) → arm()`；同一方法的 `afterHookedMethod(mScreenOn==true) → cancel()`，
+  `cancel()` 会 `removeCallbacks(pending)` 并把 `deferUntil` 清零（`DeviceIdleDelayHook.java:30-41,63-92`）。
+- 若真机的 `updateInteractivityLocked` 方法体内不改写 `mScreenOn`（AOSP 版本里由 `handleScreenOn/Off` 负责），
+  则同一次调用里"先 arm 后 cancel"，1.2 秒窗口恒被关闭 → **推迟从未发生**。
+- 另一个待确认点：该 hook 用 `findMethodExact` 按**无参**匹配。若真机签名带 `boolean`，整条 hook 静默装不上
+  （`CleanHooks.step()` 只留一行 failed）。需反编译 `com.android.server.DeviceIdleController` 确认。
+- 修法（未实施）：after 的取消条件改成 `mScreenOn==false`，或只在 false→true 边沿 arm。
+- 影响面：这是调试用 hook，不参与 AOD/动画主链路。

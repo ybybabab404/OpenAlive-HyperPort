@@ -6,10 +6,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * 把蒙版位图转成带符号距离场，输出 RGBA_F16 位图（距离、x/y 梯度、1）给引擎的 SDK 着色器使用。
+ * 把蒙版位图转成带符号距离场，输出 RGBA_F16 位图（距离、x/y 梯度、1）。
  *
- * <p>距离用可分离的平方距离变换逐行/逐列算出，再做 9 抽头两遍平滑；计算过程中按行检查线程中断，
+ * <p>距离用可分离的平方距离变换逐行/逐列算出，再做 9 抽头两遍平滑；计算过程中按行/按列检查线程中断，
  * 取消时抛 CancellationException，避免大图计算占住页面切换。</p>
+ *
+ * <p><b>当前没有生产调用方</b>：唯一的消费者 {@code NativeVivoClockMaterial}（时钟着色器）已移入
+ * {@code workbench/archive/removed-java}，{@code app/java} 内零引用，{@code tests/vivo} 里另有一份副本。</p>
  */
 final class VivoGlyphDistanceField {
     static Bitmap create(Bitmap mask) {

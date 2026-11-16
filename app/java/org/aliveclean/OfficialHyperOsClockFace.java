@@ -9,7 +9,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 用官方时钟模板 inflate 出来的 HyperOS 时钟控件（注入 AOD/预览时用它保持与系统一致的样式）。
+ * 用官方时钟模板 inflate 出来的 HyperOS 时钟控件。
+ *
+ * <p>目前只用于 {@code XiaomiPreviewActivity} 的预览面板；系统 AOD 里显示的是 MIUI 自己的时钟，
+ * 我们的自绘时钟是 {@link AodClockView}（仅预览），AOD 侧另有 {@code XiaomiAodPreview}。</p>
  */
 final class OfficialHyperOsClockFace extends FrameLayout implements AutoCloseable {
     private final String template;

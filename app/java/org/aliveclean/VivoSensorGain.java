@@ -9,7 +9,11 @@ import android.os.SystemClock;
 import java.util.WeakHashMap;
 
 /**
- * Vivo 液态样式的陀螺仪增益：把传感器数据平滑成渲染层要的乘数，带引用计数按需开关传感器。
+ * Vivo 光栅/闪卡场景的传感器增益：把引擎注册的陀螺仪监听换成自己，按灵敏度倍率
+ * （{@code multiplier} 是 0.1~2 倍的纯幂函数）缩放事件三轴后原样转给原监听器——
+ * 没有平滑/滤波环节。带引用计数与空闲看门狗按需开关传感器。
+ *
+ * <p>液态家族不走这里（那边是 {@link VivoLiquidSensitivity}），只复用 {@code multiplier} 的倍率算法。</p>
  */
 final class VivoSensorGain implements SensorEventListener,AutoCloseable {
     private static final String TAG="AliveClean";

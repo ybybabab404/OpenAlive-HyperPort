@@ -8,7 +8,7 @@ import android.os.Parcelable;
 
 /**
  * 手写的最小 AIDL 代理：com.xiaomi.aicr.plugin.IImageSegmentService。
- * 交易码与 MIUI 原始 .aidl 一致；只实现我们实际要用的几个：
+ * 交易码按 MIUI 原始 .aidl 全量映射；当前实际只调用 1/2/4/11（其余声明保留，便于排查）：
  * 1=initAlgorithmCachePath 2=initPersonModel 3=initSkyModel 4=segment 7=releaseAll
  * 9=segmentMainFunc 11=getSegmentMainFuncVersion 12=depthSegmentMainFunc 14=getDepthSegmentMainFuncVersion
  */

@@ -8,7 +8,11 @@ import java.io.*;
 import java.security.MessageDigest;
 
 /**
- * 以 ContextWrapper 的形式加载系统 ThemeManager 的资源与 ClassLoader，用完必须 {@code close}。
+ * 以 ContextWrapper 的形式套上 {@code com.flyme.systemuieditor} 的资源（从 assets 里的
+ * editor-ui.apk 解包后 createPackageContext 取 Resources，并校验 sha256）。
+ *
+ * <p>ClassLoader 是宿主自己的：类由随 APK 打包的 {@code classes2.dex} 提供，这里**不建 DexClassLoader**。
+ * {@code close()} 只是放掉 inflater。</p>
  */
 final class OfficialUi extends ContextWrapper implements AutoCloseable {
     private final Resources resources;

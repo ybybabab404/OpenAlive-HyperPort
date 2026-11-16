@@ -18,8 +18,9 @@ import io.github.libxposed.api.XposedInterface.Chain;
 /**
  * LSPosed API 的集中封装：类查找、hook 安装、字段与方法读写、结果改写。
  *
- * <p>全模块只在这里接触框架 API，目的是把 API 102 的差异、静默失败的处理和日志格式
- * 收到一处；业务类里不要直接引用镜像 API 的类型。</p>
+ * <p>hook、反射、类查找与结果改写只经这里，目的是把 API 102 的差异、静默失败的处理和日志格式
+ * 收到一处。唯一例外是模块入口 {@link CleanHooks}——框架要求它直接继承 {@code XposedModule}
+ * 并实现回调；业务类仍然不得引用框架类型。</p>
  */
 public final class Xp {
     private static volatile XposedInterface api;

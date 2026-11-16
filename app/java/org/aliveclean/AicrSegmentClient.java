@@ -20,11 +20,11 @@ import org.aliveclean.aicr.VisionAttribute;
  * 链路（与 MIUI 自己完全一致，见 com.miui.keyguard.editor.utils.segment.SegmentTask）：
  *   bindService(com.xiaomi.aicr/.access.AiCrCoreService)
  *   -> IAiCrCoreService.getPluginBinder(cb, address, "com.xiaomi.aicr.plugin.IImageSegmentService", "5.0", status)
- *   -> IImageSegmentService.segment(bitmap, new VisionAttribute(false, true))
+ *   -> IImageSegmentService.segment(bitmap, new VisionAttribute(false, maxArea))
  *   -> SegmentResult.getBitmaps().get(0)
  *
- * 注意：本 ROM 的 SegmentPlugin.depthSegmentMainFunc() 直接返回 null（未实现），
- * 所以景深入口只能走 segment()/segmentMainFunc()。
+ * 注意：本 ROM 的 SegmentPlugin.depthSegmentMainFunc() 直接返回 null（未实现），所以不要依赖它；
+ * segment()/segmentMainFunc() 只返回主体蒙版（bitmaps/rects/contours），不含景深数据。
  */
 final class AicrSegmentClient implements ServiceConnection, AutoCloseable {
     private static final String TAG = "AliveClean";

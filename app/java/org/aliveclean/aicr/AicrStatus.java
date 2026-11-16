@@ -1,6 +1,9 @@
 package org.aliveclean.aicr;
 
-/** 与 com.xiaomi.aicr.constant.Constants.STATUS_DEFINE 顺序一致的枚举（取 ordinal 比较）。 */
+/**
+ * {@code com.xiaomi.aicr.constant.Constants.STATUS_DEFINE} 的取值镜像（int 常量 + 可读名字）。
+ * 不是枚举：跨进程传的就是 int 本身，没有 ordinal 语义。
+ */
 public final class AicrStatus {
     public static final int OK = 0;
     public static final int DOWNLOADING_FIRST_USE = 1;

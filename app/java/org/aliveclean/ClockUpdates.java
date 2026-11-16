@@ -8,7 +8,9 @@ import android.provider.Settings;
 /**
  * 时间变化的统一来源：监听系统的分钟/时区/日期变化并回调。
  *
- * <p>预览引擎没有系统广播可用，所以 {@code preview} 模式改成自己每分钟触发一次。</p>
+ * <p>{@code preview} 模式在广播之外**额外**挂一个对齐整分的 60 秒定时器（{@code 60000-now%60000}），
+ * 用来兜住 TIME_TICK 的空档与自绘预览；非 preview 只依赖广播。注册的动作里没有
+ * {@code ACTION_DATE_CHANGED}，日期变化靠 TIME_TICK 或改时间间接触发，另注册了 12/24 制观察者。</p>
  */
 final class ClockUpdates {
     interface Listener {void refresh(long time);}

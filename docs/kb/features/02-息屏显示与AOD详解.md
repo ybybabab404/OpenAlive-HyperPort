@@ -604,11 +604,14 @@ AOD 构图（启航样式下壁纸缩成 0.22 的球，见 §3.10）。两者叠
 ```java
         if(mode!=next){stateReported=false;frameSample.clear();if(next==0)aodMotion.enter(System.nanoTime());else aodMotion.leave();}
         ...
-        mode=next;pacer.doze(next==0);if(next==0){probeUntil=SystemClock.uptimeMillis()+1500;probeLast=0;probeDrawLast=0;}
+        mode=next;pacer.doze(next==0);
 ```
 
-`pacer.doze(true)` 把帧节奏切到 doze 档；`probeUntil` 打开 1.5 秒的帧间隔探针
-（日志 `probe frame dt=…` / `probe vsync gap=…`）。
+`pacer.doze(true)` 把帧节奏切到 doze 档。
+
+> 2026-11-16：原来这里还会打开 1.5 秒的帧间隔探针（`probeUntil` / `probe frame dt=` / `probe vsync gap=`），
+> 现已整体删除——它不该常驻，而且探针过期没清零时会每帧写一行把现场日志冲掉。需要临时测帧节奏时，
+> 按 `docs/kb/build/02-代码注释规范.md` §4 的要求加**带开关、带到期清零**的临时探针，用完删掉。
 
 **doze 期间 Choreographer 可能整段不发 vsync**，这是"surface 在、画面永远不出"的真因，
 修法写在 `RenderLoop.java:215-231`（逐字）：
@@ -908,7 +911,7 @@ I/AliveClean: vsync watchdog: drawing without Choreographer mode=0
 **排查命令**：
 
 ```powershell
-adb -s <serial> logcat -d -s AliveClean | Select-String -Pattern 'vsync watchdog|probe vsync gap|probe frame dt'
+adb -s <serial> logcat -d -s AliveClean | Select-String -Pattern 'vsync watchdog|scene transition'
 ```
 
 ### 5.5 F4：看门狗拉起 alpha 但没有内容

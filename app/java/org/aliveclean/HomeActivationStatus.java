@@ -8,7 +8,8 @@ import android.view.*;
 import android.widget.*;
 
 /**
- * 主页顶部的"模块是否激活"指示条：查询激活状态，未激活时给出重启/勾选作用域的引导。
+ * 主页的"模块 / Root 状态"指示条：显示 LSP 检测中、已激活、未激活与 Root 授权状态，
+ * 点一下重新查询。它只报告状态，不负责指导用户去勾选作用域或重启（那类提示在 SceneApply）。
  */
 final class HomeActivationStatus {
     private final Activity activity;

@@ -11,8 +11,9 @@ import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * 锁屏触摸中转与景深修正：把落在 AOD 时钟、景深时钟上的触摸转发给真正的目标 View，
- * 同时处理变形（deform）状态的开关，避免一次触摸被两个地方同时响应。
+ * 锁屏触摸中转与景深修正：把落在 AOD/景深时钟上的触摸归一化后经 {@link SceneChannel}
+ * （what=4）跨进程发给壁纸渲染器，让时钟所在的图层能跟着滑动；同时压平 MIUI 的 deform，
+ * 并对"上滑解锁"与"操作通知栏"做二选一的 gate，避免一次触摸被两处同时响应。
  */
 final class KeyguardTouchRelay {
     private static final String TAG="AliveClean";

@@ -416,13 +416,10 @@ final class RenderLoop {
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
             if(forced||pacer.due(time)||!moving){
                 boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
-                long tDraw=SystemClock.uptimeMillis();
                 if(!okEff)throw new IllegalStateException("Invalid texture effect packet");
                 boolean okRen=NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base);
-                long tSw=SystemClock.uptimeMillis();
                 if(!okRen)throw new IllegalStateException("Invalid native frame packet");
                 boolean okSw=swap("native");
-                long tEn=SystemClock.uptimeMillis();
                 if(!okSw)throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){

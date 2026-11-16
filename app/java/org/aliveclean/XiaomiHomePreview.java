@@ -13,9 +13,10 @@ import java.util.*;
  * 壁纸预览素材：从壁纸包 apk 里取出原版的桌面/锁屏/AOD 缩略图并解码成 Bitmap，
  * 另外提供把小米 AOD 渲染器画进 View 的 Clock。
  *
- * <p>缩略图资源 id 存在带 is_super_wallpaper 的 service 的 metaData 里，要按模式（0=AOD、
- * 1=锁屏、2=桌面）和横竖屏后缀拼名字，深色模式优先取 *_dark；某一项取不到只记日志、卡片留空，
- * 不让整页失败。</p>
+ * <p>缩略图资源 id 取自 metaData：要求 service 名字不含 {@code Preview} 且带
+ * {@code is_super_wallpaper}。名字按模式拼（0 → {@code aod_small_preview}、1 → {@code lockscreen_small_preview}、
+ * 2 → {@code home_small_preview_<land>}，横竖屏后缀只用于桌面），深色模式优先取 {@code *_dark}；
+ * 某一项取不到只记日志、卡片留空，不让整页失败。</p>
  */
 final class XiaomiHomePreview {
     static final class Card {

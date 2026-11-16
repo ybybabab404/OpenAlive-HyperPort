@@ -15,9 +15,10 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Replaces the MIUI full-AOD style row with a three-item list while our wallpaper is active:
- * native item 0, native item 1, then "AliveHS 样式". The native adapter is never discarded:
- * it is wrapped and restored when the wallpaper stops being ours.
+ * While our wallpaper is active, replaces the MIUI full-AOD style row **in place** with an
+ * "AliveHS 样式" entry: the native list keeps its length, and index 1 (or 0 when the native list
+ * has a single item) is answered by our label instead of the native style. The native adapter is
+ * never discarded: it is wrapped and restored when the wallpaper stops being ours.
  *
  * <p>The previous implementation replaced the adapter with a new two-item ArrayAdapter and
  * returned early when the wallpaper changed. If the AOD settings page stayed open, the
@@ -388,7 +389,7 @@ public final class AodSettingsGuard {
         }
 
         /**
-         * Reuse the last native item's view hierarchy.  MIUI's spinner item layout is a
+         * Reuse the view hierarchy of the native item we replace (index 1).  MIUI's spinner item layout is a
          * LinearLayout with a title and a summary, not a TextView; inflating it and casting
          * the root to TextView is what crashed AodShowModeSettingActivity.
          */

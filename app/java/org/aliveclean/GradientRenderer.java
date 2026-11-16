@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.*;
 
 /**
- * 渐变壁纸的 GLES3 渲染器：用一条 100 列的三角带铺满屏幕，把六条样条的系数和 16 个控制点颜色灌进片元着色器。
+ * 渐变壁纸的 GLES3 渲染器：用一条 100 列的三角带铺满屏幕，把六条样条的系数和 16 个控制点颜色灌进顶点着色器（片元只消费 varying 与一个 dark 强度）。
  *
  * <p>uniform 名是拼字符串拼出来的（{@code u_splineN.funcM.coefficients}），必须与
  * {@code app/assets/shader/gradient/gradient.vert} 里 {@code PolynomialSpline}/{@code PolynomialFunction}

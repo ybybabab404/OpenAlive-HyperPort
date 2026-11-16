@@ -197,13 +197,6 @@ final class SceneMotion {
         tracks.clear();groundMask=false;
         int previous=mode,tr=transition(previous,next);
         if(aod==0&&previous==0&&next==2){tr=0;AliveLog.i("AliveClean","scene sail lock animation 0->2 tr=0");}
-        {
-            // 每次转场只打一行：用来对比"息屏→锁屏"和"息屏→桌面"两条配置是否真的同参数。
-            float[] t=lensState(next);
-            AliveLog.i("AliveClean","scene transition "+previous+"->"+next+" tr="+tr
-                    +" lensTarget="+t[0]+","+t[1]+","+t[2]+","+t[3]
-                    +" glass="+glassState(next)[0]);
-        }
         if(aod==0)lens(tr,next);else if(aod==101)full(tr,next);
         if(textureTracks){if(lock==1||lock==2)glass(tr,next);else if(lock==3)ground(tr,next);}
         blendFrom=new float[]{values[0],values[1],values[2]};blendNext=next;
@@ -216,10 +209,13 @@ final class SceneMotion {
         long end=blendDuration;
         for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);long e=k.delay+k.duration;if(e>end)end=e;}
         duration=end;clock=0;running=false;paused=false;
-        // 每次转场一行，够后期对比"两种转场是否同参数"；不要在这里加逐帧打印（见 AliveLog 的说明）。
+        // 每次转场一行（也是唯一一行）：对比"息屏→锁屏"与"息屏→桌面"是否真的同参数时，
+        // 要连 blend/playDelay 一起比——只比 lensTarget 曾得出错误结论。不要在这里加逐帧打印。
+        float[] target=lensState(next);
         AliveLog.i("AliveClean","scene transition "+previous+"->"+next+" tr="+tr
                 +" blend="+blendDuration+" playDelay="+playDelay+" duration="+duration
-                +" lensTarget="+values[LENS]+","+values[LENS+1]+","+values[LENS+2]
+                +" lensTarget="+target[0]+","+target[1]+","+target[2]+","+target[3]
+                +" glass="+glassState(next)[0]
                 +" aod="+aod+" lock="+lock+" home="+home+" textureTracks="+textureTracks);
         mode=next;
     }

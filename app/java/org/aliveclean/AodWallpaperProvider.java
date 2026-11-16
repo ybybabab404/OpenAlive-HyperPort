@@ -14,8 +14,9 @@ import java.io.FileNotFoundException;
 /**
  * 给系统 AOD / 主题管理器读取"当前 AOD 图片"的 ContentProvider。
  *
- * <p>按 {@code preview} 与否分别取 draft / applied 偏好里的照片与模板缓存文件；
- * 查不到就返回 null，由调用方决定回退。</p>
+ * <p>只服务"当前生效"的那张图：按 fixed 顺序取 applied 偏好里的照片 → draft 偏好里的照片
+ * → 从 MIUI 模板缓存出来的一份世界可读副本；三处都没有就抛 {@code FileNotFoundException}，
+ * 由 AOD 侧决定回退到渐变占位（query/insert 在无数据时返回 null）。</p>
  */
 public final class AodWallpaperProvider extends ContentProvider {
     static final String AUTHORITY = "org.aliveclean.aodwallpaper";

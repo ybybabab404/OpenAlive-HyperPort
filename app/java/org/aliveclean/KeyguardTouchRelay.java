@@ -10,6 +10,10 @@ import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
 
+/**
+ * 锁屏触摸中转与景深修正：把落在 AOD 时钟、景深时钟上的触摸转发给真正的目标 View，
+ * 同时处理变形（deform）状态的开关，避免一次触摸被两个地方同时响应。
+ */
 final class KeyguardTouchRelay {
     private static final String TAG="AliveClean";
     private static final Uri SCENE=Uri.parse("content://org.aliveclean.scene/configuration");
@@ -25,10 +29,8 @@ final class KeyguardTouchRelay {
     private static int forwarded;
     private static int consumers;
     private static int captures;
-    private static int probe;
     private static java.lang.ref.WeakReference<View> clockRef=new java.lang.ref.WeakReference<>(null);
     private static boolean dumped;
-    private static boolean clockProbed;
 
     private static final float DEFORM_GAIN=0f;
     private static boolean deformLogged;
@@ -56,10 +58,6 @@ final class KeyguardTouchRelay {
                         if (param.args==null||param.args.length!=1||!(param.args[0] instanceof MotionEvent))return;
                         MotionEvent event=(MotionEvent)param.args[0];
                         if (liquid()&&locked()) pinClock(param.thisObject);
-        if (event.getActionMasked()==MotionEvent.ACTION_DOWN&&probe<3) {
-                            probe++;
-                            AliveLog.i(TAG,"lock probe liquid="+liquid()+" locked="+locked());
-                        }
                         if (liquid()) gate(param,event);
                         forward(param.thisObject,event);
                     } catch (Throwable error) {
@@ -279,18 +277,6 @@ final class KeyguardTouchRelay {
             clock=findBySimpleName(root,"Clock");
             if (clock==null) return;
             clockRef=new java.lang.ref.WeakReference<>(clock);
-        }
-        if (!clockProbed) {
-            clockProbed=true;
-            StringBuilder sb=new StringBuilder(clock.getClass().getName()).append(" methods:");
-            for (java.lang.reflect.Method m:clock.getClass().getDeclaredMethods()) {
-                String n=m.getName();
-                if (n.contains("draw")||n.contains("Draw")||n.contains("alpha")||n.contains("Alpha")
-                        ||n.contains("progress")||n.contains("Progress")||n.contains("offset")||n.contains("Offset")
-                        ||n.contains("scale")||n.contains("Scale")||n.contains("update")||n.contains("Update"))
-                    sb.append(' ').append(n);
-            }
-            AliveLog.i(TAG,"clock probe: "+sb);
         }
         clock.setTranslationX(0f);
         clock.setTranslationY(0f);

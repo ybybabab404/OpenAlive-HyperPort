@@ -1,10 +1,5 @@
 package org.aliveclean;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
 import android.util.FloatProperty;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Interpolator;
@@ -17,6 +12,13 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Random;
 
+/**
+ * 场景转场的参数生成器：把 from→to 编译成若干 {@link Track}，每帧求值出 ratio、lens、glass 等
+ * uniform 数组，交给 native 或 Java 渲染器。
+ *
+ * <p>同一个槽位的多条 Track 是"后者整段覆盖前者"，所以写不了顺序关键帧；
+ * 要做先升后降只能用曲线或换起始值。</p>
+ */
 final class SceneMotion {
 
     static final int COUNT=60, LENS=3, GLASS=13, GROUND=19, FULL=21, MASK=23,
@@ -39,10 +41,6 @@ final class SceneMotion {
     private float[] blendFrom=new float[]{0,0,0};
     private int blendNext;
     private long blendDuration;
-    /** 转场诊断：从转场开始计时，这段时间内按帧采样 ratio/lens，用来对比 0->1 与 0->2。 */
-    private long diagEndMs;
-    private long diagLastLog;
-    private int diagPrevTarget;
     private Interpolator blendCurve;
     private float aodX,aodY=.335f;
     private int mode;
@@ -217,11 +215,12 @@ final class SceneMotion {
         playDelay=previous==0&&!interrupted?150:0;
         long end=blendDuration;
         for(int i=0;i<tracks.size();i++){Track k=tracks.get(i);long e=k.delay+k.duration;if(e>end)end=e;}
-        diagEndMs=1600;diagLastLog=-1000;diagPrevTarget=next;
-        AliveLog.i("AliveClean","scene transition detail "+previous+"->"+next+" tr="+tr
-                +" blend="+blendDuration+" playDelay="+playDelay+" duration="+duration
-                +" aod="+aod+" lock="+lock+" home="+home+" textureTracks="+textureTracks);
         duration=end;clock=0;running=false;paused=false;
+        // 每次转场一行，够后期对比"两种转场是否同参数"；不要在这里加逐帧打印（见 AliveLog 的说明）。
+        AliveLog.i("AliveClean","scene transition "+previous+"->"+next+" tr="+tr
+                +" blend="+blendDuration+" playDelay="+playDelay+" duration="+duration
+                +" lensTarget="+values[LENS]+","+values[LENS+1]+","+values[LENS+2]
+                +" aod="+aod+" lock="+lock+" home="+home+" textureTracks="+textureTracks);
         mode=next;
     }
     void change(int next){change(next,true);}
@@ -271,13 +270,6 @@ final class SceneMotion {
             clock+=delta;
             if(clock>=duration){complete();return;}
             seek(clock);
-            if(clock<=diagEndMs&&clock-diagLastLog>=60){diagLastLog=clock;
-                float a=values[0],l=values[1],h=values[2];
-                AliveLog.i("AliveClean","diag tr="+diagPrevTarget+" t="+clock
-                        +" ratio="+String.format("%.3f",a)+","+String.format("%.3f",l)+","+String.format("%.3f",h)
-                        +" aodVis="+(a>0)+" lockVis="+(l>0||(a>0&&aod>=0))+" homeVis="+(h>0)
-                        +" lens="+String.format("%.2f",values[LENS])+","+String.format("%.3f",values[LENS+1])+","+String.format("%.2f",values[LENS+2]));
-            }
             return;
         }
         if(mode==0){values[LENS+5]=aodX;values[LENS+6]=aodY;}

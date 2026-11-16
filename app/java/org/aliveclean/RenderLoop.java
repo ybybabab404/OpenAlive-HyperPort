@@ -9,6 +9,13 @@ import android.view.Choreographer;
 import java.io.*;
 import java.nio.ByteBuffer;
 
+/**
+ * 渲染循环与场景装配中枢：按 {@link SceneOptions} 建出具体渲染器（native/Cosmic/Vivo/…），
+ * 在渲染线程上驱动每帧，管理 surface 生命周期、可见性节流与 mode 变化带来的转场。
+ *
+ * <p>所有 {@code mode()} 调用都 post 到同一个 handler，因此调用顺序即执行顺序；
+ * 想让某一帧生效的时序改动，必须在这里排队，而不是在调用方加 sleep。</p>
+ */
 final class RenderLoop {
     private final Context context;
     private final android.content.SharedPreferences preferences;
@@ -45,7 +52,6 @@ final class RenderLoop {
     private int homeWidth,homeHeight;
     private float aspect=1;
     private boolean visible=true;
-    private long probeUntil,probeLast,probeVsyncLast,probeDrawLast;
     private Runnable firstFrame;
     private boolean firstFrameReported;
 
@@ -179,7 +185,7 @@ final class RenderLoop {
 
         if(vivo!=null&&(mode!=next||lightSnapshot)){vivo.transition(next,animate,vivoDarkWallpaper?.76f:1f,vivoAodMask);vivo.visible(renderingVisible());}
         int previous=mode;boolean visible=renderingVisible();
-        mode=next;pacer.doze(next==0);if(next==0){probeUntil=SystemClock.uptimeMillis()+1500;probeLast=0;probeDrawLast=0;}updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)AliveLog.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
+        mode=next;pacer.doze(next==0);updateCosmicLifecycle();if(textureMotion!=null)textureMotion.change(next,animate);if(motion!=null){if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();if(!visible)frameMotion.pause(true);}motion.change(next,visible);if(!animate)motion.finish();if(visible)motion.pause(false);if(previous!=next)AliveLog.i("AliveClean","scene motion "+previous+"->"+next+" animate="+animate+" visible="+visible+" pending="+motion.pending());}schedule();
     });}
     private boolean renderingVisible(){return visible&&!backdropCovered;}
     void backdrop(boolean covered){handler.post(()->{if(preview||backdropCovered==covered)return;backdropCovered=covered;updateRenderActivity();});}
@@ -229,7 +235,7 @@ final class RenderLoop {
         try{frameTime=android.os.SystemClock.uptimeMillis()*1_000_000L;render(frameTime);}
         catch(Throwable error){AliveLog.w("AliveClean","vsync watchdog render failed",error);}
     };
-    private void onVsync(long time){handler.removeCallbacks(vsyncWatchdog);framePosted=false;if(probeUntil!=0){long ms=time/1_000_000L;if(probeVsyncLast!=0&&ms-probeVsyncLast>25)AliveLog.i("AliveClean","probe vsync gap="+(ms-probeVsyncLast)+" mode="+mode+" v0="+(motion!=null?motion.values[0]:-1));probeVsyncLast=ms;}frameTime=time;handler.post(renderTask);}
+    private void onVsync(long time){handler.removeCallbacks(vsyncWatchdog);framePosted=false;frameTime=time;handler.post(renderTask);}
     private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);handler.removeCallbacks(vsyncWatchdog);}
     private void updateCosmicLifecycle(){
         try{
@@ -378,7 +384,6 @@ final class RenderLoop {
     private void render(long time){
 
         boolean forced=forceFrame;forceFrame=false;
-        long probeNow=SystemClock.uptimeMillis();if(probeUntil!=0&&probeNow>=probeUntil)probeUntil=0;if(probeNow<probeUntil){AliveLog.i("AliveClean","probe frame dt="+(probeLast==0?-1:probeNow-probeLast)+" mode="+mode+" forced="+forced+" vis="+renderingVisible()+(motion!=null?" v0="+motion.values[0]:""));probeLast=probeNow;}else probeLast=0;
         if((!renderingVisible()&&!forced)||(scene==0&&cosmic==null&&vivo==null))return;
         if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){AliveLog.e("AliveClean","Vivo frame failed",e);release();}return;}
         if(cosmic!=null){
@@ -410,7 +415,6 @@ final class RenderLoop {
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
             if(forced||pacer.due(time)||!moving){
-                long tEf=SystemClock.uptimeMillis();
                 boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
                 long tDraw=SystemClock.uptimeMillis();
                 if(!okEff)throw new IllegalStateException("Invalid texture effect packet");
@@ -420,10 +424,6 @@ final class RenderLoop {
                 boolean okSw=swap("native");
                 long tEn=SystemClock.uptimeMillis();
                 if(!okSw)throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
-                if(probeUntil!=0){
-                    AliveLog.i("AliveClean","probe draw gap="+(probeDrawLast==0?-1:tEf-probeDrawLast)+" eff="+(tDraw-tEf)+" ren="+(tSw-tDraw)+" sw="+(tEn-tSw)+" mode="+mode+" v0="+(motion!=null?motion.values[0]:-1));
-                    probeDrawLast=tEf;
-                }
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
                     if(Diagnostics.TRACE){long wait=SystemClock.uptimeMillis()-frameSample.capturedAt;if(wait>80)AliveLog.i("AliveClean","Frame sample mask="+frameSample.mask+" waitMs="+wait);}

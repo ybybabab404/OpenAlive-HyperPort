@@ -1,3 +1,5 @@
+//! GLES3 的 extern 声明与薄封装：着色器编译/链接、纹理与缓冲上传、uniform 设置。
+//! 所有调用都必须在持有 EGL 上下文的线程上进行（见 renderer.rs 的约定）。
 #![allow(non_snake_case)]
 use std::{collections::HashMap,ffi::{c_void,c_char,CString},ptr};
 use crate::math::{Mat,ID};
@@ -12,7 +14,7 @@ extern "C" {
  pub fn glViewport(x:i32,y:i32,w:i32,h:i32);pub fn glActiveTexture(texture:u32);pub fn glBindTexture(target:u32,texture:u32);pub fn glGenTextures(n:i32,v:*mut u32);pub fn glDeleteTextures(n:i32,v:*const u32);pub fn glTexParameteri(target:u32,pname:u32,param:i32);pub fn glTexImage2D(target:u32,level:i32,internal:i32,w:i32,h:i32,border:i32,format:u32,kind:u32,data:*const c_void);
  pub fn glGenFramebuffers(n:i32,v:*mut u32);pub fn glDeleteFramebuffers(n:i32,v:*const u32);pub fn glBindFramebuffer(target:u32,v:u32);pub fn glFramebufferTexture2D(target:u32,attachment:u32,textarget:u32,texture:u32,level:i32);pub fn glCheckFramebufferStatus(target:u32)->u32;
  pub fn glGenBuffers(n:i32,v:*mut u32);pub fn glDeleteBuffers(n:i32,v:*const u32);pub fn glBindBuffer(target:u32,v:u32);pub fn glBufferData(target:u32,size:isize,data:*const c_void,usage:u32);pub fn glGenVertexArrays(n:i32,v:*mut u32);pub fn glDeleteVertexArrays(n:i32,v:*const u32);pub fn glBindVertexArray(v:u32);
- pub fn glEnableVertexAttribArray(index:u32);pub fn glVertexAttribPointer(index:u32,size:i32,kind:u32,normalized:u8,stride:i32,pointer:*const c_void);pub fn glDrawArrays(mode:u32,first:i32,count:i32);pub fn glClearColor(r:f32,g:f32,b:f32,a:f32);pub fn glClear(mask:u32);pub fn glGetError()->u32;
+ pub fn glEnableVertexAttribArray(index:u32);pub fn glVertexAttribPointer(index:u32,size:i32,kind:u32,normalized:u8,stride:i32,pointer:*const c_void);pub fn glDrawArrays(mode:u32,first:i32,count:i32);pub fn glClearColor(r:f32,g:f32,b:f32,a:f32);pub fn glClear(mask:u32);
 }
 #[cfg(target_os="android")]
 #[link(name="log")]extern "C"{fn __android_log_write(priority:i32,tag:*const c_char,text:*const c_char)->i32;}

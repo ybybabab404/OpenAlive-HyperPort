@@ -1,9 +1,6 @@
 package org.aliveclean;
 
-import android.app.WallpaperInfo;
-import android.app.WallpaperManager;
 import android.content.Context;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -18,6 +15,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+/**
+ * 锁屏景深层修正：判断当前锁屏显示的是不是我们的壁纸，不是就把 MIUI 自建的景深层清掉。
+ *
+ * <p>判据必须用 {@link AodWallpaperMode#lockShowsOurs}（锁屏槽优先）；只看系统槽会在
+ * "系统槽=我们的、锁屏槽=MIUI 静态图"时误判，清掉 MIUI 的景深层后 MIUI 立刻重建，
+ * 锁屏上就成了两层（2026-11-16 复现并修正）。</p>
+ */
 final class KeyguardDepthHider {
     private static final String TAG = "AliveHSDepth";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());

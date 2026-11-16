@@ -30,7 +30,6 @@ final class VivoEngineScene implements AutoCloseable {
     private boolean preview,visibilitySet,running,resumePending;
 
     private static final List<VivoEngineScene> LIVE=new java.util.concurrent.CopyOnWriteArrayList<>();
-    private final long bornAt=SystemClock.uptimeMillis();
     private final java.util.concurrent.atomic.AtomicInteger frames=new java.util.concurrent.atomic.AtomicInteger();
     private volatile long frameAt=SystemClock.uptimeMillis();
     private int seenFrames=-1;

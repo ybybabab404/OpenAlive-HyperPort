@@ -41,17 +41,9 @@ XPOSED_API_JAR = ROOT / "vendor/libxposed/classes.jar"
 
 XZ_SOURCES_SHA256 = "c35c682fa8b617c1f6f21270df14bad4e11df2fe46962dfe45e765b7aec0181b"
 
-CHECKS = [
-    "check_layout.py",
-    "check_clock_scope.py",
-    "check_wallpaper_picker.py",
-    "check_xiaomi_assets.py",
-    "check_xiaomi_desktop.py",
-    "check_xiaomi_aod_density.py",
-    "check_unlock_handoff.py",
-    "check_fingerprint_clock.py",
-    "check_fingerprint_clock_mask.py",
-]
+# Every tools/check_*.py is a build gate; discovering them keeps the list from going stale
+# (it once named seven scripts that no longer existed, which broke a plain `build_release.py`).
+CHECKS = sorted(path.name for path in (ROOT / "tools").glob("check_*.py"))
 
 
 def fail(message: str) -> None:

@@ -84,6 +84,9 @@ final class SceneMotion {
     }
     private float[] lensState(int scene) {
         if(scene==0)return new float[]{22,.22f,9,1,0,aodX,aodY,1,0,Float.NaN};
+        // 注意：启航的锁屏稳态构图取样自 AOD 层（lens_blend 在镜头圆内直接用 u_aod_effect），
+        // 所以这里的模糊半径是"会被显示出来"的稳态值，必须为 0 —— 设成 16 会让锁屏一直糊。
+        // 转场期间的模糊由 lens() 里那一档的起始值 22 衰减到 0 提供。
         return new float[]{scene==1?0:16,expandedScale,0,0,-149,0,0,0,1.24f,-360};
     }
     private float[] glassState(int scene) {
@@ -110,7 +113,9 @@ final class SceneMotion {
         long rippleDelay=0;
         float angleStart=values[LENS+9];
         if(tr==0||tr==2) {
-            ms[0]=183;curves[0]=EASE;ms[3]=33;curves[3]=EASE;
+            // 模糊半径 22(AOD 的稳态) -> 目标的衰减时长：183ms 太短，亮屏时几乎看不到模糊；
+            // 650ms 让"形变 + 模糊"同时被看见，终点仍是 0，不会残留在锁屏上。
+            ms[0]=tr==0?650:183;curves[0]=EASE;ms[3]=33;curves[3]=EASE;
             ms[1]=ms[5]=ms[6]=tr==0?950:1000;
             curves[1]=curves[5]=curves[6]=tr==0?EXPAND:path(0,0,0,1);
             ms[2]=tr==0?800:900;curves[2]=DISTORT;

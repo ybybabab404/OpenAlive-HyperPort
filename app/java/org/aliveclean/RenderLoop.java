@@ -27,6 +27,8 @@ final class RenderLoop {
     private float vivoAodMask=.5f;
     private long cosmicUntil;
     private boolean cosmicContinuousAod,cosmicContinuousHome,sailContinuousAod;
+    /** 启航样式（cosmic==0 && aod==0）：唤醒转场固定按锁屏处理，见 CleanWallpaper.update()。 */
+    private boolean sail;
     private Surface attachedSurface;
     private SceneMotion motion;
     private TextureMotion textureMotion;
@@ -83,6 +85,7 @@ final class RenderLoop {
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener changes=(p,key)->reload();
     RenderLoop(Context context){this(context,SceneOptions.APPLIED);}
     RenderLoop(Context context,String name){Context app=context.getApplicationContext();this.context=app!=null?app:context;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
+    boolean sailScene(){return sail;}
     void onFirstFrame(Runnable listener){firstFrame=listener;}
     void attach(Surface surface,int w,int h){queueAttach(surface,w,h,false);}
 
@@ -171,7 +174,10 @@ final class RenderLoop {
         }
     }
     void mode(int next,boolean animate){mode(next,animate,Float.NaN,Float.NaN);}
-    void mode(int next,boolean animate,float nightLevel,float aodMask){handler.post(()->{
+    void mode(int requested,boolean animate,float nightLevel,float aodMask){handler.post(()->{
+        // 启航：预览与真实壁纸保持一致 —— 真实壁纸里 mode 2（桌面构图）已被 send() 拦掉，
+        // 这里把预览请求的 2 也压成 1，避免主页「桌面」卡片/编辑页桌面页显示真实不会出现的画面。
+        int next=(sail&&requested==2)?1:requested;
         boolean lightSnapshot=(nightLevel==1f||nightLevel==.76f)&&aodMask>=0&&aodMask<1;
         if(lightSnapshot){vivoDarkWallpaper=nightLevel<1;vivoAodMask=aodMask;}
         if(mode!=next){stateReported=false;frameSample.clear();if(next==0)aodMotion.enter(System.nanoTime());else aodMotion.leave();}
@@ -258,6 +264,9 @@ final class RenderLoop {
         }
         cosmicContinuousAod=options.cosmicContinuousAod;cosmicContinuousHome=options.cosmicContinuousHome;
         sailContinuousAod=options.cosmic==0&&options.aod==0&&options.sailContinuousAod;
+        sail=options.cosmic==0&&options.aod==0;
+        // 启航不渲染桌面构图：创建场景前若请求的就是 2，回落到 1（预览/编辑页同规则）。
+        if(sail&&mode==2)mode=1;
         if(options.cosmic!=0){
             boolean dark=(context.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;
 
@@ -378,7 +387,7 @@ final class RenderLoop {
     private void render(long time){
 
         boolean forced=forceFrame;forceFrame=false;
-        long probeNow=SystemClock.uptimeMillis();if(probeNow<probeUntil){AliveLog.i("AliveClean","probe frame dt="+(probeLast==0?-1:probeNow-probeLast)+" mode="+mode+" forced="+forced+" vis="+renderingVisible()+(motion!=null?" v0="+motion.values[0]:""));probeLast=probeNow;}else probeLast=0;
+        long probeNow=SystemClock.uptimeMillis();if(probeUntil!=0&&probeNow>=probeUntil)probeUntil=0;if(probeNow<probeUntil){AliveLog.i("AliveClean","probe frame dt="+(probeLast==0?-1:probeNow-probeLast)+" mode="+mode+" forced="+forced+" vis="+renderingVisible()+(motion!=null?" v0="+motion.values[0]:""));probeLast=probeNow;}else probeLast=0;
         if((!renderingVisible()&&!forced)||(scene==0&&cosmic==null&&vivo==null))return;
         if(vivo!=null){try{vivo.draw();if(!swap("vivo"))throw new IllegalStateException("Vivo EGL swap failed");if(clockToken!=0)reportClock(false);if(vivo.transitionActive()||forced)schedule();}catch(Exception e){AliveLog.e("AliveClean","Vivo frame failed",e);release();}return;}
         if(cosmic!=null){

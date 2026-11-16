@@ -6,7 +6,7 @@
 > 当前快照：2026-11-15，设备 `9eb96e8a`，构建 b1c（`b1c98f74...`）。
 > 设备在最后一次复现前 adb 断开，部分稳态截图未完成；以下 AOD 稳态问题以**用户实机观察**为主，辅以源码链路推断。
 >
-> **2026-11-15 22:40 复核（设备未连接）**：本文件里靠 logcat 支撑的“已验证/已复现”条目，多数在 `.tmp` 中已找不到原始日志（只保留 2026-11-15 10:xx 旧构建的日志与截图）。凡涉及 b1c 的日志类证据，一律降级为【证据缺失】；截图类证据已逐张复核（结论见 `01-*` §8.1）。另外修正了三处与源码不符的表述，见 §1.4、§1.5、§3.5 的“复核”注记。
+> **2026-11-15 22:40 复核（设备未连接）**：本文件里靠 logcat 支撑的“已验证/已复现”条目，多数在 `.tmp` 中已找不到原始日志（只保留 2026-11-15 10:xx 旧构建的日志与截图）。凡涉及 b1c 的日志类证据，一律降级为【证据缺失】；截图类证据已逐张复核（结论见 `../facts/01-项目总览与环境.md` §8.1）。另外修正了三处与源码不符的表述，见 §1.4、§1.5、§3.5 的“复核”注记。
 
 ## 0. 当前未关闭问题（用户原话）
 
@@ -681,7 +681,7 @@ alive_aod_restore_value/set/active = null, null, null
 - 自己的三个 marker 已被 `restore()` 清空；
 - `full_screen_aod_support=1` / `full_screen_aod_disable_reason=0` 是 **MIUI 自己算出来的**
   （静态 MIUI 壁纸 + 默认锁屏主题 → `isWallpaperTypeSupport=true`），不是我们的残留 —— 这一条
-  推翻了"support=1 一定是残留"的猜测，`03-*` §9.2 里的 B2 需要按此修正为"我们确实造成过，但当前值本身是原生的"。
+  推翻了"support=1 一定是残留"的猜测，`02-已定位Bug档案.md` §9.2 里的 B2 需要按此修正为"我们确实造成过，但当前值本身是原生的"。
 
 **关键证据 5：AOD 样式下拉现在能改、且改得住（Bug B 的症状是模块抢回设置造成的）**
 
@@ -758,7 +758,7 @@ I/AliveHSAod: alpha watchdog fired, alpha=0.0
 2. ~~正式包关 TRACE~~ —— 已完成：`338aae7`。
 3. **待做：冷启动回归**——重启 → 锁屏态下 AODView 先构造一次（会走 `SCENE_UNKNOWN` 重试链）
    → 解锁 → 应用壁纸 → 锁屏看球。这次的所有验证都是 `killall com.android.systemui` 后的热路径。
-4. 待做：把 `03-*` §1.4 的 H1–H6 按 §9 的证据重新标级（H1/H2 已修，H5 未涉及）。
+4. 待做：把 `02-已定位Bug档案.md` §1.4 的 H1–H6 按 §9 的证据重新标级（H1/H2 已修，H5 未涉及）。
 5. ~~待做：B（全屏 AOD 不生效）~~ —— 已在 §11 修（按用户选择补足能力）。
 
 ## 11. 2026-11-16 00:0x Bug B/C 的重新定义与修法（设计变更）
@@ -1036,3 +1036,30 @@ if(aod==0&&previous==0&&next==2&&lock>=1)blendDuration=150;
 **回退**：把 `int palette=mode;` 改回 `mode==0?1:mode` 即回到 85cfa94 的行为（息屏预览与锁屏相同）。
 
 **顺带确认的历史结论**：`85cfa94` 的注释说"AOD 调色板是琥珀色、和预览不一致"——那是它把预览固定成 keyguard 造成的单向不一致；让预览也走 aod 调色板，两边就一致了，代价是放弃"息屏跟锁屏长得一样"这个非目标。
+
+### 12.10 2026-11-16 17:1x–18:5x **已修**：主体分割效果差、照片导入慢（两项独立修复）
+
+#### 12.10.1 主体/背景蒙版：从内置 u2netp 换成小米自带的 NPU 分割
+
+- **现象**：Vivo 编辑器里"主体/背景"自动抠图边缘糊、细节差，用户要求"利用小米自带的景深算法"。
+- **取证**：旧实现是 `u2netp.onnx` + ONNX Runtime **纯 CPU**（只配 `setIntraOpNumThreads(2)`，无 NNAPI/QNN），输入固定 320×320 再放大回全图。
+- **根因**：分辨率与执行后端都不够；不是"模型坏了"。
+- **修法**：新增 `App/java/org/aliveclean/aicr/*`（手写 AIDL 代理）+ `AicrSegmentClient` + `SubjectEngine`，走
+  `bind com.xiaomi.aicr/.access.AiCrCoreService → getPluginBinder(..IImageSegmentService..) → segment(bitmap, VisionAttribute(false,true)) → SegmentResult.getBitmaps()[0]`。
+  服务不校验调用方，**不需要 hook**；算法/模型全在小米进程里跑。删除 `vendor/onnxruntime` 与 `app/assets/vivo/models`（APK −22.7 MiB）。
+- **验证**：logcat `segment_qcom_qnn_8850` / `[segment_v3_npu:3]` / `native segment 52ms`；三张真机照片端到端 334–837ms；用户确认可用。
+- **详见**：`features/04-主体分割与编辑器.md`。
+- **回退**：从 git 历史恢复 `VivoSubjectMask` 与 ONNX 依赖（`.tmp/onnx-backup/` 也有备份）。
+
+#### 12.10.2 照片导入/裁切页慢（Vivo 素材导入约 3 秒）
+
+- **现象**：选 4K 照片导入要等 1 秒多到 3 秒，"越大分辨率越慢"。
+- **取证**（同机、26MB 9248×6944 JPEG）：
+  `ImageDecoder` target=2048 → 1107–1511ms；target=64 → 971–1158ms；
+  `BitmapFactory` 全尺寸 → 573–964ms；`inSampleSize=4` → 226–241ms；
+  2312×1736 位图 **PNG(100) 落盘 1658–2564ms** vs JPEG q95 64–189ms；复制文件 8–11ms。
+- **根因**：两条叠加 —— ①`ImageDecoder` 近似"全量解码后再缩"，压到 64px 也要 1 秒；②Vivo 导入把结果以 PNG 质量 100 存盘，又是 1.7–2.6 秒。
+- **修法**：新增 `PhotoDecode`（`BitmapFactory` + `inSampleSize`，替换 4 处 `ImageDecoder`）；Vivo 导入改为**原图直接复制、不重编码**（不可解码时才回退 JPEG(100)）；`VivoImages.size()` 只读文件头，替代为拿宽高而整套解码的 `loadImageSize()`。
+- **验证**：Vivo 导入 ~3s → ~10ms；裁切页解码 1.1–1.5s → 0.25s；用户确认"很快，且画质没问题"。
+- **详见**：`features/06-照片解码与导入性能.md`。
+- **回退**：把调用点换回 `ImageDecoder`；Vivo 侧把 `importPhoto()` 的复制分支去掉、改回 `write(PhotoDecode.decode(...))`。

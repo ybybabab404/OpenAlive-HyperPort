@@ -346,13 +346,50 @@ final class RenderLoop {
         }
         createScene(options);if(Diagnostics.TRACE)AliveLog.i("AliveClean","GLES3 scene ready "+w+"x"+h);
     }
+    private static final int KIND_PROVIDER=0;
+    private static final int KIND_FILE=1;
+    /**
+     * 取缓存。provider 来源的位图内容会随应用壁纸变化，因此只认「同一场景名」的缓存；
+     * 文件来源另有大小+修改时间兜底。
+     */
+    private static Bitmap cachedPhoto(String key,int kind){
+        synchronized(PHOTO_CACHE_LOCK){
+            if(cachedPhotoBitmap==null||cachedPhotoKey==null||cachedPhotoBitmap.isRecycled()){
+                AliveLog.i("AliveClean","photo cache miss kind="+kind+" reason=empty key="+key);
+                return null;
+            }
+            if(!cachedPhotoKey.equals(key)){
+                AliveLog.i("AliveClean","photo cache miss kind="+kind+" reason=key\n  have="+cachedPhotoKey+"\n  want="+key);
+                return null;
+            }
+            return cachedPhotoBitmap;
+        }
+    }
+    private static void storePhoto(String key,int kind,Bitmap bitmap){
+        AliveLog.i("AliveClean","photo cache store kind="+kind+" key="+key);
+        synchronized(PHOTO_CACHE_LOCK){
+            if(cachedPhotoBitmap!=null&&cachedPhotoBitmap!=bitmap&&!cachedPhotoBitmap.isRecycled())cachedPhotoBitmap.recycle();
+            cachedPhotoBitmap=bitmap;cachedPhotoKey=key;
+        }
+    }
+    /** 上传并保留缓存位图（不能再 recycle，缓存要继续用）。 */
+    private int uploadBitmap(Bitmap bitmap){
+        int id=upload(bitmap);
+        return id;
+    }
     private int loadPhoto(String name,boolean primary){
         File file=new File(context.getFilesDir(),name);
 
         if(primary&&!preview){
             try{
+                String providerKey="provider|"+AodWallpaperProvider.PHOTO+"|"+name;
+                Bitmap cached=cachedPhoto(providerKey,KIND_PROVIDER);
+                if(cached!=null){
+                    AliveLog.i("AliveClean","aod photo cache hit "+cached.getWidth()+"x"+cached.getHeight());
+                    aspect=(float)cached.getWidth()/cached.getHeight();return uploadBitmap(cached);
+                }
                 Bitmap fromProvider=PhotoDecode.decode(context.getContentResolver(),AodWallpaperProvider.PHOTO,2048);
-                if(fromProvider!=null){AliveLog.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();int id=upload(fromProvider);fromProvider.recycle();return id;}
+                if(fromProvider!=null){AliveLog.i("AliveClean","aod photo from provider "+fromProvider.getWidth()+"x"+fromProvider.getHeight());aspect=(float)fromProvider.getWidth()/fromProvider.getHeight();storePhoto(providerKey,KIND_PROVIDER,fromProvider);int id=upload(fromProvider);return id;}
                 else AliveLog.w("AliveClean","aod provider returned no bitmap");
             }catch(Throwable failure){AliveLog.w("AliveClean","aod provider read failed",failure);}
 
@@ -366,9 +403,17 @@ final class RenderLoop {
         }
         AliveLog.i("AliveClean","loadPhoto "+file.getAbsolutePath()+" exists="+file.isFile()+" mode="+mode+" primary="+primary);
         Bitmap bitmap=null;
-        if(file.exists())try{bitmap=PhotoDecode.decode(file,2048);}catch(IOException e){AliveLog.e("AliveClean","Photo decode failed",e);}
+        String fileKey=file.getAbsolutePath()+"|"+file.length()+"|"+file.lastModified()+"|"+primary;
+        if(file.exists()){
+            bitmap=cachedPhoto(fileKey,KIND_FILE);
+            if(bitmap!=null)AliveLog.i("AliveClean","photo cache hit "+fileKey);
+            if(bitmap==null)try{
+                bitmap=PhotoDecode.decode(file,2048);
+                if(bitmap!=null)storePhoto(fileKey,KIND_FILE,bitmap);
+            }catch(IOException e){AliveLog.e("AliveClean","Photo decode failed",e);}
+        }
         if(bitmap==null){bitmap=Bitmap.createBitmap(720,1440,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);Paint p=new Paint(3);p.setShader(new LinearGradient(0,0,720,1440,new int[]{0xff183955,0xffce865c,0xff5b526e},null,Shader.TileMode.CLAMP));canvas.drawRect(0,0,720,1440,p);p.setShader(null);p.setColor(0xffe6b282);canvas.drawCircle(490,480,230,p);p.setColor(0xff254452);canvas.drawOval(-220,800,930,1880,p);}
-        if(primary)aspect=(float)bitmap.getWidth()/bitmap.getHeight();else{homeWidth=bitmap.getWidth();homeHeight=bitmap.getHeight();}int id=upload(bitmap);bitmap.recycle();return id;
+        if(primary)aspect=(float)bitmap.getWidth()/bitmap.getHeight();else{homeWidth=bitmap.getWidth();homeHeight=bitmap.getHeight();}return uploadBitmap(bitmap);
     }
     private static int upload(Bitmap bitmap){
         int[] ids=new int[1];GLES30.glGenTextures(1,ids,0);GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,ids[0]);
@@ -498,8 +543,9 @@ final class RenderLoop {
         if(ren>probeRenMax)probeRenMax=ren;
         if(sw>probeSwMax)probeSwMax=sw;
         if(sw>=80_000_000L)probeSwOver80++;
-        // 逐帧提交时刻：用来判断壁纸进程与 SystemUI 的 AOD loop 在哪一段重叠。
-        AliveLog.i("AliveClean","probe submit t="+SystemClock.uptimeMillis()+" mode="+mode+" sw="+(sw/1_000_000f));
+        // 只记录异常帧：逐帧写 logcat 本身会给渲染加负荷，等于用观察者影响被测对象。
+        if(sw>=40_000_000L)
+            AliveLog.i("AliveClean","probe slow t="+SystemClock.uptimeMillis()+" mode="+mode+" sw="+(sw/1_000_000f));
         if(sw>=40_000_000L)probeSwOver40++;
         if(++probeFrames<30)return;
         AliveLog.i("AliveClean","probe frame n="+probeFrames+" mode="+mode
@@ -511,6 +557,14 @@ final class RenderLoop {
     }
 
     private int surfaceLostRetries;
+    /**
+     * AOD 照片的解码结果缓存。EGL 上下文每轮进入 AOD 都会重建，纹理 id 不能跨轮复用，
+     * 但**解码**（provider 实测 146–199ms）可以：这份时间正好落在息屏转场里。
+     * 键由「来源 + 文件大小 + 修改时间」组成，换照片或重新应用壁纸会自动 miss。
+     */
+    private static Bitmap cachedPhotoBitmap;
+    private static String cachedPhotoKey;
+    private static final Object PHOTO_CACHE_LOCK=new Object();
     private boolean nativeMissingLogged;
     private void retrySurface(Surface surface,int w,int h){
         if(closed)return;

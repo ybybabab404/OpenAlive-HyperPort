@@ -81,3 +81,22 @@ python3 tools/deploy.py --device 1.2.3.4:5555
 设备靠 `ALIVEHS_DEVICE`（序列号或 `host:port`，逗号分隔按顺序匹配）来挑，没设备时用 `ALIVEHS_CONNECT`（逗号分隔的 `host:port` 列表）自动 `adb connect`。都没配的话，有 USB 就挑 USB。
 
 安装走 `adb push` 到 `/data/local/tmp` 再 `su -c pm install -r -d`，比流式安装抗断线。
+
+## 统一签名（重要）
+
+所有发布包必须用**同一把签名密钥**，否则已安装的用户无法覆盖更新（Android 会拒绝签名不一致的包，
+只能卸载重装，应用数据全丢）。
+
+- 本地：`local/development.jks`（alias `development`，被 `.gitignore` 挡住，不进仓库）。
+- CI：仓库 Secrets 里存了同一把钥匙，工作流会还原成 `alivehs.jks` 再签名：
+
+  | Secret | 内容 |
+  | --- | --- |
+  | `ALIVEHS_KEYSTORE_B64` | 密钥文件的 base64 |
+  | `ALIVEHS_STORE_PASSWORD` | keystore 密码 |
+  | `ALIVEHS_KEY_ALIAS` | key alias |
+  | `ALIVEHS_KEY_PASSWORD` | key 密码 |
+
+- 当前证书指纹：`SHA-256 54930f16dddcfbfdc0edd4617f7690f0c5090e384c3f7dc3ef799fa5a2c8a682`
+  （`CN=HyperAlive Development`）。发布前用 `apkinfo <apk>` 核对，指纹变了就说明换了钥匙。
+- 密钥丢了就永远无法再发可覆盖更新的包，请离线备份 `local/development.jks`。

@@ -30,7 +30,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Prepare Android and Rust
         run: |
-          sdkmanager 'platforms;android-37' 'build-tools;35.0.0' 'ndk;29.0.14206865'
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;29.0.14206865'
           rustup target add aarch64-linux-android
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
       - name: Load signing key

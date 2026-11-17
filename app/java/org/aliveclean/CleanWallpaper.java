@@ -111,6 +111,10 @@ public final class CleanWallpaper extends WallpaperService {
                 getContentResolver().registerContentObserver(android.provider.Settings.System.getUriFor("alive_wallpaper_position"),false,area);
                 regionObserverRegistered=true;
             }catch(RuntimeException error){AliveLog.w("AliveClean","AOD region observer unavailable",error);}
+            // 关闭偏移通知：MIUI 每帧把视差偏移推给 engine，转场期间还会继续更新，合成器要为我们的
+            // 层反复重算变换（现场 dump 里 1.0049 的 scale 就是它）。我们的场景不使用偏移，关掉不影响
+            // 构图，只去掉这条每帧链路。2026-11-17：用于判断 270ms 停顿是否来自壁纸变换链。
+            setOffsetNotificationsEnabled(false);
             setTouchEventsEnabled(true);if(Diagnostics.TRACE)AliveLog.i("AliveClean","Wallpaper engine created preview="+isPreview());
         }
         @Override public void scene(int next,boolean animate,long time,int phase,long clockToken,float nightLevel,float aodMask){

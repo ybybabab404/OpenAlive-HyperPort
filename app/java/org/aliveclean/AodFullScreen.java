@@ -336,13 +336,17 @@ final class AodFullScreen {
         return count;
     }
 
-    /** 只拦「写 1」；写 0（用户主动选自定义）原样放行。args = (cr, name, value[, user])。 */
+    /** 冻结 {@code full_screen_aod_on}：我们的壁纸生效期间 0/1 都不许落盘。args = (cr, name, value[, user])。 */
     private static void blockFullAodWrite(Xp.MethodHookParam param) {
         if (Boolean.TRUE.equals(SETTING_OVERRIDE.get())) return;
         Object[] args = param.args;
         if (args.length < 3 || !AodWallpaperMode.KEY_MODE.equals(args[1])) return;
+        // 两个方向都拦：写 1 会把用户的「自定义」改掉；写 0 会在壁纸重绑的瞬间把用户的
+        // 「和锁屏样式一致」清掉（MIUI 的 updateSettings 会重算并落盘 0），表现就是
+        // 「应用后 正常 → 自定义 → 正常」这一段抖动。我们的壁纸生效时设置行已被替换成
+        // AliveHS 样式，用户本来也无法在这里改它，所以整键冻结是安全的。
         Object value = args[2];
-        if (!(value instanceof Integer) || ((Integer) value) != 1) return;
+        if (!(value instanceof Integer)) return;
         Context context = Xp.currentApplication();
         if (context == null) return;
         boolean ours;

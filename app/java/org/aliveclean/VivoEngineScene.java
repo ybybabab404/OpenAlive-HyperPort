@@ -363,8 +363,12 @@ final class VivoEngineScene implements AutoCloseable {
     void touch(int action,float x,float y){
         if(family!=VivoOptions.LIQUID)return;
         final float tx=.5f+(x-.5f)/drawnScale,ty=.4f+(y-.4f)/drawnScale;
+        // 液态的 3 个折射效果（style>1）内部是上下颠倒的坐标：渲染时它们本来就画得正，
+        // 所以没有 uprightLiquid() 那个 180° 补偿，触控也就必须自己把 y 翻过来，
+        // 否则点上方、效果出现在下方。style==1 走 180° 旋转那条路，坐标已经是屏幕方向。
+        final float ey=options.style==1?ty:1f-ty;
         main.post(()->{if(closed||!visible)return;try{
-            String json="{\"data\":{\"eventAction\":"+action+",\"x\":"+tx+",\"y\":"+ty+"}}";
+            String json="{\"data\":{\"eventAction\":"+action+",\"x\":"+tx+",\"y\":"+ey+"}}";
             Object touch=bean(BASE+"bean.TouchDataBean",json);
             api.call(controller,"onWallpaperTouchEvent",new Class<?>[]{touch.getClass()},touch);
         }catch(Exception e){AliveLog.w("AliveClean","Vivo touch unavailable",e);}});

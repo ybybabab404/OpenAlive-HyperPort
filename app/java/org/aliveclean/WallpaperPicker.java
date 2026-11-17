@@ -80,30 +80,37 @@ final class WallpaperPicker {
         }
     }
 
-    static boolean applied(WallpaperManager manager,ComponentName expected,int result,
-            boolean reliableResult,int previousHomeId,int previousLockId){
+    /**
+     * 判定「换成我们的壁纸了吗」：只看当前系统槽（SDK 34+ 再看锁屏槽）上的组件是不是 {@code expected}。
+     * 选择器返回什么、槽位 id 有没有变，都不参与判定——那两项只用来写 {@link #logPicker} 的诊断日志。
+     */
+    static boolean applied(WallpaperManager manager,ComponentName expected){
         WallpaperInfo home=manager.getWallpaperInfo();
         String homeName=home==null?null:home.getComponent().flattenToShortString();
         int homeId=manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
-        AliveLog.i("AliveClean","wallpaper check: result="+result+" reliable="+reliableResult
-                +" home="+homeName+" homeId="+homeId+" prevHome="+previousHomeId+" expected="+expected.flattenToShortString());
+        AliveLog.i("AliveClean","wallpaper check: home="+homeName+" homeId="+homeId+" expected="+expected.flattenToShortString());
 
         if(home!=null&&expected.equals(home.getComponent()))return true;
         if(Build.VERSION.SDK_INT>=34){
             WallpaperInfo lock=manager.getWallpaperInfo(WallpaperManager.FLAG_LOCK);
             int lockId=manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
             String lockName=lock==null?null:lock.getComponent().flattenToShortString();
-            AliveLog.i("AliveClean","wallpaper check lock: "+lockName+" lockId="+lockId+" prevLock="+previousLockId);
+            AliveLog.i("AliveClean","wallpaper check lock: "+lockName+" lockId="+lockId);
             if(lock!=null&&expected.equals(lock.getComponent()))return true;
         }
         return false;
     }
 
-    static void appliedChecked(WallpaperManager manager,ComponentName expected,int result,
-            boolean reliableResult,int previousHomeId,int previousLockId,Runnable onApplied,Runnable onFailed){
-        if(applied(manager,expected,result,reliableResult,previousHomeId,previousLockId)){onApplied.run();return;}
+    /** 记一行「选择器返回了什么」，排查「看着成功其实没换成」的现场用；不参与判定。 */
+    static void logPicker(int result,boolean reliableResult,int previousHomeId,int previousLockId){
+        AliveLog.i("AliveClean","wallpaper picker: result="+result+" reliable="+reliableResult
+                +" prevHome="+previousHomeId+" prevLock="+previousLockId);
+    }
+
+    static void appliedChecked(WallpaperManager manager,ComponentName expected,Runnable onApplied,Runnable onFailed){
+        if(applied(manager,expected)){onApplied.run();return;}
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
-            if(applied(manager,expected,result,reliableResult,previousHomeId,previousLockId))onApplied.run();
+            if(applied(manager,expected))onApplied.run();
             else onFailed.run();
         },900);
     }

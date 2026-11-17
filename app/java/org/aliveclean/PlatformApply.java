@@ -11,8 +11,8 @@ import org.json.JSONObject;
 /**
  * ColorOS 息屏模式（全景 AOD）的配置入口：{@code app_process} 起、跑在系统 UID 下，
  * 通过 {@code com.oplus.aod.AodMachineHelperProvider} 写 AOD 相关设置；壁纸只用来做前置校验，
- * 由 {@link RootBridge} 在需要时拉起。参数只有 {@code panoramic-aod}（当前唯一调用方用的）
- * 与 {@code local-aod}（保留入口，暂无调用方）。
+ * 由 {@link RootBridge} 在需要时拉起。唯一的参数是 {@code panoramic-aod}
+ * （{@code local-aod} 一直没有调用方，2026-11-17 删除）。
  */
 public final class PlatformApply {
     private static final String PROVIDER="com.oplus.aod.AodMachineHelperProvider";
@@ -21,8 +21,8 @@ public final class PlatformApply {
         System.out.println("ALIVE_ADAPTER_STARTED");
         try{
             if(Process.myUid()!=1000)throw new SecurityException("Platform adapter requires the system UID");
-            if(args.length!=1||(!"local-aod".equals(args[0])&&!"panoramic-aod".equals(args[0])))throw new IllegalArgumentException("Unsupported operation");
-            if(android.os.Build.VERSION.SDK_INT<31)throw new UnsupportedOperationException("Local AOD adapter requires Android 12 or later");
+            if(args.length!=1||!"panoramic-aod".equals(args[0]))throw new IllegalArgumentException("Unsupported operation");
+            if(android.os.Build.VERSION.SDK_INT<31)throw new UnsupportedOperationException("Panoramic AOD adapter requires Android 12 or later");
             stage="wallpaper";
             Looper.prepareMainLooper();
             Class<?> thread=Class.forName("android.app.ActivityThread");Object instance=thread.getMethod("systemMain").invoke(null);
@@ -34,8 +34,7 @@ public final class PlatformApply {
             JSONObject report;
             try(PlatformProvider settings=new PlatformProvider("settings",0)){
             int before=settings.secureInt("Setting_AodState",-1);
-            int local=settings.secureInt("Setting_AodState_Local",0);
-            int target="panoramic-aod".equals(args[0])?2:before==0||before==1?before:local==1?1:0;
+            int target=2;
 
             stage="mode";
             try(PlatformProvider aod=new PlatformProvider(PROVIDER,0)){

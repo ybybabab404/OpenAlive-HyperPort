@@ -151,8 +151,9 @@ public class XiaomiPreviewActivity extends Activity implements SurfaceHolder.Cal
         completePicker(result);
     }
     private void completePicker(int result){awaitingPicker=false;
-        if(WallpaperPicker.applied(WallpaperManager.getInstance(this),new ComponentName(this,pack.component()),result,
-                pickerResultReliable,previousWallpaperId,previousLockId))new Thread(this::applied,"XiaomiAodApply").start();else cancelApply();
+        WallpaperPicker.logPicker(result,pickerResultReliable,previousWallpaperId,previousLockId);
+        if(WallpaperPicker.applied(WallpaperManager.getInstance(this),new ComponentName(this,pack.component())))
+            new Thread(this::applied,"XiaomiAodApply").start();else cancelApply();
     }
     @Override public void onBackPressed(){if(choosing){choosing=false;showChoice();changeScene(false);}else super.onBackPressed();}
     @Override protected void onResume(){super.onResume();resumed=true;if(player!=null)try{player.running(true);}catch(Exception e){failure(e);}updateProgress();}

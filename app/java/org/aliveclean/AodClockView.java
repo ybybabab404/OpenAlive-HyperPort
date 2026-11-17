@@ -26,7 +26,6 @@ final class AodClockView extends AodClockFace {
     private TimeZone formattedZone;
     private Locale formattedLocale,formattedDefaultLocale;
     private boolean formatted24Hour;
-    private final int[] screenLocation=new int[2];
     private static Typeface digits;
     private static synchronized Typeface digits(Context context){
         if(digits==null)try{
@@ -46,7 +45,6 @@ final class AodClockView extends AodClockFace {
         updates=new ClockUpdates(context,preview,this::refresh);refresh(System.currentTimeMillis());
     }
     void active(boolean value){enabled=value;updateActivity();}
-    void tick(long now){if(enabled)updates.refresh(now);}
     void refresh(long now){
         boolean full=DateFormat.is24HourFormat(getContext());
         Locale locale=getResources().getConfiguration().getLocales().get(0);
@@ -80,7 +78,6 @@ final class AodClockView extends AodClockFace {
 
         content.setTranslationY(getHeight()*.225f+getWidth()*.22243f);
     }
-    int notificationTop(){getLocationOnScreen(screenLocation);return Math.round(screenLocation[1]+content.getY()+content.getHeight()+getWidth()*.035f);}
     @Override protected void onAttachedToWindow(){super.onAttachedToWindow();updateActivity();}
     @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);if(updates!=null)updateActivity();}
     @Override protected void onDetachedFromWindow(){updates.stop();super.onDetachedFromWindow();}

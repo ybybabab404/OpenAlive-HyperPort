@@ -143,8 +143,8 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         if(request==20&&awaitingApply){
             awaitingApply=false;
             WallpaperManager manager=WallpaperManager.getInstance(this);
-            WallpaperPicker.appliedChecked(manager,new ComponentName(this,CleanWallpaper.class),result,
-                    pickerResultReliable,previousWallpaperId,previousLockId,this::commitDraft,
+            WallpaperPicker.logPicker(result,pickerResultReliable,previousWallpaperId,previousLockId);
+            WallpaperPicker.appliedChecked(manager,new ComponentName(this,CleanWallpaper.class),this::commitDraft,
                     ()->{if(result==RESULT_OK)toast("系统未切换到此壁纸，应用没有成功");else toast("未应用，已保留编辑内容");});
             return;
         }

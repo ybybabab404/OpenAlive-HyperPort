@@ -5,14 +5,13 @@ import android.os.Looper;
 import android.os.SystemClock;
 
 /**
- * system_server：想在亮屏后把 DeviceIdle 的「无活动」状态转换推迟 1.2 秒，给息屏/解锁动画留时间。
- * 拦截条件是 quick doze + state=ACTIVE(0)，其他情况一律放行。
+ * system_server：亮屏后把 DeviceIdle 的「无活动」状态转换推迟 1.2 秒，给息屏/解锁动画留时间。
+ * 拦截条件还要 quick doze + state=ACTIVE(0)，其他情况一律放行。
  *
- * <p><b>当前实现并不生效</b>：{@code beforeHookedMethod} 在 {@code mScreenOn==true} 时 {@code arm()}，
- * 而同一方法（{@code updateInteractivityLocked}）的 {@code afterHookedMethod} 在<b>同一条件</b>下
- * {@code cancel()}，刚装上的延时任务立刻被撤掉。要真正推迟，after 的取消条件应改成息屏
- * （{@code mScreenOn==false}），或只在 false→true 的边沿 arm。已记在
- * {@code docs/kb/troubleshooting/02-已定位Bug档案.md} §13.5，尚未修改。</p>
+ * <p>时序：{@code beforeHookedMethod} 在 {@code mScreenOn==true} 时 {@code arm()}（登记 1.2 秒后的重放）；
+ * {@code afterHookedMethod} 只在<b>息屏</b>（{@code mScreenOn==false}）时 {@code cancel()}。
+ * 2026-11-17 之前这里两处条件是同一个，arm 完立刻 cancel，功能等于没做（见
+ * {@code docs/kb/troubleshooting/02-已定位Bug档案.md} §13.5）。</p>
  */
 public final class DeviceIdleDelayHook {
     private static final String TAG = "AliveHSHooks";
@@ -39,8 +38,10 @@ public final class DeviceIdleDelayHook {
             }
 
             @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                // 只在息屏时撤销：亮屏这次调用正是要推迟的那一次，撤掉就等于功能没做
+                // （2026-11-17 修：原先这里判 mScreenOn==true，与 before 的 arm 条件相同，刚装就撤）。
                 Object screen = Xp.getObjectField(param.thisObject, "mScreenOn");
-                if (screen instanceof Boolean && (Boolean) screen) {
+                if (screen instanceof Boolean && !((Boolean) screen)) {
                     cancel();
                 }
             }

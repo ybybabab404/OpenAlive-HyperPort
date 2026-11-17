@@ -291,8 +291,9 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         if(request==20&&awaitingApply){
             awaitingApply=false;
             WallpaperManager manager=WallpaperManager.getInstance(this);
-            WallpaperPicker.appliedChecked(manager,new ComponentName(this,CleanWallpaper.class),result,
-                    pickerResultReliable,previousId,previousLockId,this::commit,()->toast("未应用，已保留编辑内容"));
+            WallpaperPicker.logPicker(result,pickerResultReliable,previousId,previousLockId);
+            WallpaperPicker.appliedChecked(manager,new ComponentName(this,CleanWallpaper.class),this::commit,
+                    ()->toast("未应用，已保留编辑内容"));
             return;
         }
         if(result!=RESULT_OK||data==null||!(request>=10&&request<=15||VivoMediaSelection.isSlot(request)||request==VivoMediaSelection.BATCH_IMAGES)||busy)return;

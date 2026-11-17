@@ -34,9 +34,9 @@ final class RootBridge {
         for(String line:result.split("\n"))if(line.startsWith("ALIVE_RESULT ")){
             JSONObject json=new JSONObject(line.substring(13));
             if(process.exitValue()==0&&json.optBoolean("ok")){
-                return json.optBoolean("backgroundAllowed")
-                    ?"壁纸已应用，已开启全景息屏并允许后台运行"
-                    :"壁纸已应用；后台运行设置未确认，请在系统电池设置中选择完全允许后台行为";
+                // PlatformApply 只回 ok/before/mode——「后台运行是否允许」它并不检查，
+                // 所以这里只能如实说「未确认」并给出建议，不要假装已经查过。
+                return "壁纸已应用；后台运行设置未确认，请在系统电池设置中选择完全允许后台行为";
             }
             String stage=json.optString("stage","unknown");
             String detail=json.optString("error","系统拒绝切换息屏模式");

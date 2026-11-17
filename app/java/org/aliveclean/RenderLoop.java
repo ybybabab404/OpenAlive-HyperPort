@@ -461,6 +461,7 @@ final class RenderLoop {
             }
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
+            lastMoving=moving;
             if(forced||pacer.due(time)||!moving){
                 long probeStart=probeBegin();
                 boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
@@ -515,7 +516,8 @@ final class RenderLoop {
     private boolean probeEnabled;
     private long probeCheckedAt;
     private long probeLastStart;
-    private int probeFrames, probeSwOver80, probeSwOver40;
+    private int probeFrames, probeSwOver80, probeSwOver40, probeGapFrames;
+    private boolean lastMoving;
     private long probeEffMax, probeRenMax, probeSwMax, probeGapMax;
     private long probeBegin(){
         long now=System.nanoTime();
@@ -530,6 +532,12 @@ final class RenderLoop {
         if(probeLastStart!=0L){
             long gap=now-probeLastStart;
             if(gap>probeGapMax)probeGapMax=gap;
+            // 球转动卡顿取证：只在前 400 帧、只在 mode 0 时逐帧记录帧间隔。
+            // 看 dt 是否出现 2×/3× 的离散跳变（丢帧）还是连续抖动（采样问题）。
+            if(mode==0&&probeGapFrames<400&&gap>=12_000_000L){
+                probeGapFrames++;
+                AliveLog.i("AliveClean","probe dt t="+SystemClock.uptimeMillis()+" dt="+(gap/1_000_000f)+" moving="+lastMoving);
+            }
         }
         probeLastStart=now;
         return now;

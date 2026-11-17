@@ -348,20 +348,20 @@ final class AodWallpaperMode {
                 "aod mode left to the user (" + (wantsFullAod(context) ? "full" : "custom") + ")");
     }
 
+    /**
+     * 只清掉本模块自己的旁路键（`alive_aod_*`），**绝不写 `full_screen_aod_on`**。
+     *
+     * <p>2026-11-17 修：旧实现会把捕获时的旧值写回去。用户的 `alive_aod_restore_value` 是 0，
+     * 于是之后每次 restore 都把 `full_screen_aod_on` 覆盖成 0——用户在设置里选「和锁屏样式一致」
+     * 也会被改回「自定义」，全屏 AOD 不再生效，息屏时壁纸层（动画）就整个消失。这个键属于用户，
+     * 本模块只读不写。</p>
+     */
     static void restore(Context context) {
         try {
-            if (getInt(context, KEY_HAS_RESTORE, 0) != 1) return;
-            int original = getInt(context, KEY_RESTORE, UNSET);
-            int current = getInt(context, KEY_MODE, UNSET);
-            if (original == UNSET) {
-                if (current != UNSET) putString(context, KEY_MODE, null);
-            } else if (current != original) {
-                putInt(context, KEY_MODE, original);
-            }
             putString(context, KEY_RESTORE, null);
             putString(context, KEY_HAS_RESTORE, null);
             putString(context, KEY_ACTIVE, null);
-            AliveLog.i(TAG, "aod mode restored=" + original + " (was " + current + ")");
+            AliveLog.i(TAG, "aod bookkeeping cleared; full_screen_aod_on left to the user");
         } catch (Throwable error) {
             AliveLog.w(TAG, "aod mode restore failed", error);
         }

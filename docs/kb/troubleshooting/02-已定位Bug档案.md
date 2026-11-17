@@ -1400,3 +1400,38 @@ self.aod_pass(frame, decor, lens_src);
   （`CleanHooks.step()` 只留一行 failed）。需反编译 `com.android.server.DeviceIdleController` 确认。
 - 修法（未实施）：after 的取消条件改成 `mScreenOn==false`，或只在 false→true 边沿 arm。
 - 影响面：这是调试用 hook，不参与 AOD/动画主链路。
+
+## 14. 息屏显示 6 秒后被系统挂起（DOZE_SUSPEND）——**ROM 行为，非本模块**
+
+**症状（2026-11-17 13:05 现场）**：真实电源键熄屏后 AOD 只显示约 6 秒，随后面板直接熄灭
+（`mScreenState` 从 `DOZE` 变 `DOZE_SUSPEND`），用户设置是「始终显示」（`doze_always_on=1`）。
+用户还报告「用几个小时后才出现」。
+
+**实测证据（决定性）**：
+
+| 状态 | 日志 |
+|---|---|
+| 模块工作 + 强制全屏 AOD | `MiuiDozeService: needWallpaperAnim: true, fullAodEnable: true` → `AlarmTimeout: schedule DozeScreenState in 6000` → `applyPendingScreenState: mPendingScreenState 4` → `setDozeScreenState 4` |
+| **A/B：`HyperOsAod.install` 停用 + MIUI 原生壁纸**（`AliveHSAod: overlay skipped: wallpaper is not ours`） | `fullAodEnable: false` → **同样** `schedule DozeScreenState in 6000` → `setDozeScreenState 4` |
+
+即：`com.miui.aod` 的 `DozeScreenState` 在进入 doze 时挂 6 秒 `AlarmTimeout`，到点把屏幕置为
+`DOZE_SUSPEND`。**本模块完全不参与时同样发生**，因此不属于本模块缺陷。
+（顺带排除的假设：不是「强制全屏 AOD」导致的 —— 关掉强制后 `fullAodEnable` 已变 false，6 秒照旧。）
+
+**与它区分开的另一个真实故障（同一时段抓到）**：开机 19 小时后出现
+
+```
+bindService exceeded max service connection number per process, callerApp:system
+  -> Unable to bind dream service ... MiuiDozeService
+  -> Stopping dream, reason='bindService failed'
+  -> PowerManagerService: Sleeping        # 面板立刻灭，动画一帧都没有
+```
+
+system_server 自身服务连接数耗尽 → AOD 的 dream 服务绑不上 → 直接睡眠。**重启即恢复。**
+连接数实测：重启后全局 372 个，19 小时后 3762 个；本模块相关始终只有 1 个
+（`org.aliveclean/.CleanWallpaper`）。另外**每次覆盖安装会多出 3 个连接，全部是
+`com.android.permissioncontroller/...PermissionControllerServiceImpl`**（系统自己的），
+不是本模块的服务。
+
+**结论**：这两条都不是本模块代码缺陷；处理方式是「重启」与「减少无谓的覆盖安装」。
+不要用 hook 去抬高 system_server 的连接上限——那会掩盖真实泄漏，且热路径 hook 风险远大于收益。

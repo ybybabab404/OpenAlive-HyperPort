@@ -421,7 +421,7 @@ final class RenderLoop {
                 boolean okRen=NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base);
                 if(!okRen)throw new IllegalStateException("Invalid native frame packet");
                 boolean okSw=swap("native");
-                if(!okSw)throw new IllegalStateException("EGL swap error "+EGL14.eglGetError());
+                if(!okSw)throw new SurfaceLost("EGL swap error "+EGL14.eglGetError());
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
                     if(Diagnostics.TRACE){long wait=SystemClock.uptimeMillis()-frameSample.capturedAt;if(wait>80)AliveLog.i("AliveClean","Frame sample mask="+frameSample.mask+" waitMs="+wait);}
@@ -429,11 +429,20 @@ final class RenderLoop {
                 }
             }
             if(moving||frameSample.pending||resumedSample||forced)schedule();
-        }catch(Exception e){AliveLog.e("AliveClean","Frame failed",e);release();}
+        }catch(Exception e){
+            AliveLog.e("AliveClean","Frame failed",e);
+            Surface lost=e instanceof SurfaceLost?attachedSurface:null;
+            int lostWidth=attachedWidth,lostHeight=attachedHeight;
+            release();
+            // surface 被系统先销毁导致的 swap 失败不是渲染缺陷：把场景拆掉后自己重挂一次，
+            // 免得宿主不再给新 surface 时永久黑着（日志里的 alpha=0 就是这么来的）。
+            if(lost!=null)retrySurface(lost,lostWidth,lostHeight);
+        }
     }
     private void closeFrame(){if(textureMotion!=null){textureMotion.close();textureMotion=null;}if(scene!=0)reportClock(false);frameSample.clear();if(frameMotion!=null){frameMotion.close();frameMotion=null;}if(masks!=null){masks.close();masks=null;}}
     private boolean swap(String tag){
         boolean ok=EGL14.eglSwapBuffers(display,window);
+        if(ok)surfaceLostRetries=0;
         if(!ok)AliveLog.e("AliveClean","eglSwapBuffers failed "+tag+" err="+EGL14.eglGetError()+" size="+attachedWidth+"x"+attachedHeight);
         if(ok&&!firstFrameReported){
             firstFrameReported=true;
@@ -443,5 +452,26 @@ final class RenderLoop {
         }
         return ok;
     }
+    /** 渲染中途 surface 失效（swap 返回 false）。与着色器/纹理错误区分开，前者可以自愈。 */
+    private static final class SurfaceLost extends IllegalStateException{
+        SurfaceLost(String message){super(message);}
+    }
+
+    /** 连续自愈次数上限，避免 surface 真死了还在无限重建。 */
+    private int surfaceLostRetries;
+    private void retrySurface(Surface surface,int w,int h){
+        if(closed)return;
+        if(!surface.isValid()||w<1||h<1){
+            if(surfaceLostRetries<20){
+                surfaceLostRetries++;
+                AliveLog.w("AliveClean","surface lost: retry "+surfaceLostRetries+" "+w+"x"+h+" valid="+surface.isValid());
+                handler.postDelayed(()->retrySurface(surface,w,h),100);
+            }else AliveLog.w("AliveClean","surface lost: give up after "+surfaceLostRetries);
+            return;
+        }
+        AliveLog.w("AliveClean","surface lost: reattaching "+w+"x"+h);
+        attachFresh(surface,w,h);
+    }
+
     private void release(){stopFrames();if(vivo!=null){vivo.close();vivo=null;}closeCosmic();handler.removeCallbacks(reloadTask);closeFrame();if(motion!=null){motion.close();motion=null;}if(display!=EGL14.EGL_NO_DISPLAY){if(scene!=0){NativeScene.destroy(scene);scene=0;}clearAuxiliary();GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);EGL14.eglTerminate(display);EGL14.eglReleaseThread();}display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;window=EGL14.EGL_NO_SURFACE;attachedSurface=null;attachedWidth=attachedHeight=0;}
 }

@@ -498,6 +498,8 @@ final class RenderLoop {
         if(ren>probeRenMax)probeRenMax=ren;
         if(sw>probeSwMax)probeSwMax=sw;
         if(sw>=80_000_000L)probeSwOver80++;
+        // 逐帧提交时刻：用来判断壁纸进程与 SystemUI 的 AOD loop 在哪一段重叠。
+        AliveLog.i("AliveClean","probe submit t="+SystemClock.uptimeMillis()+" mode="+mode+" sw="+(sw/1_000_000f));
         if(sw>=40_000_000L)probeSwOver40++;
         if(++probeFrames<30)return;
         AliveLog.i("AliveClean","probe frame n="+probeFrames+" mode="+mode

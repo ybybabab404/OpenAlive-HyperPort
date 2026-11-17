@@ -19,3 +19,7 @@ Thumbs.db
 /.local/
 # Assistant workspace (snapshots / tmp / uploads / delivery backups)
 /.jxai/
+# Internal knowledge base stays local
+/docs/kb/
+/docs/port/
+/docs/notes/

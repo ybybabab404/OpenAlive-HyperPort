@@ -1,6 +1,7 @@
-# 文档索引
+# 文档
 
 | 文件 | 内容 |
 | --- | --- |
-| [port/hyperos.md](port/hyperos.md) | HyperOS 移植记录：设备、平台差异、已落地改动、验证方式 |
-| notes/ | 按日期记录的问题与修复 |
+| [../README.md](../README.md) | 项目介绍、安装与使用 |
+| [../BUILD.md](../BUILD.md) | 从源码构建 |
+| [release-notes.md](release-notes.md) | 版本更新日志 |

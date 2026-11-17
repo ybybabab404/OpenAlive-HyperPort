@@ -224,6 +224,35 @@ final class RenderLoop {
     private static final long AOD_FRAME_MS=8L;
     private Runnable aodFrame;
     private long aodDeadline;
+    /**
+     * 心跳探针：每 16ms 检查一次「这些拍里到底画了几帧」。
+     * 之前只记录"画了之后间隔多大"，测不到"该画却没画"的那一段——而卡顿很可能就藏在那里。
+     */
+    private long aodBeats, aodRenders, aodMisses;
+    private boolean aodHeartbeat;
+    private final Runnable aodBeat=()->{
+        aodBeatRun();
+    };
+    private void aodBeatRun(){
+        if(!aodHeartbeat)return;
+        aodBeats++;
+        if(aodRenders==0L){
+            aodMisses++;
+            AliveLog.i("AliveClean","probe beat miss t="+SystemClock.uptimeMillis()+" mode="+mode
+                    +" posted="+framePosted+" visible="+renderingVisible()+" beats="+aodBeats);
+        }
+        aodRenders=0L;
+        handler.postDelayed(aodBeat,16L);
+    }
+    private void startAodHeartbeat(){
+        if(aodHeartbeat)return;
+        aodHeartbeat=true;aodBeats=0L;aodRenders=0L;aodMisses=0L;
+        handler.postDelayed(aodBeat,16L);
+    }
+    private void stopAodHeartbeat(){
+        aodHeartbeat=false;
+        if(aodBeat!=null)handler.removeCallbacks(aodBeat);
+    }
     private Runnable aodFrame(){
         if(aodFrame==null)aodFrame=()->{framePosted=false;frameTime=System.nanoTime();handler.post(renderTask);};
         return aodFrame;
@@ -245,6 +274,7 @@ final class RenderLoop {
     private void schedule(){
         if(!((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)))return;
         if(AOD_TIMER_DRIVEN&&mode==0){
+            startAodHeartbeat();
             if(!framePosted)postAodFrame();
         }else if(choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}
         // Choreographer 在 doze/息屏期间可能整段不发 vsync；一旦回调不来，framePosted 会
@@ -262,7 +292,8 @@ final class RenderLoop {
         catch(Throwable error){AliveLog.w("AliveClean","vsync watchdog render failed",error);}
     };
     private void onVsync(long time){handler.removeCallbacks(vsyncWatchdog);framePosted=false;frameTime=time;handler.post(renderTask);}
-    private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);if(aodFrame!=null)handler.removeCallbacks(aodFrame);handler.removeCallbacks(vsyncWatchdog);}
+    private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);stopAodHeartbeat();
+        if(aodFrame!=null)handler.removeCallbacks(aodFrame);handler.removeCallbacks(vsyncWatchdog);}
     private void updateCosmicLifecycle(){
         try{
             if(cosmic!=null){
@@ -486,7 +517,10 @@ final class RenderLoop {
             }
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
-            lastMoving=moving;
+            if(moving!=lastMoving){
+                AliveLog.i("AliveClean","probe moving="+moving+" t="+SystemClock.uptimeMillis()+" mode="+mode);
+                lastMoving=moving;
+            }
             if(forced||pacer.due(time)||!moving){
                 long probeStart=probeBegin();
                 boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
@@ -559,7 +593,7 @@ final class RenderLoop {
             if(gap>probeGapMax)probeGapMax=gap;
             // 球转动卡顿取证：只在前 400 帧、只在 mode 0 时逐帧记录帧间隔。
             // 看 dt 是否出现 2×/3× 的离散跳变（丢帧）还是连续抖动（采样问题）。
-            if(mode==0&&probeGapFrames<400&&gap>=12_000_000L){
+            if(mode==0&&gap>=12_000_000L){
                 probeGapFrames++;
                 AliveLog.i("AliveClean","probe dt t="+SystemClock.uptimeMillis()+" dt="+(gap/1_000_000f)+" moving="+lastMoving);
             }
@@ -568,6 +602,7 @@ final class RenderLoop {
         return now;
     }
     private void probeFrame(long start,long afterEff,long afterRen){
+        if(mode==0)aodRenders++;
         if(!probeEnabled||start==0L)return;
         long sw=System.nanoTime()-afterRen;
         long eff=(afterEff==0L?0L:afterEff-start);
@@ -613,5 +648,49 @@ final class RenderLoop {
         attachFresh(surface,w,h);
     }
 
-    private void release(){stopFrames();if(vivo!=null){vivo.close();vivo=null;}closeCosmic();handler.removeCallbacks(reloadTask);closeFrame();if(motion!=null){motion.close();motion=null;}if(display!=EGL14.EGL_NO_DISPLAY){if(scene!=0){NativeScene.destroy(scene);scene=0;}clearAuxiliary();GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);EGL14.eglTerminate(display);EGL14.eglReleaseThread();}display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;window=EGL14.EGL_NO_SURFACE;attachedSurface=null;attachedWidth=attachedHeight=0;}
+    /**
+     * 销毁本上下文里的 GL 对象（native scene、辅助纹理、照片/装饰图）。
+     * 必须在 context 仍为 current 时调用：Rust 侧的 Drop 与 glDeleteTextures 都要有活上下文。
+     * 不碰 display / egl / window。
+     */
+    private void destroySceneObjects(){
+        if(scene!=0){NativeScene.destroy(scene);scene=0;}
+        clearAuxiliary();
+        GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);
+        photo=decorator=0;
+    }
+    /** 只销毁 window surface：先解绑 current（销毁前它不能是 current），再 destroy。不碰 context。 */
+    private void destroyWindow(){
+        EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);
+        if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);
+    }
+    /** 只销毁 context / display 并释放本线程 EGL 状态。不碰 GL 对象。 */
+    private void destroyEglAll(){
+        if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);
+        EGL14.eglTerminate(display);
+        EGL14.eglReleaseThread();
+        display=EGL14.EGL_NO_DISPLAY;
+        egl=EGL14.EGL_NO_CONTEXT;
+    }
+    /**
+     * 全量销毁。顺序不可换：GL 对象（要 current context）→ window surface → context。
+     * 前六步（停止排帧、vivo/cosmic/frame/motion 等 Java 对象）保持原有先后顺序。
+     */
+    private void release(){
+        stopFrames();
+        if(vivo!=null){vivo.close();vivo=null;}
+        closeCosmic();
+        handler.removeCallbacks(reloadTask);
+        closeFrame();
+        if(motion!=null){motion.close();motion=null;}
+        // 原实现里这三个 destroy 都在 display 有效的保护下；window 与尺寸的清零在保护之外。
+        if(display!=EGL14.EGL_NO_DISPLAY){
+            destroySceneObjects();
+            destroyWindow();
+            destroyEglAll();
+        }
+        window=EGL14.EGL_NO_SURFACE;
+        attachedSurface=null;
+        attachedWidth=attachedHeight=0;
+    }
 }

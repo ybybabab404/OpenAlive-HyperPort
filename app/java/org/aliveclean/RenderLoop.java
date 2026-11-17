@@ -343,11 +343,9 @@ final class RenderLoop {
         scene=NativeScene.create(width,height,mode,options.aod,lock,home);
         if(scene==0)throw new IllegalStateException("Native scene creation failed; see shader log");
         pacer.doze(mode==0);
-        motion=new SceneMotion(width,height,mode,PhotoStyle.supported(options.aod)?-1:options.aod,lock,home,false);
-        textureMotion=new TextureMotion(width,height,mode,lock,home);
+        createPerInstanceState(options,lock,home);
         if(PhotoStyle.supported(options.aod)){
             PhotoStyle style=PhotoStyle.get(options.aod);
-            frameMotion=new FrameMotion(width,height,mode,options.pairedFrame(),style);
             if(options.pairedFrame()){
                 auxiliary[5]=loadPhoto(options.framePhoto,false);
                 NativeScene.texture(scene,5,auxiliary[5],homeWidth,homeHeight);
@@ -359,7 +357,6 @@ final class RenderLoop {
             GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D,0,GLES30.GL_RGB,1,1,0,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,ByteBuffer.allocateDirect(3));
             NativeScene.texture(scene,0,id[0],style.size,style.size);
 
-            masks=new MaskFrames(context.getAssets(),handler,()->{if(visible&&scene!=0)render(frameTime);},style);
         }
         applyAodRegion();
         choreographer=Choreographer.getInstance();pacer.reset();
@@ -369,6 +366,19 @@ final class RenderLoop {
         }
         if(options.lock==3||options.home==9){loadAuxiliary(1,"shader/photo/lock/groundGlass/gray.png",false);loadAuxiliary(2,"shader/photo/lock/groundGlass/mask.png",true);}
         if(options.aod==101)loadAuxiliary(3,"shader/photo/aod/fullAod/gray.png",false);
+    }
+    /**
+     * 只建每实例的 Java 侧状态（运动/纹理运动/相框/掩码序列），不碰 scene、纹理等 GL 资源。
+     * 这样"共享 GL 资源、独占实例状态"的复用路径也能复用它。
+     */
+    private void createPerInstanceState(SceneOptions options,int lock,int home){
+        motion=new SceneMotion(width,height,mode,PhotoStyle.supported(options.aod)?-1:options.aod,lock,home,false);
+        textureMotion=new TextureMotion(width,height,mode,lock,home);
+        if(PhotoStyle.supported(options.aod)){
+            PhotoStyle style=PhotoStyle.get(options.aod);
+            frameMotion=new FrameMotion(width,height,mode,options.pairedFrame(),style);
+            masks=new MaskFrames(context.getAssets(),handler,()->{if(visible&&scene!=0)render(frameTime);},style);
+        }
     }
     private void loadAuxiliary(int slot,String path,boolean repeat)throws IOException{
         try(InputStream in=context.getAssets().open(path)){

@@ -89,7 +89,9 @@ jobs:
             echo "Release $tag already exists; leaving it alone."
             exit 0
           fi
-          gh release create "$tag" dist/*.apk dist/SHA256SUMS dist/MD5SUMS dist/build-report.json \
+          # 只发 APK：GitHub 每个资源旁边本来就有一键复制摘要，校验和文件与构建报告对下载者没有用
+          # （build-report.json 里还带着构建机的路径）。
+          gh release create "$tag" dist/*.apk \
             --target "$GITHUB_SHA" --title "OpenAlive HyperPort $version" --notes-file docs/release-notes.md
       - name: Remove signing key
         if: always()

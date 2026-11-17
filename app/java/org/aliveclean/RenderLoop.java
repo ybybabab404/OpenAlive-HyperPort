@@ -26,6 +26,14 @@ final class RenderLoop {
     private EGLContext egl=EGL14.EGL_NO_CONTEXT;
     private EGLSurface window=EGL14.EGL_NO_SURFACE;
     private long scene;
+    /** 借用进程级共享资源：release 只拆 window。 */
+    private boolean sharedLease;
+    /** 只有宿主刚送来新 Surface 时才允许复用。 */
+    private boolean allowAcquire;
+    /** 诊断开关：true=连 scene 一起复用；false=只复用 context，每实例新建 scene。 */
+    private static final boolean SHARE_SCENE=true;
+    /** 建当前上下文用的 config，共享登记与重挂窗口都要它。 */
+    private EGLConfig lastConfig;
     private WallpaperRenderer cosmic;
     private StereoSensor stereoSensor;
     private SceneOptions renderedOptions;
@@ -116,6 +124,7 @@ final class RenderLoop {
             }
             AliveLog.i("AliveClean","redraw rebuild "+w+"x"+h+" attached="+attachedWidth+"x"+attachedHeight+" valid="+surface.isValid());
             release();
+            allowAcquire=false;
             try{init(surface,w,h);}catch(Throwable e){AliveLog.e("AliveClean","Renderer redraw failed",e);release();return;}
             forceFrame=true;pacer.reset();schedule();
         });
@@ -366,6 +375,11 @@ final class RenderLoop {
         }
         if(options.lock==3||options.home==9){loadAuxiliary(1,"shader/photo/lock/groundGlass/gray.png",false);loadAuxiliary(2,"shader/photo/lock/groundGlass/mask.png",true);}
         if(options.aod==101)loadAuxiliary(3,"shader/photo/aod/fullAod/gray.png",false);
+        if(lastConfig!=null){
+            SharedGl.adopt(display,egl,lastConfig);
+            SharedGl.publish(scene,photo,decorator,auxiliary,aspect,width,height,options.aod,lock,home,options.photo);
+            sharedLease=true;
+        }
     }
     /**
      * 只建每实例的 Java 侧状态（运动/纹理运动/相框/掩码序列），不碰 scene、纹理等 GL 资源。
@@ -389,20 +403,39 @@ final class RenderLoop {
     private void clearAuxiliary(){GLES30.glDeleteTextures(auxiliary.length,auxiliary,0);java.util.Arrays.fill(auxiliary,0);}
     private void init(Surface surface,int w,int h)throws IOException{
         if(!NativeScene.available){if(!nativeMissingLogged){nativeMissingLogged=true;AliveLog.w("AliveClean","native library unavailable; render loop idle (restart needed after update)");}return;}
-        SceneOptions options=new SceneOptions(preferences);attachedSurface=surface;
+        SceneOptions options=new SceneOptions(preferences);
+        SharedGl.Lease lease=SharedGl.acquire(surface,w,h,options.aod,options.lock,options.home,options.photo);
+        if(lease!=null){
+            attachedSurface=surface;width=w;height=h;attachedWidth=w;attachedHeight=h;
+            // 关键：swap() 用的是实例字段 display/window，复用路径必须把它们一并赋回，
+            // 否则 swap 收到 EGL_NO_DISPLAY，第一帧就报 12288 EGL_BAD_SURFACE。
+            display=lease.display;egl=lease.context;
+            window=lease.window;sharedLease=true;
+            if(SHARE_SCENE){
+                scene=lease.scene;photo=lease.photo;decorator=lease.decorator;
+                aspect=lease.aspect;System.arraycopy(lease.auxiliary,0,auxiliary,0,auxiliary.length);
+                renderedOptions=options;stereoAodAnimation=options.stereoAodAnimation;
+                pacer.doze(mode==0);
+                createPerInstanceState(options,options.lock,options.home);
+                applyAodRegion();choreographer=Choreographer.getInstance();pacer.reset();
+                return;
+            }
+
+        }
+        attachedSurface=surface;
         width=w;height=h;attachedWidth=w;attachedHeight=h;display=EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
         int[] version=new int[2];if(!EGL14.eglInitialize(display,version,0,version,1))throw new IllegalStateException("eglInitialize");
         EGLConfig[] configs=new EGLConfig[1];int[] count=new int[1];
         int[] attrs={EGL14.EGL_RENDERABLE_TYPE,0x40,EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,EGL14.EGL_DEPTH_SIZE,options.cosmic!=0?16:0,EGL14.EGL_NONE};
         if(options.cosmic!=0)configs[0]=CosmicEgl.choose(display,EGL14.EGL_WINDOW_BIT);
         else if(!EGL14.eglChooseConfig(display,attrs,0,configs,0,1,count,0)||count[0]==0)throw new IllegalStateException("No GLES3 EGL config");
-        egl=EGL14.eglCreateContext(display,configs[0],EGL14.EGL_NO_CONTEXT,new int[]{EGL14.EGL_CONTEXT_CLIENT_VERSION,3,EGL14.EGL_NONE},0);
+        lastConfig=configs[0];egl=EGL14.eglCreateContext(display,configs[0],EGL14.EGL_NO_CONTEXT,new int[]{EGL14.EGL_CONTEXT_CLIENT_VERSION,3,EGL14.EGL_NONE},0);
         window=options.vivo!=null?VivoColorSpace.window(display,configs[0],surface):EGL14.eglCreateWindowSurface(display,configs[0],surface,new int[]{EGL14.EGL_NONE},0);
         if(!EGL14.eglMakeCurrent(display,window,window,egl))throw new IllegalStateException("eglMakeCurrent");
         int[] eglW=new int[1],eglH=new int[1];
         EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,eglW,0);
         EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,eglH,0);
-        AliveLog.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid());
+        AliveLog.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid()+" surface="+System.identityHashCode(surface));
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}
         catch(Exception missing){
@@ -550,13 +583,22 @@ final class RenderLoop {
             }
             if(moving||frameSample.pending||resumedSample||forced)schedule();
         }catch(Throwable e){
-            AliveLog.e("AliveClean","Frame failed",e);
+            StringBuilder frames=new StringBuilder();
+            StackTraceElement[] st=e.getStackTrace();
+            for(int i=0;i<Math.min(4,st.length);i++)frames.append(" | ").append(st[i].toString());
+            AliveLog.e("AliveClean","Frame failed "+e.getClass().getSimpleName()+": "+e.getMessage()+frames);
             Surface lost=e instanceof SurfaceLost?attachedSurface:null;
             int lostWidth=attachedWidth,lostHeight=attachedHeight;
+            boolean wasShared=sharedLease;   // release() 会清掉它，先记住
             release();
             // surface 被系统先销毁导致的 swap 失败不是渲染缺陷：把场景拆掉后自己重挂一次，
             // 免得宿主不再给新 surface 时永久黑着（日志里的 alpha=0 就是这么来的）。
-            if(lost!=null)retrySurface(lost,lostWidth,lostHeight);
+            // 共享模式下不自己重试同一个失效 Surface：正是 release() 拆掉 EGL 才会让宿主补发新
+            // Surface，保留 context 时宿主不会补，用同一个 Surface 重试只会无限失败。
+            if(lost!=null&&!wasShared)retrySurface(lost,lostWidth,lostHeight);
+            else if(lost!=null){
+                AliveLog.i("AliveClean","shared gl: window dropped, waiting for host surface");
+            }
         }
     }
     private void closeFrame(){if(textureMotion!=null){textureMotion.close();textureMotion=null;}if(scene!=0)reportClock(false);frameSample.clear();if(frameMotion!=null){frameMotion.close();frameMotion=null;}if(masks!=null){masks.close();masks=null;}}
@@ -688,6 +730,12 @@ final class RenderLoop {
      */
     private void release(){
         stopFrames();
+        if(sharedLease){
+            SharedGl.releaseWindow(window);
+            window=EGL14.EGL_NO_SURFACE;sharedLease=false;
+            scene=0;photo=decorator=0;attachedSurface=null;attachedWidth=attachedHeight=0;
+            return;
+        }
         if(vivo!=null){vivo.close();vivo=null;}
         closeCosmic();
         handler.removeCallbacks(reloadTask);

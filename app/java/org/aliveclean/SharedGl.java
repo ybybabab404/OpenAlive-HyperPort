@@ -1,0 +1,159 @@
+package org.aliveclean;
+
+import android.opengl.EGL14;
+import android.opengl.EGLConfig;
+import android.opengl.EGLContext;
+import android.opengl.EGLDisplay;
+import android.opengl.EGLSurface;
+import android.view.Surface;
+
+/**
+ * 进程级的 GL 资源持有者。
+ *
+ * <p>实测：每次熄屏 AOD 都会新建一个 {@link RenderLoop}（旧实例 close），所以资源放在实例字段里
+ * 毫无意义。这里把 GL 资源放到静态持有者上，新实例只创建自己的 window surface。</p>
+ *
+ * <p>并发：acquire/release/publish 都在 {@link #LOCK} 内，持锁期间只做 EGL/GL 调用。</p>
+ */
+final class SharedGl {
+    private static final Object LOCK=new Object();
+
+    /** 一次租约：本实例的 window 加上共享资源的句柄。 */
+    static final class Lease {
+        EGLDisplay display=EGL14.EGL_NO_DISPLAY;
+        EGLContext context=EGL14.EGL_NO_CONTEXT;
+        EGLSurface window=EGL14.EGL_NO_SURFACE;
+        long scene;
+        int photo;
+        int decorator;
+        int[] auxiliary;
+        float aspect;
+    }
+
+    private static EGLDisplay display=EGL14.EGL_NO_DISPLAY;
+    private static EGLContext context=EGL14.EGL_NO_CONTEXT;
+    private static EGLConfig config;
+    /** 当前持有上下文的 window：只有它被释放时才需要解绑 current。 */
+    private static EGLSurface activeWindow=EGL14.EGL_NO_SURFACE;
+
+    private static long scene;
+    private static int photo,decorator;
+    private static int[] auxiliary=new int[6];
+    private static float aspect=1f;
+    private static int sceneW,sceneH,sceneAod,sceneLock,sceneHome;
+    private static String scenePhotoKey="";
+
+    static boolean available(){
+        return display!=EGL14.EGL_NO_DISPLAY&&context!=EGL14.EGL_NO_CONTEXT&&config!=null;
+    }
+
+    /** 资源键一致且上下文可用时，只建 window 并挂到共享上下文上；否则返回 null。 */
+    static Lease acquire(Surface surface,int w,int h,int aod,int lock,int home,String photoKey){
+        synchronized(LOCK){
+            if(!available()||scene==0)return null;
+            if(sceneW!=w||sceneH!=h||sceneAod!=aod||sceneLock!=lock||sceneHome!=home)return null;
+            if(!photoKey.equals(scenePhotoKey))return null;
+            // 现场重新选 config：首实例存下的那个可能与本进程当前状态不匹配（实测用它会
+            // 12289 EGL_BAD_NATIVE_WINDOW，而同一 Surface 上现场选的 config 正常）。
+            EGLConfig fresh=chooseNativeConfig();
+            if(fresh!=null)config=fresh;
+            EGLSurface window=EGL14.EGL_NO_SURFACE;
+            for(int attempt=0;attempt<4;attempt++){
+                window=EGL14.eglCreateWindowSurface(display,config,surface,new int[]{EGL14.EGL_NONE},0);
+                if(window!=EGL14.EGL_NO_SURFACE)break;
+                if(attempt==3){
+                    AliveLog.w("AliveClean","shared gl: create window failed err="+EGL14.eglGetError()+" valid="+surface.isValid());
+                    return null;
+                }
+                try{Thread.sleep(20);}catch(InterruptedException ignored){}
+            }
+            if(!EGL14.eglMakeCurrent(display,window,window,context)){
+                AliveLog.w("AliveClean","shared gl: make current failed err="+EGL14.eglGetError());
+                EGL14.eglDestroySurface(display,window);
+                return null;
+            }
+            // swap interval 与 surface 绑定，重挂必须重设。
+            EGL14.eglSwapInterval(display,1);
+            activeWindow=window;
+            int[] qw=new int[1],qh=new int[1];
+            boolean qok=EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,qw,0)&
+                    EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,qh,0);
+            AliveLog.i("AliveClean","shared gl: window query ok="+qok+" "+qw[0]+"x"+qh[0]
+                    +" current="+(EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)==window)
+                    +" ctxOk="+(EGL14.eglGetCurrentContext()==context));
+            Lease lease=new Lease();
+            lease.display=display;lease.context=context;
+            lease.window=window;lease.scene=scene;lease.photo=photo;lease.decorator=decorator;
+            lease.auxiliary=auxiliary.clone();lease.aspect=aspect;
+            AliveLog.i("AliveClean","shared gl: reused scene="+scene+" "+w+"x"+h+" surface="+System.identityHashCode(surface)+" config="+System.identityHashCode(config));
+            return lease;
+        }
+    }
+
+    /** 与全量初始化完全一致的 config 选择。 */
+    static EGLConfig chooseNativeConfig(){
+        int[] attrs={
+                EGL14.EGL_RENDERABLE_TYPE,0x40,
+                EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,
+                EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,
+                EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,
+                EGL14.EGL_DEPTH_SIZE,0,
+                EGL14.EGL_NONE};
+        EGLConfig[] configs=new EGLConfig[1];
+        int[] count=new int[1];
+        if(!EGL14.eglChooseConfig(display,attrs,0,configs,0,1,count,0)||count[0]==0)return null;
+        return configs[0];
+    }
+    /** 接管本实例刚建好的 EGL 对象（首个实例走这条路）。 */
+    static void adopt(EGLDisplay d,EGLContext c,EGLConfig cfg){
+        synchronized(LOCK){display=d;context=c;config=cfg;}
+    }
+
+    /** 登记资源供后续实例复用；旧 scene 若被替换则销毁，避免泄漏。 */
+    static void publish(long sceneId,int photoId,int decoratorId,int[] auxiliaryIds,float photoAspect,
+                        int w,int h,int aod,int lock,int home,String photoKey){
+        synchronized(LOCK){
+            if(scene!=0&&scene!=sceneId&&display!=EGL14.EGL_NO_DISPLAY)NativeScene.destroy(scene);
+            scene=sceneId;photo=photoId;decorator=decoratorId;aspect=photoAspect;
+            auxiliary=auxiliaryIds.clone();
+            sceneW=w;sceneH=h;sceneAod=aod;sceneLock=lock;sceneHome=home;scenePhotoKey=photoKey;
+            AliveLog.i("AliveClean","shared gl: published scene="+scene+" "+w+"x"+h);
+        }
+    }
+
+    /** 只拆 window：上下文与场景保留给下一个实例。 */
+    static void releaseWindow(EGLSurface window){
+        synchronized(LOCK){
+            if(display==EGL14.EGL_NO_DISPLAY)return;
+            // 旧实例的 close() 可能晚于新实例的 acquire：此时上下文已被新 window 接管，
+            // 再解绑就会把新实例的 current 抢走，导致它下一帧 swap 报 12288。
+            if(window==activeWindow){
+                EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);
+                activeWindow=EGL14.EGL_NO_SURFACE;
+            }else{
+                AliveLog.i("AliveClean","shared gl: stale window released without unbind");
+            }
+            if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);
+        }
+    }
+
+    /** 全量销毁：进程退出或明确的上下文丢失。 */
+    static void destroyAll(){
+        synchronized(LOCK){
+            if(display==EGL14.EGL_NO_DISPLAY){forget();return;}
+            EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);
+            if(scene!=0){NativeScene.destroy(scene);scene=0;}
+            if(photo!=0||decorator!=0){android.opengl.GLES30.glDeleteTextures(2,new int[]{photo,decorator},0);photo=decorator=0;}
+            if(auxiliary.length>0){android.opengl.GLES30.glDeleteTextures(auxiliary.length,auxiliary,0);java.util.Arrays.fill(auxiliary,0);}
+            if(context!=EGL14.EGL_NO_CONTEXT){EGL14.eglDestroyContext(display,context);context=EGL14.EGL_NO_CONTEXT;}
+            EGL14.eglTerminate(display);EGL14.eglReleaseThread();
+            display=EGL14.EGL_NO_DISPLAY;config=null;
+        }
+    }
+
+    private static void forget(){
+        display=EGL14.EGL_NO_DISPLAY;context=EGL14.EGL_NO_CONTEXT;config=null;
+        scene=0;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";
+        java.util.Arrays.fill(auxiliary,0);
+    }
+}

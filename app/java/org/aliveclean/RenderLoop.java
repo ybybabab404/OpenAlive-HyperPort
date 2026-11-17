@@ -417,11 +417,15 @@ final class RenderLoop {
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
             boolean moving=textureMotion.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&(preview||sailContinuousAod||aodMotion.running(time)));
             if(forced||pacer.due(time)||!moving){
+                long probeStart=probeBegin();
                 boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
+                long probeAfterEff=probeEnabled?System.nanoTime():0L;
                 if(!okEff)throw new IllegalStateException("Invalid texture effect packet");
                 boolean okRen=NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base);
+                long probeAfterRen=probeEnabled?System.nanoTime():0L;
                 if(!okRen)throw new IllegalStateException("Invalid native frame packet");
                 boolean okSw=swap("native");
+                probeFrame(probeStart,probeAfterEff,probeAfterRen);
                 if(!okSw)throw new SurfaceLost("EGL swap error "+EGL14.eglGetError());
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
@@ -459,6 +463,51 @@ final class RenderLoop {
     }
 
     /** 连续自愈次数上限，避免 surface 真死了还在无限重建。 */
+    /**
+     * 帧耗时探针：关着时每帧只多一次布尔判断，开着时每 30 帧汇总打一行。
+     * 指标口径与 docs/kb/troubleshooting/04 一致：eff = effects，ren = render，sw = swap，gap = 帧起点间隔。
+     */
+    private boolean probeEnabled;
+    private long probeCheckedAt;
+    private long probeLastStart;
+    private int probeFrames, probeSwOver80, probeSwOver40;
+    private long probeEffMax, probeRenMax, probeSwMax, probeGapMax;
+    private long probeBegin(){
+        long now=System.nanoTime();
+        if(!probeEnabled){
+            long uptime=SystemClock.uptimeMillis();
+            if(uptime-probeCheckedAt>=1000L){
+                probeCheckedAt=uptime;
+                probeEnabled=RenderProbe.enabled(context);
+            }
+        }
+        if(!probeEnabled)return 0L;
+        if(probeLastStart!=0L){
+            long gap=now-probeLastStart;
+            if(gap>probeGapMax)probeGapMax=gap;
+        }
+        probeLastStart=now;
+        return now;
+    }
+    private void probeFrame(long start,long afterEff,long afterRen){
+        if(!probeEnabled||start==0L)return;
+        long sw=System.nanoTime()-afterRen;
+        long eff=(afterEff==0L?0L:afterEff-start);
+        long ren=(afterEff==0L?0L:afterRen-afterEff);
+        if(eff>probeEffMax)probeEffMax=eff;
+        if(ren>probeRenMax)probeRenMax=ren;
+        if(sw>probeSwMax)probeSwMax=sw;
+        if(sw>=80_000_000L)probeSwOver80++;
+        if(sw>=40_000_000L)probeSwOver40++;
+        if(++probeFrames<30)return;
+        AliveLog.i("AliveClean","probe frame n="+probeFrames+" mode="+mode
+                +" effMax="+probeEffMax/1_000_000f+"ms renMax="+probeRenMax/1_000_000f+"ms"
+                +" swMax="+probeSwMax/1_000_000f+"ms gapMax="+probeGapMax/1_000_000f+"ms"
+                +" sw>=40ms:"+probeSwOver40+" sw>=80ms:"+probeSwOver80);
+        probeFrames=0;probeEffMax=probeRenMax=probeSwMax=probeGapMax=0;
+        probeSwOver40=probeSwOver80=0;
+    }
+
     private int surfaceLostRetries;
     private boolean nativeMissingLogged;
     private void retrySurface(Surface surface,int w,int h){

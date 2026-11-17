@@ -354,6 +354,10 @@ final class AodWallpaperMode {
     /**
      * 只清掉本模块自己的旁路键（`alive_aod_*`），**绝不写 `full_screen_aod_on`**。
      *
+     * <p>2026-11-17 二次修：上一版为「历史遗留的 1」保留了写回分支，结果只要探针判定一次
+     * 「壁纸不是我们的」（把确认加速到 150/350ms 后，壁纸重绑的瞬间很容易误判），就会把捕获到的
+     * 0 写回，用户刚选的「和锁屏样式一致」再次被清掉。这个键一律不写。
+     *
      * <p>2026-11-17 修：旧实现会把捕获时的旧值写回去。用户的 `alive_aod_restore_value` 是 0，
      * 于是之后每次 restore 都把 `full_screen_aod_on` 覆盖成 0——用户在设置里选「和锁屏样式一致」
      * 也会被改回「自定义」，全屏 AOD 不再生效，息屏时壁纸层（动画）就整个消失。这个键属于用户，
@@ -361,19 +365,13 @@ final class AodWallpaperMode {
      */
     static void restore(Context context) {
         try {
-            int original = getInt(context, KEY_HAS_RESTORE, 0) == 1 ? getInt(context, KEY_RESTORE, UNSET) : UNSET;
-            int current = getInt(context, KEY_MODE, UNSET);
-            // 只有「存储里确实还是 1、而用户原值是 0」这种历史遗留才写回一次；
-            // 正常路径下写侧已经把 1 拦掉了，这里通常是空操作。
-            if (original >= 0 && original != current) {
-                putInt(context, KEY_MODE, original);
-                AliveLog.i(TAG, "aod mode restored=" + original + " (was " + current + ")");
-            }
             putString(context, KEY_RESTORE, null);
             putString(context, KEY_HAS_RESTORE, null);
             putString(context, KEY_ACTIVE, null);
+            AliveLog.i(TAG, "aod bookkeeping cleared; full_screen_aod_on left to the user");
         } catch (Throwable error) {
             AliveLog.w(TAG, "aod mode restore failed", error);
         }
     }
+
 }

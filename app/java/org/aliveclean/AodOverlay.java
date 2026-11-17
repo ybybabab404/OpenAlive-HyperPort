@@ -32,7 +32,13 @@ final class AodOverlay {
             return;
         }
         if (view != null) { Trace.log("T10", "overlay#show already"); return; }
-        if (HyperOsAod.injectIntoAod()) { AliveLog.i(TAG, "injected into the AOD view"); return; }
+        if (HyperOsAod.injectIntoAod()) {
+            AliveLog.i(TAG, "injected into the AOD view");
+            // 注入成功说明 MIUI 的 AOD 视图已经在跑；此时若存储值是「和锁屏样式一致」而 MIUI 内部
+            // 还停在自定义，就让它重算一次（有 1.5 秒防抖，不会每轮都打扰）。
+            AodFullScreen.ensureFullAodApplied(service);
+            return;
+        }
         final int token = ++showToken;
         new android.os.Handler(service.getMainLooper()).postDelayed(new Runnable() {
             @Override public void run() {

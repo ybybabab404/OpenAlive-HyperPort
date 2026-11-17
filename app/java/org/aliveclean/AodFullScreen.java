@@ -142,6 +142,28 @@ final class AodFullScreen {
      * {@code full_screen_aod_on=0}。结果：全屏 AOD 在系统壁纸下也"永远受支持"，
      * AOD 样式页被按全屏 AOD 渲染 —— 用户看到的就是"怎么设都是自定义"。</p>
      */
+    /**
+     * 注入完成后的兜底：用户选的是「和锁屏样式一致」时，让 MIUI 重算内部的全屏 AOD 状态。
+     *
+     * <p>场景：设置值已经是 1（我们的写侧也不再改它），但 MIUI 的 {@code MiuiFullAodManager}
+     * 在开机早期就把 {@code mAodFullScreenEnable} 算成了 false，之后再没有任何东西让它重算——
+     * 表现就是「设置行显示 AliveHS 样式，但息屏只画时钟、壁纸层不出现」。这里有 1.5 秒防抖。</p>
+     */
+    static void ensureFullAodApplied(Context context) {
+        if (context == null) return;
+        Object manager = lastManager.get();
+        if (manager == null) return;
+        try {
+            if (!AodWallpaperMode.wantsFullAod(context)) return;
+            if (!Boolean.TRUE.equals(RECONCILING.get())) {
+                AliveLog.once(TAG, "full aod ensure", "full aod: asking MIUI to recompute (stored value is 1)");
+            }
+            reconcileNative(manager, context);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "full aod ensure failed", error);
+        }
+    }
+
     private static void reconcileNative(Object manager, Context context) {
         if (manager == null) return;
         if (Boolean.TRUE.equals(RECONCILING.get())) return;

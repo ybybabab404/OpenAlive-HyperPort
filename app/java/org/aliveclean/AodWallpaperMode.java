@@ -25,8 +25,12 @@ final class AodWallpaperMode {
     static final String KEY_ACTIVE = "alive_aod_active";
     private static final String TAG = "AliveHSHooks";
     private static final int UNSET = -1;
-    private static final int RESTORE_CONFIRMATIONS = 5;
-    private static final long RESTORE_CONFIRM_MS = 1000L;
+    /**
+     * 兜底探测的节奏：以前是 5 次 × 1 秒（最多 5 秒才改回去），慢得能被用户看见。
+     * 正常路径已经把「写 1」在写侧拦住了（见 {@code AodFullScreen#blockFullAodWrite}），
+     * 这里只处理历史遗留的 1，所以两次快速确认足够。
+     */
+    private static final long[] RESTORE_PROBE_MS = {150L, 350L};
     private static final Object RESTORE_LOCK = new Object();
     private static boolean restoreInFlight;
 
@@ -296,31 +300,30 @@ final class AodWallpaperMode {
             @Override
             public void run() {
                 try {
+                    int stepIndex = misses[0] + ours[0];
                     if (alive(context)) {
                         if (misses[0] != 0) {
                             AliveLog.i(TAG, "aod restore cancelled after " + misses[0] + " miss");
                             finishRestoreProbe();
                             return;
                         }
-                        // A mutation callback can arrive before WMS has rebound the
-                        // wallpaper.  Give the live wallpaper a short grace period to
-                        // disappear instead of cancelling on the first early probe.
                         ours[0]++;
-                        if (ours[0] >= RESTORE_CONFIRMATIONS) {
+                        if (ours[0] >= RESTORE_PROBE_MS.length) {
                             AliveLog.i(TAG, "aod restore cancelled: wallpaper is still ours");
                             finishRestoreProbe();
                             return;
                         }
                     } else {
                         misses[0]++;
-                        if (misses[0] >= RESTORE_CONFIRMATIONS) {
+                        if (misses[0] >= RESTORE_PROBE_MS.length) {
                             AliveLog.i(TAG, "aod foreign confirmed x" + misses[0]);
                             restore(context);
                             finishRestoreProbe();
                             return;
                         }
                     }
-                    handler.postDelayed(step[0], RESTORE_CONFIRM_MS);
+                    long delay = RESTORE_PROBE_MS[Math.min(stepIndex, RESTORE_PROBE_MS.length - 1)];
+                    handler.postDelayed(step[0], delay);
                 } catch (Throwable error) {
                     AliveLog.w(TAG, "aod restore probe failed", error);
                     finishRestoreProbe();
@@ -358,10 +361,17 @@ final class AodWallpaperMode {
      */
     static void restore(Context context) {
         try {
+            int original = getInt(context, KEY_HAS_RESTORE, 0) == 1 ? getInt(context, KEY_RESTORE, UNSET) : UNSET;
+            int current = getInt(context, KEY_MODE, UNSET);
+            // 只有「存储里确实还是 1、而用户原值是 0」这种历史遗留才写回一次；
+            // 正常路径下写侧已经把 1 拦掉了，这里通常是空操作。
+            if (original >= 0 && original != current) {
+                putInt(context, KEY_MODE, original);
+                AliveLog.i(TAG, "aod mode restored=" + original + " (was " + current + ")");
+            }
             putString(context, KEY_RESTORE, null);
             putString(context, KEY_HAS_RESTORE, null);
             putString(context, KEY_ACTIVE, null);
-            AliveLog.i(TAG, "aod bookkeeping cleared; full_screen_aod_on left to the user");
         } catch (Throwable error) {
             AliveLog.w(TAG, "aod mode restore failed", error);
         }

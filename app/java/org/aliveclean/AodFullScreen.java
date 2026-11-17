@@ -70,6 +70,7 @@ final class AodFullScreen {
         AodFullScreen.settingsProcess = settingsProcess;
         int hooks = 0;
         hooks += hookFullAodSetting(loader);
+        hooks += hookFullAodWrite(loader);
         if (settingsProcess) {
             hooks += hookSupport(loader);
         } else {
@@ -270,6 +271,69 @@ final class AodFullScreen {
         param.setResult(1);
         AliveLog.warnOnce(TAG, "aod mode forced full",
                 "aod mode forced to 和锁屏样式一致 while our wallpaper is applied", null);
+    }
+
+    /**
+     * 拦住写入：我们的壁纸生效期间，谁也别把 {@code full_screen_aod_on} 落成 1。
+     *
+     * <p>MIUI 的 {@code MiuiFullAodManager.updateSettings()} 与设置页都会写这个键；一旦写进存储，
+     * 切回系统壁纸后用户看到的就是「和锁屏样式一致」而不是他自己的「自定义」——旧实现为此要在
+     * 切回时做一次「写回去」的补偿，既慢（5×1s 确认）又容易把用户新选的 1 覆盖成 0
+     * （2026-11-17 那次 Bug 就是这么来的）。</p>
+     *
+     * <p>现在改成写侧拦截：存储值全程保持用户原值，读取侧本来就会返回 1，MIUI 该看到的都看得到。
+     * 切回系统壁纸时无需任何补偿动作，天然即时。</p>
+     */
+    private static int hookFullAodWrite(ClassLoader loader) {
+        Class<?> secure = Xp.findClassIfExists("android.provider.Settings$Secure", loader);
+        if (secure == null) return 0;
+        int count = 0;
+        try {
+            Xp.findAndHookMethod(secure, "putInt", ContentResolver.class, String.class, int.class,
+                    new Xp.MethodHook() {
+                        @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                            blockFullAodWrite(param);
+                        }
+                    });
+            count++;
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod write putInt", "full aod: putInt hook failed", error);
+        }
+        try {
+            Xp.findAndHookMethod(secure, "putIntForUser",
+                    ContentResolver.class, String.class, int.class, int.class,
+                    new Xp.MethodHook() {
+                        @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                            blockFullAodWrite(param);
+                        }
+                    });
+            count++;
+        } catch (Throwable error) {
+            AliveLog.warnOnce(TAG, "full aod write putIntForUser", "full aod: putIntForUser hook failed", error);
+        }
+        return count;
+    }
+
+    /** 只拦「写 1」；写 0（用户主动选自定义）原样放行。args = (cr, name, value[, user])。 */
+    private static void blockFullAodWrite(Xp.MethodHookParam param) {
+        if (Boolean.TRUE.equals(SETTING_OVERRIDE.get())) return;
+        Object[] args = param.args;
+        if (args.length < 3 || !AodWallpaperMode.KEY_MODE.equals(args[1])) return;
+        Object value = args[2];
+        if (!(value instanceof Integer) || ((Integer) value) != 1) return;
+        Context context = Xp.currentApplication();
+        if (context == null) return;
+        boolean ours;
+        SETTING_OVERRIDE.set(Boolean.TRUE);
+        try {
+            ours = aliveCached(context) && HyperOsAod.aodEnabled(context);
+        } finally {
+            SETTING_OVERRIDE.remove();
+        }
+        if (!ours) return;
+        param.setResult(Boolean.TRUE);
+        AliveLog.warnOnce(TAG, "aod mode write blocked",
+                "aod mode: kept the stored full_screen_aod_on as the user chose it", null);
     }
 
     /** {@code alive()} 每次都要问 WallpaperManager，做 1 秒缓存，避免拖慢 Settings 读取路径。 */

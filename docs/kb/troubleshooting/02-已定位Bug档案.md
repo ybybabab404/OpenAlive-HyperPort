@@ -1490,3 +1490,18 @@ SystemUI 进程里的模块 ClassLoader 仍指向上一个已被删除的 APK �
 
 **验证**：重装 + 重启后 `full_screen_aod_on=1`、`alive_aod_restore_value/set=null`；用户确认
 息屏动画持续显示。
+
+## 17. 「切回系统壁纸后 AOD 模式恢复不够即时」——改为写侧拦截，不再补偿
+
+**问题**：旧设计是「应用壁纸时捕获用户原值，切回系统壁纸时再写回去」。写回本身要等壁纸变更回调
++ 5 次 × 1 秒确认（最长 5 秒），用户能明显看出延迟；而且这条写回路径在 2026-11-17 造成了
+「用户选 1 又被改回 0」的事故（§16）。
+
+**新方案（`be14b10`）**：
+1. **写侧拦截**：`AodFullScreen#blockFullAodWrite` 在「壁纸是我们的 + 息屏开着」时拦掉对
+   `full_screen_aod_on` 写 1 的调用（写 0 放行），存储值全程保持用户原值；
+2. 因此切回系统壁纸时 MIUI 读到的就是用户原值，**不需要恢复动作，零延迟**；
+3. 兜底：若存储里是历史遗留的 1，`AodWallpaperMode.restoreWhenForeign` 用 150ms/350ms 两次
+   确认（约 0.5 秒）后写回捕获值；`AodWallpaperModeHook` 的首检延迟由 800ms 降到 250ms。
+
+**验证**：重启后 `aod foreign confirmed x2` 出现在约 0.5 秒内（旧实现要 5 秒）。

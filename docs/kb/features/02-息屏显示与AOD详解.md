@@ -711,6 +711,17 @@ AOD 构图（启航样式下壁纸缩成 0.22 的球，见 §3.10）。两者叠
 
 ### 4.2 `full_screen_aod_on` 由谁写
 
+> **2026-11-17 起：本模块既不写、"我们的壁纸生效期间"也不允许别人写。**
+> 做法是「读侧强制 + 写侧拦截」：
+> - 读侧：`AodFullScreen#overrideFullAodRead` 在「壁纸是我们的 + 息屏显示开着」时把读取结果改为 1；
+> - 写侧：`AodFullScreen#blockFullAodWrite` 在同一条件下拦掉 `Settings$Secure.putInt/putIntForUser`
+>   对这个键写 1 的调用（写 0 放行），存储值全程保持用户原值。
+>
+> 好处：切回系统壁纸时**不需要任何"恢复"动作**，MIUI 读到的就是用户原值——恢复天然即时；
+> 也不会再出现「restore 把用户新选的 1 覆盖回 0」那类 bug（见 `troubleshooting/02-*` §16）。
+> 兜底：若存储里存在历史遗留的 1，壁纸变更后 150ms/350ms 两次确认即写回捕获值（约 0.5 秒）。
+
+
 | 写入方 | 时机 | 值 | 证据 |
 |---|---|---|---|
 | MIUI 原生 `MiuiFullAodManager.updateSettings()` | `r4==0` 时 | 写 `0` | 反编译源码，`02-*` §9.2【源码级】 |

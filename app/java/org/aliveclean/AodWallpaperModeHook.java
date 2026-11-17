@@ -14,7 +14,8 @@ import android.os.Looper;
  */
 final class AodWallpaperModeHook {
     private static final String TAG = "AliveHSHooks";
-    private static final long CHECK_DELAY_MS = 800L;
+    /** 壁纸变更后的首检延迟；配合 {@code AodWallpaperMode} 里的 150/350ms 两次探测，整体约 1 秒内收敛。 */
+    private static final long CHECK_DELAY_MS = 250L;
 
     private AodWallpaperModeHook() {}
 

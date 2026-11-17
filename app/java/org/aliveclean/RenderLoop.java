@@ -219,9 +219,34 @@ final class RenderLoop {
             if(surface!=null&&surface.isValid()){init(surface,width,height);schedule();}return;
         }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){AliveLog.e("AliveClean","Scene reload failed",e);release();}}
     void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
+    /** 实验：AOD 段用自建定时器驱动，绕过 doze 下 Choreographer 的降频。验证完必须定论。 */
+    private static final boolean AOD_TIMER_DRIVEN=true;
+    private static final long AOD_FRAME_MS=8L;
+    private Runnable aodFrame;
+    private long aodDeadline;
+    private Runnable aodFrame(){
+        if(aodFrame==null)aodFrame=()->{framePosted=false;frameTime=System.nanoTime();handler.post(renderTask);};
+        return aodFrame;
+    }
+    /**
+     * 按绝对时间排下一帧：目标 = 上次目标 + 8ms，而不是"画完再等 8ms"。
+     * 后者会把一帧自身的耗时（约 8ms）叠加进来，实测周期变成 16ms。
+     * 落后超过一帧时直接对齐到当前时间，不累积欠账。
+     */
+    private void postAodFrame(){
+        long now=System.nanoTime();
+        long period=AOD_FRAME_MS*1_000_000L;
+        if(aodDeadline==0L||now-aodDeadline>period)aodDeadline=now;
+        else aodDeadline+=period;
+        long delayMs=Math.max(0L,(aodDeadline-now)/1_000_000L);
+        framePosted=true;
+        handler.postDelayed(aodFrame(),delayMs);
+    }
     private void schedule(){
         if(!((renderingVisible()||forceFrame)&&(scene!=0||cosmic!=null||vivo!=null)))return;
-        if(choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}
+        if(AOD_TIMER_DRIVEN&&mode==0){
+            if(!framePosted)postAodFrame();
+        }else if(choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}
         // Choreographer 在 doze/息屏期间可能整段不发 vsync；一旦回调不来，framePosted 会
         // 永久卡在 true，之后 schedule() 全是空操作 —— 表现就是"surface 在、画面永远不出"。
         // 这里兜一个 120ms 的看门狗：只在 vsync 真的没来时直接渲染一帧。
@@ -237,7 +262,7 @@ final class RenderLoop {
         catch(Throwable error){AliveLog.w("AliveClean","vsync watchdog render failed",error);}
     };
     private void onVsync(long time){handler.removeCallbacks(vsyncWatchdog);framePosted=false;frameTime=time;handler.post(renderTask);}
-    private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);handler.removeCallbacks(vsyncWatchdog);}
+    private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);if(aodFrame!=null)handler.removeCallbacks(aodFrame);handler.removeCallbacks(vsyncWatchdog);}
     private void updateCosmicLifecycle(){
         try{
             if(cosmic!=null){

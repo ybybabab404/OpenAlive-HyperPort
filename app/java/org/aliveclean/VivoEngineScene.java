@@ -30,6 +30,7 @@ final class VivoEngineScene implements AutoCloseable {
     private VivoTextureLayer layer;
     private VivoSensorGain sensorGain;
     private VivoLiquidSensitivity liquidSensitivity;
+    private boolean touchDroppedLogged,touchAcceptedLogged;
     private Bitmap liquidMask;
     private int photoWidth,photoHeight;
     private VivoOptions options;
@@ -367,7 +368,17 @@ final class VivoEngineScene implements AutoCloseable {
         // 所以没有 uprightLiquid() 那个 180° 补偿，触控也就必须自己把 y 翻过来，
         // 否则点上方、效果出现在下方。style==1 走 180° 旋转那条路，坐标已经是屏幕方向。
         final float ey=options.style==1?ty:1f-ty;
-        main.post(()->{if(closed||!visible)return;try{
+        main.post(()->{
+            // 锁屏上曾出现过「折射效果暂时点不动、过一会儿又好了」的过渡态。触控平时不打日志，
+            // 出问题时没有任何线索，所以这里各记一次：首次被丢、首次被接受。
+            if(closed||!visible){
+                if(!touchDroppedLogged){touchDroppedLogged=true;
+                    AliveLog.i("AliveClean","vivo touch dropped style="+options.style+" closed="+closed+" visible="+visible);}
+                return;
+            }
+            if(!touchAcceptedLogged){touchAcceptedLogged=true;
+                AliveLog.i("AliveClean","vivo touch accepted style="+options.style+" family="+family);}
+            try{
             String json="{\"data\":{\"eventAction\":"+action+",\"x\":"+tx+",\"y\":"+ey+"}}";
             Object touch=bean(BASE+"bean.TouchDataBean",json);
             api.call(controller,"onWallpaperTouchEvent",new Class<?>[]{touch.getClass()},touch);

@@ -85,8 +85,12 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo 'Tag does not match the APK version'; exit 1
           fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; leaving it alone."
+            exit 0
+          fi
           gh release create "$tag" dist/*.apk dist/SHA256SUMS dist/MD5SUMS dist/build-report.json \
-            --target "$GITHUB_SHA" --title "OpenAlive HyperPort $version" --prerelease --notes-file docs/release-notes.md
+            --target "$GITHUB_SHA" --title "OpenAlive HyperPort $version" --notes-file docs/release-notes.md
       - name: Remove signing key
         if: always()
         run: |

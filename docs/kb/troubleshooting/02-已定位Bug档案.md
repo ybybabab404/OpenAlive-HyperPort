@@ -1435,3 +1435,31 @@ system_server 自身服务连接数耗尽 → AOD 的 dream 服务绑不上 → 
 
 **结论**：这两条都不是本模块代码缺陷；处理方式是「重启」与「减少无谓的覆盖安装」。
 不要用 hook 去抬高 system_server 的连接上限——那会掩盖真实泄漏，且热路径 hook 风险远大于收益。
+
+## 15. 覆盖安装后不重启 → SystemUI 直接崩（`UnsatisfiedLinkError`）
+
+**症状（2026-11-17 13:25）**：`com.android.systemui` 崩溃重启，crash 缓冲区：
+
+```
+FATAL EXCEPTION: AliveGL  (Process: com.android.systemui)
+java.lang.UnsatisfiedLinkError: LspModuleClassLoader[module=/data/app/~~KD6iYxQK.../org.aliveclean-.../base.apk]
+  couldn't find "libalive_clean.so"
+  at org.aliveclean.NativeScene.<clinit>(NativeScene.java:12)
+  at org.aliveclean.RenderLoop.createScene -> init -> attach
+```
+
+**根因**：用 `adb install -r` 覆盖安装会换掉 APK 目录（`~~xxxx==` 每次不同），而**已在运行的
+SystemUI 进程里的模块 ClassLoader 仍指向上一个已被删除的 APK 路径**，于是 `System.loadLibrary`
+找不到打包在 APK 里的 `libalive_clean.so`。这是「装完不重启」的必然结果，不是代码逻辑错误
+（`system_server`/`SystemUI` 的 hook 都要重启才换到新代码，见 `build/01-*`）。
+
+**为什么它会崩整个 SystemUI**：`UnsatisfiedLinkError` 是 `Error` 而不是 `Exception`，
+原来的 `catch(Exception)` 兜不住，异常从 `AliveGL` 渲染线程一路冒到 `HandlerThread.run` → 进程死。
+
+**已修（`9d89e77` 之后的构建）**：
+
+1. `NativeScene` 静态块不再重新抛出，改为 `available` 标志（`catch (Throwable)`）；
+2. `RenderLoop.init()` 开头判 `NativeScene.available`，不可用就打一行日志后**空转**，不建场景；
+3. `RenderLoop` 的 `render()` 与两处 `init()` 调用改成 `catch (Throwable)`——渲染线程不允许把宿主进程带走。
+
+**操作纪律**：`install -r` 之后**必须重启**再验证；调试期连续安装时尤其容易踩到。

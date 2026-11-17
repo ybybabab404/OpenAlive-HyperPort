@@ -116,7 +116,7 @@ final class RenderLoop {
             }
             AliveLog.i("AliveClean","redraw rebuild "+w+"x"+h+" attached="+attachedWidth+"x"+attachedHeight+" valid="+surface.isValid());
             release();
-            try{init(surface,w,h);}catch(Exception e){AliveLog.e("AliveClean","Renderer redraw failed",e);release();return;}
+            try{init(surface,w,h);}catch(Throwable e){AliveLog.e("AliveClean","Renderer redraw failed",e);release();return;}
             forceFrame=true;pacer.reset();schedule();
         });
     }
@@ -322,6 +322,7 @@ final class RenderLoop {
     }
     private void clearAuxiliary(){GLES30.glDeleteTextures(auxiliary.length,auxiliary,0);java.util.Arrays.fill(auxiliary,0);}
     private void init(Surface surface,int w,int h)throws IOException{
+        if(!NativeScene.available){if(!nativeMissingLogged){nativeMissingLogged=true;AliveLog.w("AliveClean","native library unavailable; render loop idle (restart needed after update)");}return;}
         SceneOptions options=new SceneOptions(preferences);attachedSurface=surface;
         width=w;height=h;attachedWidth=w;attachedHeight=h;display=EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
         int[] version=new int[2];if(!EGL14.eglInitialize(display,version,0,version,1))throw new IllegalStateException("eglInitialize");
@@ -429,7 +430,7 @@ final class RenderLoop {
                 }
             }
             if(moving||frameSample.pending||resumedSample||forced)schedule();
-        }catch(Exception e){
+        }catch(Throwable e){
             AliveLog.e("AliveClean","Frame failed",e);
             Surface lost=e instanceof SurfaceLost?attachedSurface:null;
             int lostWidth=attachedWidth,lostHeight=attachedHeight;
@@ -459,6 +460,7 @@ final class RenderLoop {
 
     /** 连续自愈次数上限，避免 surface 真死了还在无限重建。 */
     private int surfaceLostRetries;
+    private boolean nativeMissingLogged;
     private void retrySurface(Surface surface,int w,int h){
         if(closed)return;
         if(!surface.isValid()||w<1||h<1){

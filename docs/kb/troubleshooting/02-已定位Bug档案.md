@@ -1463,3 +1463,30 @@ SystemUI 进程里的模块 ClassLoader 仍指向上一个已被删除的 APK �
 3. `RenderLoop` 的 `render()` 与两处 `init()` 调用改成 `catch (Throwable)`——渲染线程不允许把宿主进程带走。
 
 **操作纪律**：`install -r` 之后**必须重启**再验证；调试期连续安装时尤其容易踩到。
+
+## 16. AOD 永远是「自定义」→ 息屏壁纸层（动画）整个消失
+
+**症状（2026-11-17 13:43 用户定位）**：息屏时时钟等元素正常、**只有壁纸/动画那层变暗消失**；
+无论如何都是「自定义」显示模式——即使在系统壁纸下重新选「和锁屏样式一致」，表现仍是自定义。
+
+**根因**：`AodWallpaperMode.restore()` 里还留着写回分支
+
+```java
+} else if (current != original) {
+    putInt(context, KEY_MODE, original);   // original = alive_aod_restore_value = 0
+}
+```
+
+模块早先捕获过用户当时的 `full_screen_aod_on = 0`（`alive_aod_restore_value=0`），于是每次
+`restore()` 都把 0 写回；用户之后选「和锁屏样式一致」（=1）会被下一次 restore 覆盖回 0。
+「自定义」模式下 MIUI 的 AOD 只画时钟，全屏 AOD 通道不生效，壁纸层因此不在画面里。
+
+**为什么以前看起来正常**：写回路径一直存在，只有在 `alive_aod_restore_set=1` 且捕获值为 0 的
+状态下才会稳定触发；重启/重装后该状态成立，于是稳定复现。
+
+**修复（`435e54e`）**：`restore()` 只清本模块自己的旁路键（`alive_aod_restore_value`、
+`alive_aod_restore_set`、`alive_aod_active`），**绝不写 `full_screen_aod_on`**——这与
+`AodWallpaperMode` 类注释自 `3d1dd48` 起声明的策略一致，此前只是这条路径没照做。
+
+**验证**：重装 + 重启后 `full_screen_aod_on=1`、`alive_aod_restore_value/set=null`；用户确认
+息屏动画持续显示。

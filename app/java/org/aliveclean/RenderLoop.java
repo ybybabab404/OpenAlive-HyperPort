@@ -241,7 +241,7 @@ final class RenderLoop {
     void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
     /** 实验：AOD 段用自建定时器驱动，绕过 doze 下 Choreographer 的降频。验证完必须定论。 */
     private static final boolean AOD_TIMER_DRIVEN=true;
-    private static final long AOD_FRAME_MS=8L;
+    private static final long AOD_FRAME_MS=16L; // AOD 60Hz；必须与 VsyncPacer.DOZE_INTERVAL_NS 一致
     private Runnable aodFrame;
     private long aodDeadline;
     /**

@@ -35,6 +35,8 @@ final class RenderLoop {
     private boolean allowAcquire;
     /** 探针：下一次渲染前测一次 glFinish，用来判断慢帧是不是我们的 GPU 工作。 */
     private boolean probeGpuArmed;
+    /** 上一帧换出是否偏慢：只有偏慢才在下一帧测一次 glFinish 归因。 */
+    private boolean probeSlowSeen;
     /** 诊断开关：true=连 scene 一起复用；false=只复用 context，每实例新建 scene。 */
     private static final boolean SHARE_SCENE=true;
     /** 建当前上下文用的 config，共享登记与重挂窗口都要它。 */
@@ -441,6 +443,14 @@ final class RenderLoop {
         EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,eglW,0);
         EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,eglH,0);
         AliveLog.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid()+" surface="+System.identityHashCode(surface));
+        if(RenderProbe.enabled(context)&&gpuTimer==null)gpuTimer=new GpuTimer();
+        if(RenderProbe.enabled(context)){
+            // 诊断：Adreno 上 timer query 是否可用，决定能否把 GPU 执行时间与"等待"分开。
+            // 这里不能读 probeEnabled 字段：它要到首帧渲染时才惰性刷新，init 阶段还是 false。
+            String ext=GLES30.glGetString(GLES30.GL_EXTENSIONS);
+            boolean timer=ext!=null&&(ext.contains("GL_EXT_disjoint_timer_query")||ext.contains("GL_EXT_disjoint_timer_query_es3"));
+            AliveLog.i("AliveClean","probe ext timer_query="+timer+" renderer="+GLES30.glGetString(GLES30.GL_RENDERER));
+        }
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}
         catch(Exception missing){
@@ -560,7 +570,13 @@ final class RenderLoop {
 
                 if(!frameSample.pending)frameSample.captureTextures(textureMotion);
                 frameSample.capture(frameMotion,motion,SystemClock.uptimeMillis());
+                // 诊断：mask 上传发生在 probeBegin 之前，此前测不到它的代价（可能是一次全屏纹理上传）。
+                long maskStart=probeEnabled?System.nanoTime():0L;
                 if(!masks.upload(frameSample.mask,auxiliary[0])){if(!masks.failed())schedule();else reportClock(false);return;}
+                if(probeEnabled){
+                    long maskMs=(System.nanoTime()-maskStart)/1_000_000L;
+                    if(maskMs>5)AliveLog.i("AliveClean","probe mask ms="+maskMs+" mode="+mode+" t="+SystemClock.uptimeMillis());
+                }
                 if(!NativeScene.frame(scene,frameSample.effect))throw new IllegalStateException("Invalid frame effect packet");
             }
             if(Diagnostics.TRACE&&mode==0&&!stateReported&&motion.values[0]>.999f){stateReported=true;AliveLog.i("AliveClean","AOD frame lensScale="+motion.values[4]+" x="+motion.values[8]+" y="+motion.values[9]+" viewport="+width+"x"+height+" photo="+photo);}
@@ -571,6 +587,7 @@ final class RenderLoop {
             }
             if(forced||pacer.due(time)||!moving){
                 long probeStart=probeBegin();
+                boolean gpuTimed=probeEnabled&&gpuTimer!=null&&gpuTimer.begin();
                 boolean okEff=NativeScene.effects(scene,frameMotion==null?textureMotion.packet():frameSample.textures);
                 long probeAfterEff=probeEnabled?System.nanoTime():0L;
                 if(!okEff)throw new IllegalStateException("Invalid texture effect packet");
@@ -579,18 +596,30 @@ final class RenderLoop {
                 if(!okRen)throw new IllegalStateException("Invalid native frame packet");
                 // 诊断：区分「我们的 GPU 没画完」与「系统压着不呈现」。glFinish 只在前一帧
                 // 异常慢之后测一次，平时不调用，避免给每帧加同步开销。
-                if(probeEnabled){
+                // 只在上一帧换出偏慢时才测一次 glFinish：每帧都测等于每帧强制同步，
+                // 会把 AOD 的帧节奏压垮，测出来的数字不能代表正常行为。
+                if(probeEnabled&&probeGpuArmed){
                     long gpuStart=System.nanoTime();
                     GLES30.glFinish();
                     long gpuMs=(System.nanoTime()-gpuStart)/1_000_000L;
-                    AliveLog.i("AliveClean","probe gpu ms="+gpuMs
+                    probeGpuArmed=false;
+                    if(gpuMs>16)AliveLog.i("AliveClean","probe gpu ms="+gpuMs
                             +" eff="+((probeAfterEff-probeStart)/1_000_000L)
                             +" ren="+((probeAfterRen-probeAfterEff)/1_000_000L)
                             +" motion="+(frameMotion==null?"tex":"frame")
                             +" mode="+mode+" t="+SystemClock.uptimeMillis());
                 }
+                long gpuNs=gpuTimed?gpuTimer.end():-1L;
+                long swapStart=System.nanoTime();                 // 单独量 eglSwapBuffers，不含 glFinish
                 boolean okSw=swap("native");
+                if(probeEnabled&&gpuNs>16_000_000L)
+                    AliveLog.i("AliveClean","probe gpuexec ns="+(gpuNs/1_000_000f)+"ms mode="+mode+" t="+SystemClock.uptimeMillis());
+                if(probeEnabled&&probeSlowSeen)probeGpuArmed=true;
                 probeFrame(probeStart,probeAfterEff,probeAfterRen);
+                if(probeEnabled){
+                    long swapMs=(System.nanoTime()-swapStart)/1_000_000L;
+                    if(swapMs>40)AliveLog.i("AliveClean","probe swaponly ms="+swapMs+" mode="+mode+" t="+SystemClock.uptimeMillis());
+                }
                 if(!okSw)throw new SurfaceLost("EGL swap error "+EGL14.eglGetError());
                 if(clockToken!=0&&mode==1){if(frameMotion==null)reportClock(false);else if(frameSample.expanded)reportClock(true);}
                 if(frameMotion!=null){
@@ -641,12 +670,67 @@ final class RenderLoop {
      * 帧耗时探针：关着时每帧只多一次布尔判断，开着时每 30 帧汇总打一行。
      * 指标口径与 docs/kb/troubleshooting/04 一致：eff = effects，ren = render，sw = swap，gap = 帧起点间隔。
      */
+    private GpuTimer gpuTimer;
     private boolean probeEnabled;
     private long probeCheckedAt;
     private long probeLastStart;
     private int probeFrames, probeSwOver80, probeSwOver40, probeGapFrames;
     private boolean lastMoving;
     private long probeEffMax, probeRenMax, probeSwMax, probeGapMax;
+
+    /**
+     * 诊断用 GPU 计时器：用 GL_EXT_disjoint_timer_query 取「本 context 已提交命令的实际 GPU 执行时间」，
+     * 与 glFinish 的墙钟等待区分开。查询异步读取（结果通常落后数帧），任何时刻都不阻塞渲染线程。
+     * 仅在探针开启时启用；正式包不产生任何 GL 调用。
+     */
+    private static final class GpuTimer{
+        private static final int TARGET_TIME_ELAPSED=0x88BF;   // GL_TIME_ELAPSED_EXT
+        private static final int QUERY_RESULT=0x8866;
+        private static final int QUERY_RESULT_AVAILABLE=0x8867;
+        private static final int GPU_DISJOINT=0x8FBB;          // GL_GPU_DISJOINT_EXT
+        private final int[] ids={0,0,0};
+        private final boolean[] running=new boolean[3];
+        private int slot;
+        boolean unsupported;
+        boolean ready(){
+            if(unsupported)return false;
+            if(ids[0]!=0)return true;
+            GLES30.glGetError();                                // 清掉历史错误，便于判定本次
+            GLES30.glGenQueries(3,ids,0);
+            if(GLES30.glGetError()!=GLES30.GL_NO_ERROR||ids[0]==0){unsupported=true;return false;}
+            return true;
+        }
+        /** 开始一段计时；返回是否真的开始。 */
+        boolean begin(){
+            if(!ready()||running[slot])return false;
+            GLES30.glGetError();
+            GLES30.glBeginQuery(TARGET_TIME_ELAPSED,ids[slot]);
+            if(GLES30.glGetError()!=GLES30.GL_NO_ERROR){unsupported=true;return false;}
+            running[slot]=true;return true;
+        }
+        /** 结束计时并返回上一轮已完成查询的结果（ns），无可用结果返回 -1。 */
+        long end(){
+            if(!running[slot])return -1L;
+            GLES30.glEndQuery(TARGET_TIME_ELAPSED);running[slot]=false;
+            long value=-1L;
+            for(int i=1;i<=ids.length;i++){
+                int idx=(slot+i)%ids.length;
+                if(!running[idx]&&ids[idx]!=0){
+                    int[] avail=new int[1];
+                    GLES30.glGetQueryObjectuiv(ids[idx],QUERY_RESULT_AVAILABLE,avail,0);
+                    if(avail[0]!=0){
+                        int[] disjoint=new int[1];
+                        GLES30.glGetIntegerv(GPU_DISJOINT,disjoint,0);
+                        int[] ns=new int[1];
+                        GLES30.glGetQueryObjectuiv(ids[idx],QUERY_RESULT,ns,0);
+                        value=disjoint[0]!=0?-2L:(ns[0]&0xFFFFFFFFL); // -2 = disjoint，本次结果不可信
+                    }
+                }
+            }
+            slot=(slot+1)%ids.length;
+            return value;
+        }
+    }
     private long probeBegin(){
         long now=System.nanoTime();
         if(!probeEnabled){
@@ -681,6 +765,7 @@ final class RenderLoop {
         if(sw>probeSwMax)probeSwMax=sw;
         if(sw>=80_000_000L)probeSwOver80++;
         // 只记录异常帧：逐帧写 logcat 本身会给渲染加负荷，等于用观察者影响被测对象。
+        probeSlowSeen=sw>=40_000_000L;
         if(sw>=40_000_000L)
             AliveLog.i("AliveClean","probe slow t="+SystemClock.uptimeMillis()+" mode="+mode+" sw="+(sw/1_000_000f));
         if(sw>=40_000_000L)probeSwOver40++;

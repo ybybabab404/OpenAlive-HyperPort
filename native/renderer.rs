@@ -49,6 +49,8 @@ struct Scene {
     home_key:Option<u64>,
     /// 上一帧 lock_pass 的输入身份；命中即可整次跳过。
     lock_key:Option<u64>,
+    /// 本帧 aod pass 是否直接画窗口 surface（跳过 blend）。
+    out_direct:bool,
 }
 
 impl Scene {
@@ -91,7 +93,7 @@ impl Scene {
             quad:Quad::new(),copy:Program::new(COPY_V,COPY_F)?,lock_program:program(lock_path)?,
             aod_program,home_program:program(home_path)?,home_effect_program:program(home_effect_path)?,blend:program(blend_path)?,
             down:program("blur/down_sample")?,gaussian:program("blur/gaussian")?,up:program("blur/up_sample")?,
-            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),copy_key:None,home_key:None,lock_key:None,
+            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),copy_key:None,home_key:None,lock_key:None,out_direct:false,
         })
     }
     fn copy(&mut self,input:u32,target:usize,aspect:f32,flip:bool) {
@@ -134,6 +136,15 @@ impl Scene {
         pp::pass_begin(7);self.targets[5].bind();self.up.bind();self.up.texture("u_photo",0,self.targets[4].texture);self.up.m3("u_texture_matrix",&matrix);self.quad.draw();pp::pass_end(7);
         self.blur_cache=Some(key);
         self.targets[5].texture
+    }
+    /// aod pass 的输出目标：稳态下 blend 只是把 targets[2] 原样搬到屏幕上（推导见 draw），
+    /// 这时直接画窗口 surface，省掉一整趟全屏读+写。
+    fn bind_aod_output(&mut self) {
+        if self.out_direct {
+            unsafe{glBindFramebuffer(0x8D40,0);glViewport(0,0,self.w,self.h);}
+        } else {
+            self.targets[2].bind_only();
+        }
     }
     unsafe fn lock_pass(&mut self,frame:&Frame) {
         let effect=self.effect_values(frame,0);
@@ -196,14 +207,14 @@ impl Scene {
             p.m4("u_video_transform",&math::ID);pp::pass_begin(3);self.quad.draw();pp::pass_end(3);return;
         }
         if self.aod==101 {
-            self.targets[2].bind_only();let p=&mut self.aod_program;p.bind();p.texture("u_lockTex",0,self.targets[1].texture);
+            self.bind_aod_output();let p=&mut self.aod_program;p.bind();p.texture("u_lockTex",0,self.targets[1].texture);
             p.texture("u_grayTex1",1,self.images[3].id);p.f("u_alpha1",frame.0[21]);pp::pass_begin(3);self.quad.draw();pp::pass_end(3);return;
         }
         let l=frame.lens();
         // lens_src 指向哪一层，就用哪一层的签名：源不同、签名必须不同，否则会把 A 层的模糊结果用到 B 层上。
         let lens_sig=if lens_src==self.targets[3].texture{(3,self.sig_home)}else{(1,self.sig_lock)};
         let source=self.blurred(lens_src,lens_sig,l[0],12.);
-        self.targets[2].bind_only();let p=&mut self.aod_program;p.bind();p.texture("u_photo",0,source);p.texture("u_lens_decorator",1,decor);
+        self.bind_aod_output();let p=&mut self.aod_program;p.bind();p.texture("u_photo",0,source);p.texture("u_lens_decorator",1,decor);
         p.f("u_lens_scale",l[1]);p.f("u_zoom",1./(l[1].min(0.5)*4.));p.f("u_aspect_ratio",self.h as f32/self.w as f32);p.f("u_aspect_ratio_reciprocal",self.w as f32/self.h as f32);
         p.f("u_distortion",l[2]/l[1]);p.f("u_decorator_alpha",l[3]);p.v3("u_translation",[l[5],l[6],0.]);p.f("u_dark_strength",0.);
         p.f("u_ripple_radius",l[8]);p.f("u_ripple_boundary",0.12);
@@ -276,6 +287,9 @@ impl Scene {
             if home.id!=0{self.copy(home.id,0,home.width as f32/home.height as f32,true);}
             self.home_pass(frame);
         }
+        // 只有在「纯 aod 相位 + aod==0」时才允许直出；转场期间 ratio 变化，必须走原来的两趟。
+        let pure=ratio[0]>0.999999&&ratio[1]<=0.000001&&ratio[2]<=0.000001;
+        self.out_direct=self.aod==0&&pure&&frame.0[57]<=0.01&&aod_visible;
         if !(1..=5).contains(&self.aod)&&aod_visible{
             let lens_src=if lens_from_home{self.targets[3].texture}else{self.targets[1].texture};
             self.aod_pass(frame,decor,lens_src);
@@ -287,6 +301,10 @@ impl Scene {
             self.home_pass(frame);
         }
         if (1..=5).contains(&self.aod)&&aod_visible{self.aod_pass(frame,decor,self.targets[1].texture);}
+        // 稳态直出：aod==0 的 lens blend 在 ratio=(1,0,0) 且暗色强度 <=0.01 时，顶点纯直通、
+        // 片元就是 texture(u_aod_effect).rgb、alpha 恒 1、applyDarkIfNeed 原样返回 —— 整趟 blend
+        // 等于把 targets[2] 搬到窗口。直接让 aod_pass 画窗口，像素逐位不变，省掉一趟全屏读+写。
+        if self.out_direct {return;}
         glBindFramebuffer(0x8D40,0);glViewport(0,0,self.w,self.h);self.blend.bind();
         self.blend.texture("u_aod_effect",0,self.targets[2].texture);self.blend.texture("u_lock_effect",1,self.targets[1].texture);self.blend.texture("u_launcher_effect",2,self.targets[3].texture);
         self.blend.v3("u_ratio",ratio);self.blend.f("u_dark_strength",frame.0[57]);self.blend.i("u_support_lock_launcher_blend",frame.0[58] as i32);

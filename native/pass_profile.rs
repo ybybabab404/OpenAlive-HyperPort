@@ -53,6 +53,8 @@ struct State {
     sample_count: usize,
     /// 各 pass 在样本窗内的累计耗时（ns），报的时候除以样本数就是均值。
     sums: [u64; PASSES],
+    /// 各 pass 在样本窗内真正跑过的帧数：用来判断缓存命中率（跑 0 次 = 完全命中）。
+    hits: [u32; PASSES],
     group: usize,
     used: [bool; GROUPS],
     frames: u32,
@@ -73,6 +75,7 @@ static mut STATE: State = State {
     samples: [0; 64],
     sample_count: 0,
     sums: [0; PASSES],
+    hits: [0; PASSES],
     group: 0,
     used: [false; GROUPS],
     frames: 0,
@@ -267,7 +270,11 @@ pub fn frame_end() {
             values[pass] = ns as i64;
             total += ns as i64;
         }
-        for pass in 0..PASSES { s.sums[pass] += values[pass].max(0) as u64; }
+        for pass in 0..PASSES {
+            if mask & (1 << pass) == 0 { continue; }
+            s.sums[pass] += values[pass].max(0) as u64;
+            s.hits[pass] += 1;
+        }
         push_sample(total);
         if s.sample_count >= 60 {
             unsafe{report_samples()};
@@ -295,15 +302,21 @@ unsafe fn report_samples() {
     slice.sort_unstable();
     let median = slice[count / 2];
     let p95 = slice[(count * 95 / 100).min(count - 1)];
+    // 均值只按「真正跑过这个 pass 的帧」平均：跑 0 帧就是缓存全命中，均值无意义、留 0。
     let mut means = [0u32; PASSES];
+    let mut hits = [0u32; PASSES];
     for pass in 0..PASSES {
-        means[pass] = (s.sums[pass] / count as u64 / 1000) as u32;
+        hits[pass] = s.hits[pass];
+        if hits[pass] > 0 {
+            means[pass] = (s.sums[pass] / hits[pass] as u64 / 1000) as u32;
+        }
         s.sums[pass] = 0;
+        s.hits[pass] = 0;
     }
-    log_report(median, p95, count as u32, &means);
+    log_report(median, p95, count as u32, &means, &hits);
 }
 
-unsafe fn log_report(median_us: u32, p95_us: u32, count: u32, means: &[u32; PASSES]) {
+unsafe fn log_report(median_us: u32, p95_us: u32, count: u32, means: &[u32; PASSES], hits: &[u32; PASSES]) {
     let mut text = format!("probe passes total_med={}us total_p95={}us n={}", median_us, p95_us, count);
     for pass in 0..PASSES {
         if means[pass] == 0 {
@@ -313,6 +326,8 @@ unsafe fn log_report(median_us: u32, p95_us: u32, count: u32, means: &[u32; PASS
         text.push_str(LABELS[pass]);
         text.push('=');
         text.push_str(&means[pass].to_string());
+        text.push('/');
+        text.push_str(&hits[pass].to_string());
     }
     let mut line = text.into_bytes();
     line.push(0);

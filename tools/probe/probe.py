@@ -30,7 +30,7 @@ SERIAL = os.environ.get("ALIVEHS_SERIAL", "9eb96e8a")
 PROBE_KEY = "alive_hs_probe"
 
 LINE = re.compile(r"probe passes (.+)$")
-TOKEN = re.compile(r"([a-z_]+)=(-?[\d.]+)")
+TOKEN = re.compile(r"([a-z_]+)=(-?[\d.]+)(?:/(\d+))?")
 
 PASS_NAMES = ["copy", "lock", "home", "aod", "down", "gh", "gv", "up", "blend"]
 
@@ -51,7 +51,11 @@ def parse(text):
         hit = LINE.search(line)
         if not hit:
             continue
-        fields = {key: float(value) for key, value in TOKEN.findall(hit.group(1))}
+        fields = {}
+        for key, value, count in TOKEN.findall(hit.group(1)):
+            fields[key] = float(value)
+            if count:
+                fields[key + "_hits"] = float(count)
         if "total_med" not in fields:
             continue
         samples.append(fields)
@@ -75,12 +79,49 @@ def summarize(samples):
         values = [s[name] for s in samples if name in s]
         if values:
             summary["passes"][name] = round(statistics.median(values), 1)
+        # 该 pass 在窗口里真正跑过的帧数（0 = 缓存全命中）。这是判断优化有没有生效的关键。
+        hits = [s[name + "_hits"] for s in samples if name + "_hits" in s]
+        if hits:
+            summary.setdefault("pass_hits", {})[name] = int(statistics.median(hits))
     # 观测窗口自身是否稳定：中位数的极差占比。>5% 说明状态没稳，结论要打折。
     if summary["total_med_typical"]:
         spread = (summary["total_med_worst"] - summary["total_med_best"]) / summary["total_med_typical"]
         summary["spread"] = round(spread * 100, 1)
     return summary
 
+
+
+FREQ_NODES = ["/sys/class/kgsl/kgsl-3d0/gpuclk",
+              "/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq",
+              "/sys/class/kgsl/kgsl-3d0/gpu_clock_stats"]
+TEMP_NODES = ["/sys/class/thermal/thermal_zone0/temp"]
+
+
+def env_sample():
+    """采一次频率与温度。取不到就返回 None —— 绝不填猜测值。
+
+    为什么要采：两次 run 的 GPU 频率或热状态不同，ms 数就没有可比性。
+    """
+    out = {}
+    for node in FREQ_NODES:
+        text = shell("su -c 'cat %s'" % node, timeout=15).stdout.strip()
+        if text.isdigit():
+            out["gpu_freq_hz"] = int(text)
+            out["gpu_freq_node"] = node
+            break
+    for node in TEMP_NODES:
+        text = shell("su -c 'cat %s'" % node, timeout=15).stdout.strip()
+        if text.lstrip("-").isdigit():
+            out["temp_c"] = round(int(text) / 1000.0, 1)
+            break
+    batt = shell("dumpsys battery | grep temperature").stdout.strip()
+    digits = "".join(ch for ch in batt if ch.isdigit())
+    if digits:
+        out["batt_c"] = round(int(digits) / 10.0, 1)
+    gov = shell("su -c 'cat /sys/class/kgsl/kgsl-3d0/devfreq/governor'", timeout=15).stdout.strip()
+    if gov:
+        out["gpu_governor"] = gov
+    return out
 
 def cmd_env(_args):
     got = {
@@ -124,6 +165,7 @@ def cmd_run(args):
     summary = summarize(samples)
     summary["tag"] = args.tag
     summary["secs"] = args.secs
+    summary["env"] = env_sample()
     (target / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -162,9 +204,19 @@ def cmd_table(args):
         pct = ((bv - av) / av * 100) if av else 0.0
         lines.append("| pass `%s` (µs) | %.0f | %.0f | %+.0f | %+.1f%% |" % (name, av, bv, bv - av, pct))
     lines.append("| 观测窗口离散度 | %.1f%% | %.1f%% | | |" % (a.get("spread", 0), b.get("spread", 0)))
+
+    def freq(item):
+        value = (item.get("env") or {}).get("gpu_freq_hz")
+        return "-" if value is None else "%.0f MHz" % (value / 1e6)
+
+    def temp(item):
+        value = (item.get("env") or {}).get("batt_c")
+        return "-" if value is None else "%.1f℃" % value
+
+    lines.append("| GPU 频率 / 电池温度 | %s / %s | %s / %s | | |" % (freq(a), temp(a), freq(b), temp(b)))
     print("\n".join(lines))
     print()
-    print("提醒：`spread` > 5% 说明该状态没稳，结论要打折；"
+    print("提醒：`spread` > 5% 说明该状态没稳，结论要打折；两臂频率/温度不一致时数字不可直接比较；"
           "单 pass < 20µs、整帧 < 50µs 的差异一律当噪声。")
     return 0
 

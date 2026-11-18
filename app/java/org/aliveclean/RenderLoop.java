@@ -263,7 +263,7 @@ final class RenderLoop {
         handler.postDelayed(aodBeat,16L);
     }
     private void startAodHeartbeat(){
-        if(aodHeartbeat)return;
+        if(aodHeartbeat||!RenderProbe.enabled(context))return; // 探针之外绝不留 16ms 定时唤醒。
         aodHeartbeat=true;aodBeats=0L;aodRenders=0L;aodMisses=0L;
         handler.postDelayed(aodBeat,16L);
     }

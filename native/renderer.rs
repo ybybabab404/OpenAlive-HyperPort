@@ -26,11 +26,21 @@ unsafe fn program(base: &str) -> Result<Program, String> {
 #[derive(Clone,Copy,Default)]
 struct Image { id:u32, width:i32, height:i32 }
 
+
+fn fnv(h:u64,v:u64)->u64{(h^v).wrapping_mul(1099511628211)}
+fn bits(v:f32)->u64{v.to_bits() as u64}
 struct Scene {
     quad:Quad, copy:Program, lock_program:Program, aod_program:Program,
     home_program:Program, home_effect_program:Program, blend:Program, down:Program, gaussian:Program, up:Program,
     targets:Vec<Target>, images:[Image;6], color:[f32;3], frame:Option<[f32;36]>, effects:Option<[f32;20]>, frame_crop:[f32;4],
     w:i32, h:i32, aod:i32, lock:i32, home:i32,
+    /// 上一次模糊结果的身份：(源槽位, 源内容签名, radius 位模式, limit 位模式)。
+    /// 命中就说明「模糊的输入一个字节都没变」，四个全尺寸 pass 可以整段跳过；
+    /// targets[4]/[5] 每次都会被覆盖，所以只留最近一份。
+    blur_cache:Option<(i32,u64,u32,u32)>,
+    /// 本帧模糊源的「内容签名」，在 draw() 开头算一次。只包含真正决定 lock/home 那张图内容的输入：
+    /// 照片来源与尺寸、aspect/flip、底色、effect 参数、灰度/遮罩纹理、玻璃样式。
+    sig_lock:u64, sig_home:u64,
 }
 
 impl Scene {
@@ -73,7 +83,7 @@ impl Scene {
             quad:Quad::new(),copy:Program::new(COPY_V,COPY_F)?,lock_program:program(lock_path)?,
             aod_program,home_program:program(home_path)?,home_effect_program:program(home_effect_path)?,blend:program(blend_path)?,
             down:program("blur/down_sample")?,gaussian:program("blur/gaussian")?,up:program("blur/up_sample")?,
-            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,
+            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,
         })
     }
     fn copy(&mut self,input:u32,target:usize,aspect:f32,flip:bool) {
@@ -82,8 +92,14 @@ impl Scene {
         let crop=if aspect>screen{[screen/aspect,1.]}else{[1.,aspect/screen]};
         self.copy.v2("crop",crop[0],crop[1]);self.copy.f("flip",if flip{1.}else{0.});self.quad.draw();
     }
-    fn blurred(&mut self,input:u32,radius:f32,limit:f32)->u32 {
+    /// `source` 是模糊源的身份（槽位号 + 内容签名）。模糊是纯函数：同一个源、同样的
+    /// radius/limit 一定得到同样的结果，所以命中缓存时直接复用上一份 targets[5]。
+    /// 注意 targets[4]/[5] 被所有模糊共用，缓存只保留最近一次；同帧两次不同源的调用会互相顶掉，
+    /// 但那只是少命中一次，不会出错误结果。
+    fn blurred(&mut self,input:u32,source:(i32,u64),radius:f32,limit:f32)->u32 {
         if radius<2. { return input; }
+        let key=(source.0,source.1,radius.to_bits(),limit.to_bits());
+        if self.blur_cache==Some(key) { return self.targets[5].texture; }
         let(factor,weights,offsets)=blur::kernel_with_limit(radius,limit);let s=1./factor;
         let matrix=[s,0.,0.,0.,s,0.,(1.-s)/2.,(1.-s)/2.,1.];
         self.targets[4].bind();self.down.bind();self.down.f("u_scale",s);self.down.texture("u_photo",0,input);self.quad.draw();
@@ -95,6 +111,7 @@ impl Scene {
             self.gaussian.f("u_texture_min",(1.-s)/2.);self.gaussian.f("u_texture_max",(1.+s)/2.);self.quad.draw();
         }
         self.targets[5].bind();self.up.bind();self.up.texture("u_photo",0,self.targets[4].texture);self.up.m3("u_texture_matrix",&matrix);self.quad.draw();
+        self.blur_cache=Some(key);
         self.targets[5].texture
     }
     unsafe fn lock_pass(&mut self,frame:&Frame) {
@@ -120,7 +137,7 @@ impl Scene {
         if self.aod<0 {self.targets[2].bind();return;}
         if (1..=5).contains(&self.aod) {
             let Some(f)=self.frame else{self.targets[2].bind();return;};
-            let source=self.blurred(self.targets[1].texture,f[33],12.);
+            let source=self.blurred(self.targets[1].texture,(1,self.sig_lock),f[33],12.);
             self.targets[2].bind();let p=&mut self.aod_program;p.bind();
             p.texture("u_photo",0,source);
             // Paired photos expand into the current screen's texture selection.
@@ -150,7 +167,9 @@ impl Scene {
             p.texture("u_grayTex1",1,self.images[3].id);p.f("u_alpha1",frame.0[21]);self.quad.draw();return;
         }
         let l=frame.lens();
-        let source=self.blurred(lens_src,l[0],12.);
+        // lens_src 指向哪一层，就用哪一层的签名：源不同、签名必须不同，否则会把 A 层的模糊结果用到 B 层上。
+        let lens_sig=if lens_src==self.targets[3].texture{(3,self.sig_home)}else{(1,self.sig_lock)};
+        let source=self.blurred(lens_src,lens_sig,l[0],12.);
         self.targets[2].bind();let p=&mut self.aod_program;p.bind();p.texture("u_photo",0,source);p.texture("u_lens_decorator",1,decor);
         p.f("u_lens_scale",l[1]);p.f("u_zoom",1./(l[1].min(0.5)*4.));p.f("u_aspect_ratio",self.h as f32/self.w as f32);p.f("u_aspect_ratio_reciprocal",self.w as f32/self.h as f32);
         p.f("u_distortion",l[2]/l[1]);p.f("u_decorator_alpha",l[3]);p.v3("u_translation",[l[5],l[6],0.]);p.f("u_dark_strength",0.);
@@ -182,6 +201,24 @@ impl Scene {
         let mut values=[0.;10];values[..8].copy_from_slice(&frame.0[13..21]);values[8..].copy_from_slice(&frame.0[23..25]);values
     }
     unsafe fn draw(&mut self,photo:u32,decor:u32,aspect:f32,frame:&Frame) {
+        // 模糊缓存的身份：只喂进真正影响「被模糊的那张图」的输入。多算无害（最多少命中一次），
+        // 少算才会让画面停在旧内容上，所以这里把 pass 里用到的参数都算进来。
+        let lock_effect=self.effect_values(frame,0);
+        let home_effect=self.effect_values(frame,10);
+        let mut h=1469598103934665603u64;
+        for v in [photo as u64,self.images[0].id as u64,self.images[1].id as u64,self.images[2].id as u64,
+                  bits(aspect),bits(self.w as f32),bits(self.h as f32),self.lock as u64] {
+            h=fnv(h,v);
+        }
+        for v in self.color.iter().copied().chain(lock_effect.iter().copied()) { h=fnv(h,bits(v)); }
+        self.sig_lock=h;
+        let mut h=1469598103934665603u64;
+        for v in [self.images[4].id as u64,self.images[1].id as u64,self.images[2].id as u64,
+                  bits(self.w as f32),bits(self.h as f32),self.home as u64] {
+            h=fnv(h,v);
+        }
+        for v in self.color.iter().copied().chain(home_effect.iter().copied()) { h=fnv(h,bits(v)); }
+        self.sig_home=h;
         let l=frame.lens();
         let ratio=frame.ratio();
         let aod_visible=ratio[0]>0.;
@@ -223,7 +260,7 @@ pub unsafe extern "system" fn Java_org_aliveclean_NativeScene_create(_: *mut c_v
 }
 #[no_mangle]
 pub unsafe extern "system" fn Java_org_aliveclean_NativeScene_texture(_: *mut c_void,_:*mut c_void,handle:i64,slot:i32,id:i32,w:i32,h:i32) {
-    if handle!=0 && (0..6).contains(&slot) && id>0 && w>0 && h>0 {(*(handle as *mut Scene)).images[slot as usize]=Image{id:id as u32,width:w,height:h};}
+    if handle!=0 && (0..6).contains(&slot) && id>0 && w>0 && h>0 {let s=&mut *(handle as *mut Scene);s.images[slot as usize]=Image{id:id as u32,width:w,height:h};s.blur_cache=None;}
 }
 #[no_mangle]
 pub unsafe extern "system" fn Java_org_aliveclean_NativeScene_frameCrop(_: *mut c_void,_:*mut c_void,handle:i64,x:f32,y:f32,size:f32,angle:f32) {

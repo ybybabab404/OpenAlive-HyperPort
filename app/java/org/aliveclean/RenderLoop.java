@@ -296,7 +296,12 @@ final class RenderLoop {
         if(AOD_TIMER_DRIVEN&&mode==0){
             startAodHeartbeat();
             if(!framePosted)postAodFrame();
-        }else if(choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}
+            // AOD 走的是定时器排帧，压根不依赖 vsync，看门狗在这里没有意义：
+            // 它到期时 framePosted 通常是 true，于是"兜底"变成额外强画一帧 ——
+            // 实测熄屏 20 秒白画 43 帧、白唤醒 43 次。
+            return;
+        }
+        if(choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}
         // Choreographer 在 doze/息屏期间可能整段不发 vsync；一旦回调不来，framePosted 会
         // 永久卡在 true，之后 schedule() 全是空操作 —— 表现就是"surface 在、画面永远不出"。
         // 这里兜一个 120ms 的看门狗：只在 vsync 真的没来时直接渲染一帧。

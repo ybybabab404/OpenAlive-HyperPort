@@ -43,7 +43,6 @@ final class VivoEngineScene implements AutoCloseable {
     private volatile long frameAt=SystemClock.uptimeMillis();
     private int seenFrames=-1;
     private final Runnable health=this::checkHealth;
-    private boolean healthArmed;
     private final Runnable prune=this::prune;
     private final Runnable pump=this::pumpFrames;
     private boolean pumping;
@@ -159,7 +158,7 @@ final class VivoEngineScene implements AutoCloseable {
 
                 sensorGain.start();
                 LIVE.add(this);
-                armHealth();
+                main.postDelayed(health,2000L);
                 main.postDelayed(prune,1000L);
             }
         }catch(Exception e){close();throw e;}
@@ -178,7 +177,7 @@ final class VivoEngineScene implements AutoCloseable {
         AliveLog.i("AliveClean","vivo visible id="+id+" "+role+" value="+value+" same=false mode="+mode+" running="+running);
         if(!value){zoom.pause();dim.pause();resumePending=true;}
         updateAnimation();
-        if(value){armHealth();invalidate.run();}
+        if(value)invalidate.run();
     }
     private void updateAnimation(){
         boolean value=visible&&(mode!=0||animateInAod());
@@ -229,7 +228,7 @@ final class VivoEngineScene implements AutoCloseable {
     void mode(int next,boolean animate){transition(next,animate,nightLevel,aodMask);}
     void transition(int next,boolean animate,float night,float mask){
         mode=next;nightLevel=night;aodMask=mask;long now=System.nanoTime();
-        zoom.mode(next,animate,now);dim.target(nightLevel,aodMask,next,animate,now);updateAnimation();armHealth();
+        zoom.mode(next,animate,now);dim.target(nightLevel,aodMask,next,animate,now);updateAnimation();
     }
     void darkWallpaper(boolean dark,boolean animate){nightLevel=dark?.76f:1f;dim.target(nightLevel,aodMask,mode,animate,System.nanoTime());invalidate.run();}
     boolean animateInAod(){return options.animateInAod();}
@@ -331,15 +330,9 @@ final class VivoEngineScene implements AutoCloseable {
         main.postDelayed(pump,16L);
     }
     private void checkHealth(){
-        if(closed){healthArmed=false;return;}
+        if(closed)return;
         try{
             boolean shouldRun=visible&&(mode!=0||animateInAod());
-            if(!shouldRun){
-                // 不可见 / 息屏且没有 AOD 动画时没有任何意义：原来仍每秒唤醒一次。
-                // 停止续排，等 visible()/模式变化时由 armHealth() 重新挂上。
-                healthArmed=false;
-                return;
-            }
             int count=frames.get();
             long idle=SystemClock.uptimeMillis()-frameAt;
             if(shouldRun&&running&&idle>1500L&&count==seenFrames){
@@ -350,13 +343,6 @@ final class VivoEngineScene implements AutoCloseable {
             }
             seenFrames=count;
         }catch(Throwable e){AliveLog.e("AliveClean","vivo health check failed",e);}
-        main.postDelayed(health,1000L);
-    }
-    /** 只在需要监督时挂一条 1s 的健康检查；重复调用安全。 */
-    private void armHealth(){
-        if(closed||healthArmed)return;
-        healthArmed=true;
-        main.removeCallbacks(health);
         main.postDelayed(health,1000L);
     }
     private void prune(){
@@ -448,7 +434,7 @@ final class VivoEngineScene implements AutoCloseable {
             if(family==VivoOptions.RASTER&&controller!=null){Object res=api.get(controller,"b");api.call(controller,"destroy");if(res!=null&&!videoRaster())((ExecutorService)api.get(res,"h")).shutdownNow();}
             if(family==VivoOptions.RASTER||family==VivoOptions.FLASH)clearSharedController(controller);
         }catch(Exception e){AliveLog.w("AliveClean","Vivo renderer release incomplete",e);}
-        closed=true;healthArmed=false;LIVE.remove(this);main.removeCallbacksAndMessages(null);glTasks.clear();dimPass.close();if(layer!=null){layer.close();layer=null;}if(liquidMask!=null){liquidMask.recycle();liquidMask=null;}
+        closed=true;LIVE.remove(this);main.removeCallbacksAndMessages(null);glTasks.clear();dimPass.close();if(layer!=null){layer.close();layer=null;}if(liquidMask!=null){liquidMask.recycle();liquidMask=null;}
 
         android.opengl.GLES30.glUseProgram(0);android.opengl.GLES30.glBindVertexArray(0);
     }

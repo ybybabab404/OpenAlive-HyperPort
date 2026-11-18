@@ -41,6 +41,8 @@ struct Scene {
     /// 本帧模糊源的「内容签名」，在 draw() 开头算一次。只包含真正决定 lock/home 那张图内容的输入：
     /// 照片来源与尺寸、aspect/flip、底色、effect 参数、灰度/遮罩纹理、玻璃样式。
     sig_lock:u64, sig_home:u64,
+    /// 模糊核缓存：key 是 (radius,limit) 的位模式，值是 (factor, weights, offsets)。
+    kernel_key:Option<(u32,u32)>, kernel:(f32,Vec<f32>,Vec<f32>),
 }
 
 impl Scene {
@@ -83,11 +85,11 @@ impl Scene {
             quad:Quad::new(),copy:Program::new(COPY_V,COPY_F)?,lock_program:program(lock_path)?,
             aod_program,home_program:program(home_path)?,home_effect_program:program(home_effect_path)?,blend:program(blend_path)?,
             down:program("blur/down_sample")?,gaussian:program("blur/gaussian")?,up:program("blur/up_sample")?,
-            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,
+            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),
         })
     }
     fn copy(&mut self,input:u32,target:usize,aspect:f32,flip:bool) {
-        self.targets[target].bind();self.copy.bind();self.copy.texture("photo",0,input);
+        self.targets[target].bind_only();self.copy.bind();self.copy.texture("photo",0,input);
         let screen=self.w as f32/self.h as f32;
         let crop=if aspect>screen{[screen/aspect,1.]}else{[1.,aspect/screen]};
         self.copy.v2("crop",crop[0],crop[1]);self.copy.f("flip",if flip{1.}else{0.});self.quad.draw();
@@ -100,13 +102,19 @@ impl Scene {
         if radius<2. { return input; }
         let key=(source.0,source.1,radius.to_bits(),limit.to_bits());
         if self.blur_cache==Some(key) { return self.targets[5].texture; }
-        let(factor,weights,offsets)=blur::kernel_with_limit(radius,limit);let s=1./factor;
+        // 核只由 radius/limit 决定：参数没变就复用，省掉每帧重算与两次 uniform 数组上传。
+        if self.kernel_key!=Some((radius.to_bits(),limit.to_bits())) {
+            let(factor,weights,offsets)=blur::kernel_with_limit(radius,limit);
+            self.kernel_key=Some((radius.to_bits(),limit.to_bits()));
+            self.kernel=(factor,weights,offsets);
+        }
+        let factor=self.kernel.0;let s=1./factor;
         let matrix=[s,0.,0.,0.,s,0.,(1.-s)/2.,(1.-s)/2.,1.];
         self.targets[4].bind();self.down.bind();self.down.f("u_scale",s);self.down.texture("u_photo",0,input);self.quad.draw();
         for (src,dst,horizontal) in [(4,5,1),(5,4,0)] {
             self.targets[dst].bind();self.gaussian.bind();self.gaussian.texture("u_blur_texture",0,self.targets[src].texture);
             self.gaussian.f("u_scale",s);self.gaussian.m3("u_texture_matrix",&matrix);
-            self.gaussian.array("u_weights",&weights);self.gaussian.array("u_offsets",&offsets);self.gaussian.i("u_radius",weights.len() as i32);
+            self.gaussian.array("u_weights",&self.kernel.1);self.gaussian.array("u_offsets",&self.kernel.2);self.gaussian.i("u_radius",self.kernel.1.len() as i32);
             self.gaussian.i("u_horizontal",horizontal);self.gaussian.v2("u_step",1./self.w as f32,1./self.h as f32);
             self.gaussian.f("u_texture_min",(1.-s)/2.);self.gaussian.f("u_texture_max",(1.+s)/2.);self.quad.draw();
         }
@@ -116,8 +124,11 @@ impl Scene {
     }
     unsafe fn lock_pass(&mut self,frame:&Frame) {
         let effect=self.effect_values(frame,0);
-        self.targets[1].bind();
-        if self.lock==4 {glClearColor(self.color[0],self.color[1],self.color[2],1.);glClear(0x4000);return;}
+        // lock==4 是纯色填充，必须清；其余样式都由全屏 quad 不透明覆盖，无需 clear。
+        if self.lock==4 {
+            self.targets[1].bind();glClearColor(self.color[0],self.color[1],self.color[2],1.);glClear(0x4000);return;
+        }
+        self.targets[1].bind_only();
         let p=&mut self.lock_program;p.bind();p.texture("u_lockTex",0,self.targets[0].texture);p.texture("u_texture",0,self.targets[0].texture);
         p.v4("u_display_uv_rect",[0.,0.,1.,1.]);p.v3("u_color",self.color);
         if self.lock==1||self.lock==2 {
@@ -163,14 +174,14 @@ impl Scene {
             p.m4("u_video_transform",&math::ID);self.quad.draw();return;
         }
         if self.aod==101 {
-            self.targets[2].bind();let p=&mut self.aod_program;p.bind();p.texture("u_lockTex",0,self.targets[1].texture);
+            self.targets[2].bind_only();let p=&mut self.aod_program;p.bind();p.texture("u_lockTex",0,self.targets[1].texture);
             p.texture("u_grayTex1",1,self.images[3].id);p.f("u_alpha1",frame.0[21]);self.quad.draw();return;
         }
         let l=frame.lens();
         // lens_src 指向哪一层，就用哪一层的签名：源不同、签名必须不同，否则会把 A 层的模糊结果用到 B 层上。
         let lens_sig=if lens_src==self.targets[3].texture{(3,self.sig_home)}else{(1,self.sig_lock)};
         let source=self.blurred(lens_src,lens_sig,l[0],12.);
-        self.targets[2].bind();let p=&mut self.aod_program;p.bind();p.texture("u_photo",0,source);p.texture("u_lens_decorator",1,decor);
+        self.targets[2].bind_only();let p=&mut self.aod_program;p.bind();p.texture("u_photo",0,source);p.texture("u_lens_decorator",1,decor);
         p.f("u_lens_scale",l[1]);p.f("u_zoom",1./(l[1].min(0.5)*4.));p.f("u_aspect_ratio",self.h as f32/self.w as f32);p.f("u_aspect_ratio_reciprocal",self.w as f32/self.h as f32);
         p.f("u_distortion",l[2]/l[1]);p.f("u_decorator_alpha",l[3]);p.v3("u_translation",[l[5],l[6],0.]);p.f("u_dark_strength",0.);
         p.f("u_ripple_radius",l[8]);p.f("u_ripple_boundary",0.12);
@@ -181,7 +192,7 @@ impl Scene {
     }
     unsafe fn home_pass(&mut self,frame:&Frame) {
         let effect=self.effect_values(frame,10);
-        self.targets[3].bind();
+        self.targets[3].bind_only();
         let style=self.home.saturating_sub(6);
         if style==0 {
             let p=&mut self.home_program;p.bind();p.texture("u_texture",0,self.targets[0].texture);p.v3("u_color",self.color);p.v4("u_display_uv_rect",[0.,0.,1.,1.]);self.quad.draw();return;
@@ -239,7 +250,8 @@ impl Scene {
             let lens_src=if lens_from_home{self.targets[3].texture}else{self.targets[1].texture};
             self.aod_pass(frame,decor,lens_src);
         }
-        if home_visible&&!lens_from_home||(1..=5).contains(&self.aod)&&aod_visible{
+        // aod==101（fullCommon）的 blend 只取 aod 与 lock 两张，画 home 纯属浪费。
+        if (home_visible&&!lens_from_home||(1..=5).contains(&self.aod)&&aod_visible)&&self.aod!=101{
             let home=if (1..=5).contains(&self.aod)&&self.images[5].id!=0{Image::default()}else{self.images[4]};
             if home.id!=0{self.copy(home.id,0,home.width as f32/home.height as f32,true);}
             self.home_pass(frame);

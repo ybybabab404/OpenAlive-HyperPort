@@ -56,6 +56,10 @@ impl Target{
   if glCheckFramebufferStatus(0x8D40)!=0x8CD5{return Err("incomplete framebuffer".into())}Ok(t)
  }
  pub fn bind(&self){unsafe{glBindFramebuffer(0x8D40,self.fbo);glViewport(0,0,self.w,self.h);glClearColor(0.,0.,0.,1.);glClear(0x4000)}}
+ /// 只绑定不清理。仅用于「下一次绘制会把整张 target 全部写满且不透明」的 pass：
+ /// copy / lock / home / lens 与 fullAOD。模糊的 down/H/V/up 只光栅化中央区域、
+ /// chromakey 只光栅化模型矩阵覆盖的部分、aod<0 靠 clear 出黑底，这些都必须继续 bind()。
+ pub fn bind_only(&self){unsafe{glBindFramebuffer(0x8D40,self.fbo);glViewport(0,0,self.w,self.h)}}
 }
 impl Drop for Target{fn drop(&mut self){unsafe{glDeleteFramebuffers(1,&self.fbo);glDeleteTextures(1,&self.texture)}}}
 pub struct Quad{vao:u32,vbo:u32}

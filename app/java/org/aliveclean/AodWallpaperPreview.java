@@ -311,7 +311,23 @@ public final class AodWallpaperPreview {
         return bitmap;
     }
 
+    /**
+     * MIUI may rebuild template_current with its grey live-wallpaper placeholder after boot.
+     * That file is not evidence of the current scene, so use the applied photo first.
+     */
+    private static Bitmap fromAppliedPhoto(Context context) {
+        if (context == null) return null;
+        try {
+            return PhotoDecode.decode(context.getContentResolver(), AodWallpaperProvider.PHOTO, 2048);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "aod wallpaper preview applied photo failed", error);
+            return null;
+        }
+    }
+
     private static synchronized Bitmap preview(Context context) {
+        Bitmap applied = fromAppliedPhoto(context);
+        if (applied != null) return applied;
         Bitmap provider = fromProvider(context);
         if (provider != null) return provider;
         File file = new File(TEMPLATE_DIR, "wallpaper_home");

@@ -2,6 +2,7 @@ package org.aliveclean;
 
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.os.Build;
@@ -24,6 +25,7 @@ final class AodWallpaperMode {
     static final String KEY_HAS_RESTORE = "alive_aod_restore_set";
     static final String KEY_ACTIVE = "alive_aod_active";
     private static final String TAG = "AliveHSHooks";
+    private static final String HOME_TAG = "AliveClean";
     private static final int UNSET = -1;
     /**
      * 兜底探测的节奏：以前是 5 次 × 1 秒（最多 5 秒才改回去），慢得能被用户看见。
@@ -31,8 +33,14 @@ final class AodWallpaperMode {
      * 这里只处理历史遗留的 1，所以两次快速确认足够。
      */
     private static final long[] RESTORE_PROBE_MS = {150L, 350L};
+    /** 首次解锁后系统仍会重绑几次；独立探测桌面槽，最多覆盖约 5 秒。 */
+    private static final long[] HOME_PROBE_MS = {150L, 350L, 700L, 1200L, 2000L};
+    private static final ComponentName CLEAN_WALLPAPER = new ComponentName(
+            "org.aliveclean", "org.aliveclean.CleanWallpaper");
     private static final Object RESTORE_LOCK = new Object();
+    private static final Object HOME_RESTORE_LOCK = new Object();
     private static boolean restoreInFlight;
+    private static boolean homeRestoreInFlight;
 
     private AodWallpaperMode() {}
 
@@ -93,7 +101,16 @@ final class AodWallpaperMode {
 
     private static boolean isOurs(WallpaperInfo info) {
         return info != null && info.getComponent() != null
-                && "org.aliveclean".equals(info.getComponent().getPackageName());
+                && CLEAN_WALLPAPER.getPackageName().equals(info.getComponent().getPackageName());
+    }
+
+    private static boolean isCleanWallpaper(WallpaperInfo info) {
+        return info != null && CLEAN_WALLPAPER.equals(info.getComponent());
+    }
+
+    private static String wallpaperComponent(WallpaperInfo info) {
+        return info == null || info.getComponent() == null ? "static/none"
+                : info.getComponent().flattenToShortString();
     }
 
     /**
@@ -336,6 +353,76 @@ final class AodWallpaperMode {
     private static void finishRestoreProbe() {
         synchronized (RESTORE_LOCK) {
             restoreInFlight = false;
+        }
+    }
+
+    /**
+     * system_server 侧恢复桌面槽。开机首次解锁时锁屏槽可能仍是我们的，而系统槽已经
+     * 被 WPMS 换成 MIUI 静态壁纸；因此这里只查当前/system 槽，绝不复用 lockShowsOurs()。
+     */
+    static void restoreHomeWhenForeign(final Context context, final String source) {
+        if (context == null) return;
+        synchronized (HOME_RESTORE_LOCK) {
+            if (homeRestoreInFlight) {
+                AliveLog.i(HOME_TAG, "home wallpaper restore coalesced source=" + source);
+                return;
+            }
+            homeRestoreInFlight = true;
+        }
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final int[] attempt = new int[]{0};
+        final Runnable[] step = new Runnable[1];
+        step[0] = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    WallpaperManager manager = WallpaperManager.getInstance(context);
+                    WallpaperInfo info = manager.getWallpaperInfo();
+                    AliveLog.i(HOME_TAG, "home wallpaper probe source=" + source
+                            + " attempt=" + (attempt[0] + 1) + " component="
+                            + wallpaperComponent(info));
+                    if (isCleanWallpaper(info)) {
+                        AliveLog.i(HOME_TAG, "home wallpaper restore complete: already ours source=" + source);
+                        finishHomeRestoreProbe();
+                        return;
+                    }
+                    if (attempt[0] == 0 || attempt[0] + 1 == HOME_PROBE_MS.length) {
+                        try {
+                            // @hide in the SDK android.jar; system_server has the required permission.
+                            Method method = WallpaperManager.class.getMethod(
+                                    "setWallpaperComponent", ComponentName.class);
+                            method.invoke(manager, CLEAN_WALLPAPER);
+                            AliveLog.i(HOME_TAG, "home wallpaper restore requested source=" + source
+                                    + " attempt=" + (attempt[0] + 1));
+                        } catch (Throwable error) {
+                            AliveLog.w(HOME_TAG, "home wallpaper restore request failed source=" + source, error);
+                        }
+                    }
+                    attempt[0]++;
+                    if (attempt[0] >= HOME_PROBE_MS.length) {
+                        WallpaperInfo after = manager.getWallpaperInfo();
+                        if (isCleanWallpaper(after)) {
+                            AliveLog.i(HOME_TAG, "home wallpaper restore complete source=" + source);
+                        } else {
+                            AliveLog.w(HOME_TAG, "home wallpaper restore exhausted source=" + source
+                                    + " component=" + wallpaperComponent(after));
+                        }
+                        finishHomeRestoreProbe();
+                        return;
+                    }
+                    handler.postDelayed(step[0], HOME_PROBE_MS[attempt[0] - 1]);
+                } catch (Throwable error) {
+                    AliveLog.w(HOME_TAG, "home wallpaper restore probe failed source=" + source, error);
+                    finishHomeRestoreProbe();
+                }
+            }
+        };
+        handler.post(step[0]);
+    }
+
+    private static void finishHomeRestoreProbe() {
+        synchronized (HOME_RESTORE_LOCK) {
+            homeRestoreInFlight = false;
         }
     }
 

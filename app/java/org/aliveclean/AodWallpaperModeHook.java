@@ -48,12 +48,21 @@ final class AodWallpaperModeHook {
         return count;
     }
 
+    private static Context serviceContext(Object service) {
+        try {
+            Object raw = Xp.getObjectField(service, "mContext");
+            return raw instanceof Context ? (Context) raw : null;
+        } catch (Throwable error) {
+            return null;
+        }
+    }
+
     private static int hookMutation(Class<?> service, String name) {
         try {
             return Xp.hookAllMethods(service, name, new Xp.MethodHook() {
                 @Override
                 protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    postCheck(param.thisObject);
+                    postCheck(param.thisObject, name);
                 }
             }).size();
         } catch (Throwable error) {
@@ -62,19 +71,15 @@ final class AodWallpaperModeHook {
         }
     }
 
-    private static void postCheck(Object service) {
-        Object raw;
-        try {
-            raw = Xp.getObjectField(service, "mContext");
-        } catch (Throwable error) {
-            return;
-        }
-        if (!(raw instanceof Context)) return;
-        final Context context = (Context) raw;
+    private static void postCheck(Object service, final String source) {
+        final Context context = serviceContext(service);
+        if (context == null) return;
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 try {
+                    // 桌面槽独立判定：锁屏是我们的并不代表桌面也已恢复。
+                    AodWallpaperMode.restoreHomeWhenForeign(context, source);
                     if (AodWallpaperMode.alive(context)) {
                         AodWallpaperMode.ensureEnabled(context);
                     } else {

@@ -25,4 +25,13 @@ final class NativeGpuTimer {
      * @return GPU 执行时间（ns）；-1 暂无可用结果；-2 结果因 GPU 不连续（disjoint）不可信。
      */
     static native long end();
+
+    /**
+     * 打开/关闭「按 pass 拆分」的 GPU 计时。
+     *
+     * <p>打开后每 60 帧打印一行 {@code probe passes copy=… lock=… …}（单位 ms）。
+     * 一帧用一组 query、多组轮转，结果回来才读，任何时候都不阻塞渲染线程。
+     * 与 {@link #begin()} 冲突（同时只能有一个活动查询），探针里二选一开。
+     */
+    static native void passes(int enable);
 }

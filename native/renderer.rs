@@ -1,5 +1,5 @@
 //! Independent GLES frame graph. Resources stay on the EGL thread.
-use crate::{blur, gl::*, math, shaders};
+use crate::{blur, gl::*, math, pass_profile as pp, shaders};
 use std::ffi::c_void;
 mod frame_rear { include!("frame_rear.rs"); }
 
@@ -89,10 +89,10 @@ impl Scene {
         })
     }
     fn copy(&mut self,input:u32,target:usize,aspect:f32,flip:bool) {
-        self.targets[target].bind_only();self.copy.bind();self.copy.texture("photo",0,input);
+        pp::pass_begin(0);self.targets[target].bind_only();self.copy.bind();self.copy.texture("photo",0,input);
         let screen=self.w as f32/self.h as f32;
         let crop=if aspect>screen{[screen/aspect,1.]}else{[1.,aspect/screen]};
-        self.copy.v2("crop",crop[0],crop[1]);self.copy.f("flip",if flip{1.}else{0.});self.quad.draw();
+        self.copy.v2("crop",crop[0],crop[1]);self.copy.f("flip",if flip{1.}else{0.});self.quad.draw();pp::pass_end(0);
     }
     /// `source` 是模糊源的身份（槽位号 + 内容签名）。模糊是纯函数：同一个源、同样的
     /// radius/limit 一定得到同样的结果，所以命中缓存时直接复用上一份 targets[5]。
@@ -110,15 +110,16 @@ impl Scene {
         }
         let factor=self.kernel.0;let s=1./factor;
         let matrix=[s,0.,0.,0.,s,0.,(1.-s)/2.,(1.-s)/2.,1.];
-        self.targets[4].bind();self.down.bind();self.down.f("u_scale",s);self.down.texture("u_photo",0,input);self.quad.draw();
+        pp::pass_begin(4);self.targets[4].bind();self.down.bind();self.down.f("u_scale",s);self.down.texture("u_photo",0,input);self.quad.draw();pp::pass_end(4);
         for (src,dst,horizontal) in [(4,5,1),(5,4,0)] {
             self.targets[dst].bind();self.gaussian.bind();self.gaussian.texture("u_blur_texture",0,self.targets[src].texture);
             self.gaussian.f("u_scale",s);self.gaussian.m3("u_texture_matrix",&matrix);
             self.gaussian.array("u_weights",&self.kernel.1);self.gaussian.array("u_offsets",&self.kernel.2);self.gaussian.i("u_radius",self.kernel.1.len() as i32);
             self.gaussian.i("u_horizontal",horizontal);self.gaussian.v2("u_step",1./self.w as f32,1./self.h as f32);
-            self.gaussian.f("u_texture_min",(1.-s)/2.);self.gaussian.f("u_texture_max",(1.+s)/2.);self.quad.draw();
+            self.gaussian.f("u_texture_min",(1.-s)/2.);self.gaussian.f("u_texture_max",(1.+s)/2.);
+            let label=if horizontal==1{5}else{6};pp::pass_begin(label);self.quad.draw();pp::pass_end(label);
         }
-        self.targets[5].bind();self.up.bind();self.up.texture("u_photo",0,self.targets[4].texture);self.up.m3("u_texture_matrix",&matrix);self.quad.draw();
+        pp::pass_begin(7);self.targets[5].bind();self.up.bind();self.up.texture("u_photo",0,self.targets[4].texture);self.up.m3("u_texture_matrix",&matrix);self.quad.draw();pp::pass_end(7);
         self.blur_cache=Some(key);
         self.targets[5].texture
     }
@@ -129,7 +130,7 @@ impl Scene {
             self.targets[1].bind();glClearColor(self.color[0],self.color[1],self.color[2],1.);glClear(0x4000);return;
         }
         self.targets[1].bind_only();
-        let p=&mut self.lock_program;p.bind();p.texture("u_lockTex",0,self.targets[0].texture);p.texture("u_texture",0,self.targets[0].texture);
+        pp::pass_begin(1);let p=&mut self.lock_program;p.bind();p.texture("u_lockTex",0,self.targets[0].texture);p.texture("u_texture",0,self.targets[0].texture);
         p.v4("u_display_uv_rect",[0.,0.,1.,1.]);p.v3("u_color",self.color);
         if self.lock==1||self.lock==2 {
             let g=&effect;
@@ -139,7 +140,7 @@ impl Scene {
             p.v2("u_maskOffset",effect[8],effect[9]);p.f("u_minGray",effect[6]);p.f("u_maskThreshold",effect[7]);
             p.v2("u_dudv",1./gray.width.max(1) as f32,1./gray.height.max(1) as f32);
         }
-        self.quad.draw();
+        self.quad.draw();pp::pass_end(1);
     }
     /// `lens_src` 是 aod==0（镜头）这一路要拿来做"模糊+镜头变形"的取样源：
     /// 息屏→锁屏时是锁屏层（targets[1]），息屏→桌面时是桌面层（targets[3]）。
@@ -171,11 +172,11 @@ impl Scene {
             p.i("u_use_snapshot",1);p.f("u_photo_alpha",f[32]);p.v3("u_first_color",self.color);
             p.m4("u_modelMatrix",f[0..16].try_into().unwrap());
             p.m4("u_contentMatrix",f[16..32].try_into().unwrap());
-            p.m4("u_video_transform",&math::ID);self.quad.draw();return;
+            p.m4("u_video_transform",&math::ID);pp::pass_begin(3);self.quad.draw();pp::pass_end(3);return;
         }
         if self.aod==101 {
             self.targets[2].bind_only();let p=&mut self.aod_program;p.bind();p.texture("u_lockTex",0,self.targets[1].texture);
-            p.texture("u_grayTex1",1,self.images[3].id);p.f("u_alpha1",frame.0[21]);self.quad.draw();return;
+            p.texture("u_grayTex1",1,self.images[3].id);p.f("u_alpha1",frame.0[21]);pp::pass_begin(3);self.quad.draw();pp::pass_end(3);return;
         }
         let l=frame.lens();
         // lens_src 指向哪一层，就用哪一层的签名：源不同、签名必须不同，否则会把 A 层的模糊结果用到 B 层上。
@@ -188,14 +189,14 @@ impl Scene {
         // Adapt official top-origin sampling to the graph's bottom-origin FBO.
         let matrix=frame.matrix(25);
         let matrix=math::mul(math::translate(0.,1.),math::mul(math::scale(1.,-1.),matrix));
-        p.m4("u_texture_matrix",&matrix);p.m4("u_decorator_matrix",&frame.matrix(41));self.quad.draw();
+        p.m4("u_texture_matrix",&matrix);p.m4("u_decorator_matrix",&frame.matrix(41));pp::pass_begin(3);self.quad.draw();pp::pass_end(3);
     }
     unsafe fn home_pass(&mut self,frame:&Frame) {
         let effect=self.effect_values(frame,10);
         self.targets[3].bind_only();
-        let style=self.home.saturating_sub(6);
+        let style=self.home.saturating_sub(6);pp::pass_begin(2);
         if style==0 {
-            let p=&mut self.home_program;p.bind();p.texture("u_texture",0,self.targets[0].texture);p.v3("u_color",self.color);p.v4("u_display_uv_rect",[0.,0.,1.,1.]);self.quad.draw();return;
+            let p=&mut self.home_program;p.bind();p.texture("u_texture",0,self.targets[0].texture);p.v3("u_color",self.color);p.v4("u_display_uv_rect",[0.,0.,1.,1.]);self.quad.draw();pp::pass_end(2);return;
         }
         let p=&mut self.home_effect_program;p.bind();p.texture("u_lockTex",0,self.targets[0].texture);p.texture("u_texture",0,self.targets[0].texture);
         p.v4("u_display_uv_rect",[0.,0.,1.,1.]);p.v3("u_color",self.color);
@@ -205,7 +206,7 @@ impl Scene {
             let gray=self.images[1];p.texture("u_grayTex",1,gray.id);p.texture("u_maskTex",2,self.images[2].id);
             p.v2("u_maskOffset",effect[8],effect[9]);p.f("u_minGray",effect[6]);p.f("u_maskThreshold",effect[7]);p.v2("u_dudv",1./gray.width.max(1) as f32,1./gray.height.max(1) as f32);
         }
-        self.quad.draw();
+        self.quad.draw();pp::pass_end(2);
     }
     fn effect_values(&self,frame:&Frame,offset:usize)->[f32;10] {
         if let Some(values)=self.effects {return values[offset..offset+10].try_into().unwrap();}
@@ -261,7 +262,7 @@ impl Scene {
         self.blend.texture("u_aod_effect",0,self.targets[2].texture);self.blend.texture("u_lock_effect",1,self.targets[1].texture);self.blend.texture("u_launcher_effect",2,self.targets[3].texture);
         self.blend.v3("u_ratio",ratio);self.blend.f("u_dark_strength",frame.0[57]);self.blend.i("u_support_lock_launcher_blend",frame.0[58] as i32);
         // Official blend samples top-origin textures; this frame graph uses bottom-origin FBOs.
-        self.blend.v2("u_translation",l[5],-l[6]);self.blend.f("u_lens_scale",l[1]);self.blend.f("u_aspect_ratio",self.h as f32/self.w as f32);self.quad.draw();
+        pp::pass_begin(8);self.blend.v2("u_translation",l[5],-l[6]);self.blend.f("u_lens_scale",l[1]);self.blend.f("u_aspect_ratio",self.h as f32/self.w as f32);self.quad.draw();pp::pass_end(8);
     }
 }
 
@@ -319,7 +320,9 @@ pub unsafe extern "C" fn alive_scene_render(handle:i64,photo:i32,decor:i32,aspec
     let mut frame=Frame([0.;FRAME_FLOATS]);
     std::ptr::copy_nonoverlapping(values,frame.0.as_mut_ptr(),FRAME_FLOATS);
     if frame.0.iter().any(|v|!v.is_finite())||frame.0[4]<=0.||frame.0[59]!=1.{return 0;}
-    (*(handle as *mut Scene)).draw(photo as u32,decor as u32,aspect,&frame);1
+    pp::frame_begin();
+    (*(handle as *mut Scene)).draw(photo as u32,decor as u32,aspect,&frame);
+    pp::tick();pp::frame_end();1
 }
 
 #[cfg(target_os="android")]

@@ -3,6 +3,7 @@ pub mod blur;
 pub mod math;
 #[cfg(target_os="android")] mod xiaomi_surface;
 #[cfg(target_os="android")] mod gpu_timer;
+#[cfg(target_os="android")] mod pass_profile;
 #[cfg(any(target_os="android",feature="headless"))] mod gl;
 #[cfg(any(target_os="android",feature="headless"))] mod shaders;
 #[cfg(any(target_os="android",feature="headless"))] mod renderer;

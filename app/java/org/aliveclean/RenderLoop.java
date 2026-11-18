@@ -454,13 +454,16 @@ final class RenderLoop {
         EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,eglW,0);
         EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,eglH,0);
         AliveLog.i("AliveClean","EGL init requested="+w+"x"+h+" eglSurface="+eglW[0]+"x"+eglH[0]+" valid="+surface.isValid()+" surface="+System.identityHashCode(surface));
-        if(RenderProbe.enabled(context)&&gpuTimer==null)gpuTimer=new GpuTimer();
+        // 整帧计时器与「按 pass 拆分」的计时互斥（同时只能有一个活动查询），探针统一走分段计时。
         if(RenderProbe.enabled(context)){
             // 诊断：Adreno 上 timer query 是否可用，决定能否把 GPU 执行时间与"等待"分开。
             // 这里不能读 probeEnabled 字段：它要到首帧渲染时才惰性刷新，init 阶段还是 false。
             String ext=GLES30.glGetString(GLES30.GL_EXTENSIONS);
             boolean timer=ext!=null&&(ext.contains("GL_EXT_disjoint_timer_query")||ext.contains("GL_EXT_disjoint_timer_query_es3"));
             AliveLog.i("AliveClean","probe ext timer_query="+timer+" renderer="+GLES30.glGetString(GLES30.GL_RENDERER));
+            // 按 pass 拆分的计时：整帧计时器和它是互斥的（同时只能有一个活动查询），
+            // 所以探针里开分段后就不再开整帧计时，避免读数互相干扰。
+            NativeGpuTimer.passes(timer?1:0);
         }
         EGL14.eglSwapInterval(display,1);if(options.cosmic==0&&options.vivo==null)photo=loadPhoto(options.photo,true);
         try(InputStream in=context.getAssets().open("shader/photo/aod/lensPhoto/lens_decorator.png")){Bitmap b=BitmapFactory.decodeStream(in);if(b==null)throw new IOException("Invalid decorator");decorator=upload(b);b.recycle();}

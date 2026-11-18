@@ -56,11 +56,7 @@ struct Scene {
 impl Scene {
     unsafe fn new(w:i32,h:i32,aod:i32,lock:i32,home:i32)->Result<Self,String> {
         let mut targets=Vec::new();
-        // 0..3 是全分辨率层；4/5 是模糊的中间层，用半分辨率（2026-11-18 的视觉变更：
-        // 模糊质量只在半径大时有可见差别，而带宽降到 1/4）。半径小的时候仍走全分辨率，
-        // 免掉「模糊到最后一段突然跳一下」。
-        for _ in 0..4 { targets.push(Target::new(w,h)?); }
-        for _ in 0..2 { targets.push(Target::new((w+1)/2,(h+1)/2)?); }
+        for _ in 0..6 { targets.push(Target::new(w,h)?); }
         let lock_path=match lock {
             1=>"photo/lock/straightGlass/straight_glass",2=>"photo/lock/curveGlass/curve_glass",
             3=>"photo/lock/groundGlass/ground_glass",5=>"photo/lock/fillMask/fill_mask",
@@ -133,7 +129,7 @@ impl Scene {
             self.targets[dst].bind();self.gaussian.bind();self.gaussian.texture("u_blur_texture",0,self.targets[src].texture);
             self.gaussian.f("u_scale",s);self.gaussian.m3("u_texture_matrix",&matrix);
             self.gaussian.array("u_weights",&self.kernel.1);self.gaussian.array("u_offsets",&self.kernel.2);self.gaussian.i("u_radius",self.kernel.1.len() as i32);
-            self.gaussian.i("u_horizontal",horizontal);self.gaussian.v2("u_step",2./self.w as f32,2./self.h as f32);
+            self.gaussian.i("u_horizontal",horizontal);self.gaussian.v2("u_step",1./self.w as f32,1./self.h as f32);
             self.gaussian.f("u_texture_min",(1.-s)/2.);self.gaussian.f("u_texture_max",(1.+s)/2.);
             let label=if horizontal==1{5}else{6};pp::pass_begin(label);self.quad.draw();pp::pass_end(label);
         }

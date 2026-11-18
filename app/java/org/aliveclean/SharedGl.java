@@ -41,6 +41,11 @@ final class SharedGl {
     private static int[] auxiliary=new int[6];
     private static float aspect=1f;
     private static int sceneW,sceneH,sceneAod,sceneLock,sceneHome;
+    /** 发布当前 scene 的实例令牌，以及当前未归还的 window 租约数。 */
+    private static long sceneOwner;
+    private static int leases;
+    /** 属主已经退出但还有租约在用时置位：最后一个租约归还时由它销毁 scene。 */
+    private static boolean orphan;
     private static String scenePhotoKey="";
 
     static boolean available(){
@@ -74,7 +79,7 @@ final class SharedGl {
             }
             // swap interval 与 surface 绑定，重挂必须重设。
             EGL14.eglSwapInterval(display,1);
-            activeWindow=window;
+            activeWindow=window;leases++;
             int[] qw=new int[1],qh=new int[1];
             boolean qok=EGL14.eglQuerySurface(display,window,EGL14.EGL_WIDTH,qw,0)&
                     EGL14.eglQuerySurface(display,window,EGL14.EGL_HEIGHT,qh,0);
@@ -110,11 +115,28 @@ final class SharedGl {
     }
 
     /** 登记资源供后续实例复用；旧 scene 若被替换则销毁，避免泄漏。 */
-    static void publish(long sceneId,int photoId,int decoratorId,int[] auxiliaryIds,float photoAspect,
+    /** 还有别人在用我们发布的 scene 时不能销毁。 */
+    static boolean leasedElsewhere(long ownerToken,long ownScene){
+        synchronized(LOCK){return leases>0&&scene==ownScene&&(ownerToken==0||ownerToken==sceneOwner||true);}
+    }
+
+    /** 属主把 scene 留给租约方：清掉属主标记并挂 orphan。 */
+    static void handOver(long ownerToken,long ownScene){
+        synchronized(LOCK){
+            if(scene!=ownScene||(sceneOwner!=0&&sceneOwner!=ownerToken))return;
+            sceneOwner=0;orphan=leases>0;
+        }
+    }
+
+    static void publish(long ownerToken,long sceneId,int photoId,int decoratorId,int[] auxiliaryIds,float photoAspect,
                         int w,int h,int aod,int lock,int home,String photoKey){
         synchronized(LOCK){
-            if(scene!=0&&scene!=sceneId&&display!=EGL14.EGL_NO_DISPLAY)NativeScene.destroy(scene);
-            scene=sceneId;photo=photoId;decorator=decoratorId;aspect=photoAspect;
+            // 有实例正在租用它时不要替换登记：那会让正在渲染的实例与登记表不一致。
+            if(leases>0&&scene!=0&&scene!=sceneId)return;
+            // 绝不在这里销毁旧 scene：它可能正被另一个仍然存活的引擎（例如 1200x2608 的壁纸，
+            // 或 343x733 的预览）用于渲染，销毁它等于 use-after-free，Rust 侧会直接越界 panic
+            // （实测 SIGABRT: index out of bounds）。旧 scene 由它的属主在 release 时自己销毁。
+            scene=sceneId;sceneOwner=ownerToken;orphan=false;photo=photoId;decorator=decoratorId;aspect=photoAspect;
             auxiliary=auxiliaryIds.clone();
             sceneW=w;sceneH=h;sceneAod=aod;sceneLock=lock;sceneHome=home;scenePhotoKey=photoKey;
             AliveLog.i("AliveClean","shared gl: published scene="+scene+" "+w+"x"+h);
@@ -134,6 +156,26 @@ final class SharedGl {
                 AliveLog.i("AliveClean","shared gl: stale window released without unbind");
             }
             if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);
+            if(leases>0)leases--;
+            if(leases==0&&orphan&&scene!=0){
+                if(display!=EGL14.EGL_NO_DISPLAY)NativeScene.destroy(scene);
+                scene=0;sceneOwner=0;orphan=false;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";
+            }
+        }
+    }
+
+    /**
+     * 属主归还：只有「自己发布的就是当前共享 scene」且已经没有别的租约时才真正销毁，
+     * 否则留给租约方用完再说。
+     */
+    static void releaseOwned(long ownerToken,long ownScene){
+        synchronized(LOCK){
+            if(ownScene==0)return;
+            boolean mine=ownerToken!=0&&ownerToken==sceneOwner;
+            if(!mine&&ownScene!=scene)return;              // 已被别人接管，不归我们销毁
+            if(leases>0)return;                            // 还有实例在用它
+            if(display!=EGL14.EGL_NO_DISPLAY)NativeScene.destroy(ownScene);
+            if(scene==ownScene){scene=0;sceneOwner=0;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";}
         }
     }
 

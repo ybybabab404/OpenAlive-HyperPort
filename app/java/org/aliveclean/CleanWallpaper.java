@@ -314,6 +314,8 @@ public final class CleanWallpaper extends WallpaperService {
             catch(RuntimeException error){AliveLog.w("AliveClean","Wallpaper dim setting unavailable",error);}
             renderer.vivoDarkWallpaper(dim);
         }
+        private android.view.Surface lastSurface;
+        private int lastSurfaceWidth,lastSurfaceHeight,lastSurfaceFormat=android.graphics.PixelFormat.UNKNOWN;
         @Override public void onSurfaceChanged(SurfaceHolder h,int format,int w,int height){
             super.onSurfaceChanged(h,format,w,height);
             if(Diagnostics.TRACE)AliveLog.i("AliveClean","Surface changed "+w+"x"+height);
@@ -321,7 +323,14 @@ public final class CleanWallpaper extends WallpaperService {
             AliveLog.i(TAG,"surface "+w+"x"+height+" frame="+frame.width()+"x"+frame.height()
                     +" valid="+h.getSurface().isValid()+" display="+engineDisplayId());
 
-            renderer.attachFresh(h.getSurface(),w,height);
+            // 只有 Surface 对象、尺寸或 format 真的变了才强制重建 window。此前无条件走
+            // attachFresh()，同尺寸的重复回调也会 destroy/recreate EGL window surface，
+            // 等于白白重置一次 BufferQueue 连接（息屏转场正是这类回调密集的时刻）。
+            android.view.Surface next=h.getSurface();
+            boolean same=next==lastSurface&&w==lastSurfaceWidth&&height==lastSurfaceHeight&&format==lastSurfaceFormat;
+            lastSurface=next;lastSurfaceWidth=w;lastSurfaceHeight=height;lastSurfaceFormat=format;
+            if(same)renderer.attach(next,w,height);
+            else renderer.attachFresh(next,w,height);
             lastSentMode=-1;
             if(!isPreview()&&panelDark&&!skipAodMode(0))renderer.mode(0,false);
             update("surface");

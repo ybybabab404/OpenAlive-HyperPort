@@ -28,6 +28,9 @@ final class RenderLoop {
     private long scene;
     /** 借用进程级共享资源：release 只拆 window。 */
     private boolean sharedLease;
+    /** 本实例在 SharedGl 里的身份，用于判断 scene 属主。 */
+    private final long instanceToken=INSTANCE_SEQ.incrementAndGet();
+    private static final java.util.concurrent.atomic.AtomicLong INSTANCE_SEQ=new java.util.concurrent.atomic.AtomicLong();
     /** 只有宿主刚送来新 Surface 时才允许复用。 */
     private boolean allowAcquire;
     /** 诊断开关：true=连 scene 一起复用；false=只复用 context，每实例新建 scene。 */
@@ -377,7 +380,7 @@ final class RenderLoop {
         if(options.aod==101)loadAuxiliary(3,"shader/photo/aod/fullAod/gray.png",false);
         if(lastConfig!=null){
             SharedGl.adopt(display,egl,lastConfig);
-            SharedGl.publish(scene,photo,decorator,auxiliary,aspect,width,height,options.aod,lock,home,options.photo);
+            SharedGl.publish(instanceToken,scene,photo,decorator,auxiliary,aspect,width,height,options.aod,lock,home,options.photo);
             sharedLease=true;
         }
     }
@@ -716,6 +719,16 @@ final class RenderLoop {
         EGL14.eglMakeCurrent(display,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT);
         if(window!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(display,window);
     }
+    /**
+     * 交接场景给别的实例时用：只拆本实例的 window，context 与 GL 对象留给租约方，
+     * 同时把本实例的句柄清零，避免之后误用。
+     */
+    private void destroyWindowOnly(){
+        destroyWindow();
+        window=EGL14.EGL_NO_SURFACE;
+        scene=0;photo=decorator=0;
+        display=EGL14.EGL_NO_DISPLAY;egl=EGL14.EGL_NO_CONTEXT;
+    }
     /** 只销毁 context / display 并释放本线程 EGL 状态。不碰 GL 对象。 */
     private void destroyEglAll(){
         if(egl!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(display,egl);
@@ -743,9 +756,17 @@ final class RenderLoop {
         if(motion!=null){motion.close();motion=null;}
         // 原实现里这三个 destroy 都在 display 有效的保护下；window 与尺寸的清零在保护之外。
         if(display!=EGL14.EGL_NO_DISPLAY){
-            destroySceneObjects();
-            destroyWindow();
-            destroyEglAll();
+            if(SharedGl.leasedElsewhere(instanceToken,scene)){
+                // 别的实例正租用我们发布的 scene：不能销毁 scene 也不能销毁上下文，
+                // 否则对方会 use-after-free（实测 Rust 直接越界 panic）。
+                SharedGl.handOver(instanceToken,scene);
+                AliveLog.i("AliveClean","shared gl: scene handed over, keeping context");
+                destroyWindowOnly();
+            }else{
+                destroySceneObjects();
+                destroyWindow();
+                destroyEglAll();
+            }
         }
         window=EGL14.EGL_NO_SURFACE;
         attachedSurface=null;

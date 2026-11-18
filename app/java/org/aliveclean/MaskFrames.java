@@ -21,6 +21,9 @@ final class MaskFrames implements AutoCloseable {
     private final MaskDecoder decoder=new MaskDecoder();
     private final String[] paths;
     private final int size,bytes,start,end,capacity;
+ /** 当前纹理已分配的边长；0 表示还没分配过（此时必须走 glTexImage2D）。 */
+ private int allocatedSide;
+ private int uploadedTexture;
     private volatile boolean closed;
     private int desired,uploaded=-1,failures,decodedFrames,presentedFrames;
     private boolean queued;
@@ -35,6 +38,7 @@ final class MaskFrames implements AutoCloseable {
     }
     static int index(long micros){return micros<=0?START:micros>=483667?END:Math.min(60,Math.round(micros*120f/1000000f));}
     synchronized boolean upload(int index,int texture){
+        if(texture!=uploadedTexture){uploadedTexture=texture;allocatedSide=0;}
         if(closed)return false;
         desired=index;
         if(uploaded==index)return true;
@@ -44,7 +48,14 @@ final class MaskFrames implements AutoCloseable {
 
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D,texture);value.position(0);
         int side=index==end?720:size;
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D,0,GLES30.GL_RGB,side,side,0,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,value);
+        // 尺寸没变就走 glTexSubImage2D 只改内容：glTexImage2D 每次都会让驱动重新分配
+        // 纹理存储（并可能触发一次同步），而这批遮罩是同一张纹理在循环轮换帧。
+        if(allocatedSide==side){
+            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D,0,0,0,side,side,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,value);
+        }else{
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D,0,GLES30.GL_RGB,side,side,0,GLES30.GL_RGB,GLES30.GL_UNSIGNED_BYTE,value);
+            allocatedSide=side;
+        }
         if(Diagnostics.TRACE){if(index<start)presentedFrames++;if(index==end)AliveLog.i("AliveClean","Frame mask endpoint: decoded="+decodedFrames+" presented="+presentedFrames);}
         uploaded=index;return true;
     }

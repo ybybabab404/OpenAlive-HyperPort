@@ -61,6 +61,8 @@ final class RenderLoop {
     private Choreographer choreographer;
     private final VsyncPacer pacer=new VsyncPacer();
     private boolean framePosted;
+    /** 已排期的 vsync 看门狗到期时刻；0 表示没排。 */
+    private long watchdogDeadline;
     private long frameTime;
     private int photo,decorator,width,height,mode=1;
     private int attachedWidth,attachedHeight;
@@ -298,10 +300,12 @@ final class RenderLoop {
         // Choreographer 在 doze/息屏期间可能整段不发 vsync；一旦回调不来，framePosted 会
         // 永久卡在 true，之后 schedule() 全是空操作 —— 表现就是"surface 在、画面永远不出"。
         // 这里兜一个 120ms 的看门狗：只在 vsync 真的没来时直接渲染一帧。
-        handler.removeCallbacks(vsyncWatchdog);
-        handler.postDelayed(vsyncWatchdog,120);
+        // 看门狗只在「没挂上」的时候排一次：原来每帧都 removeCallbacks+postDelayed，
+        // 120Hz 下等于每秒数百次消息队列操作与定时器重排。用 deadline 记状态，只在到期后重排。
+        if(watchdogDeadline==0L){watchdogDeadline=android.os.SystemClock.uptimeMillis()+120L;handler.postDelayed(vsyncWatchdog,120);}
     }
     private final Runnable vsyncWatchdog=()->{
+        watchdogDeadline=0L;
         if(!framePosted)return;
         framePosted=false;
         if(!(renderingVisible()||forceFrame)||(scene==0&&cosmic==null&&vivo==null))return;
@@ -309,9 +313,9 @@ final class RenderLoop {
         try{frameTime=android.os.SystemClock.uptimeMillis()*1_000_000L;render(frameTime);}
         catch(Throwable error){AliveLog.w("AliveClean","vsync watchdog render failed",error);}
     };
-    private void onVsync(long time){handler.removeCallbacks(vsyncWatchdog);framePosted=false;frameTime=time;handler.post(renderTask);}
+    private void onVsync(long time){if(watchdogDeadline!=0L){watchdogDeadline=0L;handler.removeCallbacks(vsyncWatchdog);}framePosted=false;frameTime=time;handler.post(renderTask);}
     private void stopFrames(){if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(renderTask);stopAodHeartbeat();
-        if(aodFrame!=null)handler.removeCallbacks(aodFrame);handler.removeCallbacks(vsyncWatchdog);}
+        if(aodFrame!=null)handler.removeCallbacks(aodFrame);watchdogDeadline=0L;handler.removeCallbacks(vsyncWatchdog);}
     private void updateCosmicLifecycle(){
         try{
             if(cosmic!=null){

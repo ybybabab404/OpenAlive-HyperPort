@@ -345,7 +345,10 @@ final class HyperOsAod {
             }
 
             private void next() {
-                if (++tries < 100) root.postDelayed(this, 300);
+                // 后退式监督：原来固定 300ms×100，等于稳定后还白唤醒 100 次（每次还要遍历视图树）。
+                // 前 8 次保持 300ms（转场刚结束、宿主最容易换的那几秒），之后放慢到 1s、3s，
+                // 总次数降到 40，但覆盖时长反而从 30s 拉到 ~75s。
+                if (++tries < 40) root.postDelayed(this, tries < 8 ? 300 : tries < 20 ? 1000 : 3000);
                 else AliveLog.i(TAG, "supervise done, parent="
                         + (surface.getParent() == null ? "null"
                         : surface.getParent().getClass().getName()));

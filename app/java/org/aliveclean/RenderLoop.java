@@ -33,6 +33,8 @@ final class RenderLoop {
     private static final java.util.concurrent.atomic.AtomicLong INSTANCE_SEQ=new java.util.concurrent.atomic.AtomicLong();
     /** 只有宿主刚送来新 Surface 时才允许复用。 */
     private boolean allowAcquire;
+    /** 探针：下一次渲染前测一次 glFinish，用来判断慢帧是不是我们的 GPU 工作。 */
+    private boolean probeGpuArmed;
     /** 诊断开关：true=连 scene 一起复用；false=只复用 context，每实例新建 scene。 */
     private static final boolean SHARE_SCENE=true;
     /** 建当前上下文用的 config，共享登记与重挂窗口都要它。 */
@@ -575,6 +577,18 @@ final class RenderLoop {
                 boolean okRen=NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():frameSample.base);
                 long probeAfterRen=probeEnabled?System.nanoTime():0L;
                 if(!okRen)throw new IllegalStateException("Invalid native frame packet");
+                // 诊断：区分「我们的 GPU 没画完」与「系统压着不呈现」。glFinish 只在前一帧
+                // 异常慢之后测一次，平时不调用，避免给每帧加同步开销。
+                if(probeEnabled){
+                    long gpuStart=System.nanoTime();
+                    GLES30.glFinish();
+                    long gpuMs=(System.nanoTime()-gpuStart)/1_000_000L;
+                    AliveLog.i("AliveClean","probe gpu ms="+gpuMs
+                            +" eff="+((probeAfterEff-probeStart)/1_000_000L)
+                            +" ren="+((probeAfterRen-probeAfterEff)/1_000_000L)
+                            +" motion="+(frameMotion==null?"tex":"frame")
+                            +" mode="+mode+" t="+SystemClock.uptimeMillis());
+                }
                 boolean okSw=swap("native");
                 probeFrame(probeStart,probeAfterEff,probeAfterRen);
                 if(!okSw)throw new SurfaceLost("EGL swap error "+EGL14.eglGetError());

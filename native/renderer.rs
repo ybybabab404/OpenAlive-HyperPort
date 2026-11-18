@@ -47,6 +47,8 @@ struct Scene {
     copy_key:Option<(u32,u64,bool,u32)>,
     /// 上一帧 home_pass 的输入身份；命中即可整次跳过。
     home_key:Option<u64>,
+    /// 上一帧 lock_pass 的输入身份；命中即可整次跳过。
+    lock_key:Option<u64>,
 }
 
 impl Scene {
@@ -89,7 +91,7 @@ impl Scene {
             quad:Quad::new(),copy:Program::new(COPY_V,COPY_F)?,lock_program:program(lock_path)?,
             aod_program,home_program:program(home_path)?,home_effect_program:program(home_effect_path)?,blend:program(blend_path)?,
             down:program("blur/down_sample")?,gaussian:program("blur/gaussian")?,up:program("blur/up_sample")?,
-            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),copy_key:None,home_key:None,
+            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),copy_key:None,home_key:None,lock_key:None,
         })
     }
     fn copy(&mut self,input:u32,target:usize,aspect:f32,flip:bool) {
@@ -135,6 +137,15 @@ impl Scene {
     }
     unsafe fn lock_pass(&mut self,frame:&Frame) {
         let effect=self.effect_values(frame,0);
+        // targets[1] 只有 lock_pass 会写（下面两个 bind 就是全部入口），所以源纹理、样式、
+        // 颜色、灰度/遮罩图、effect 都没变时，上一帧的内容就是这一帧要的，整次绘制可跳过。
+        // 稳态下图里没有任何变化，这一项实测占 0.5–0.6ms。
+        let mut lk=1469598103934665603u64;
+        for v in [self.targets[0].texture as u64,self.lock as u64,
+                  self.images[1].id as u64,self.images[2].id as u64] { lk=fnv(lk,v); }
+        for v in self.color.iter().copied().chain(effect.iter().copied()) { lk=fnv(lk,bits(v)); }
+        if self.lock_key==Some(lk){return;}
+        self.lock_key=Some(lk);
         // lock==4 是纯色填充，必须清；其余样式都由全屏 quad 不透明覆盖，无需 clear。
         if self.lock==4 {
             self.targets[1].bind();glClearColor(self.color[0],self.color[1],self.color[2],1.);glClear(0x4000);return;
@@ -291,7 +302,7 @@ pub unsafe extern "system" fn Java_org_aliveclean_NativeScene_create(_: *mut c_v
 }
 #[no_mangle]
 pub unsafe extern "system" fn Java_org_aliveclean_NativeScene_texture(_: *mut c_void,_:*mut c_void,handle:i64,slot:i32,id:i32,w:i32,h:i32) {
-    if handle!=0 && (0..6).contains(&slot) && id>0 && w>0 && h>0 {let s=&mut *(handle as *mut Scene);s.images[slot as usize]=Image{id:id as u32,width:w,height:h};s.blur_cache=None;s.copy_key=None;s.home_key=None;}
+    if handle!=0 && (0..6).contains(&slot) && id>0 && w>0 && h>0 {let s=&mut *(handle as *mut Scene);s.images[slot as usize]=Image{id:id as u32,width:w,height:h};s.blur_cache=None;s.copy_key=None;s.home_key=None;s.lock_key=None;}
 }
 #[no_mangle]
 pub unsafe extern "system" fn Java_org_aliveclean_NativeScene_frameCrop(_: *mut c_void,_:*mut c_void,handle:i64,x:f32,y:f32,size:f32,angle:f32) {

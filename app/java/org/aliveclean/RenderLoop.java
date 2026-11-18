@@ -37,6 +37,8 @@ final class RenderLoop {
     private boolean probeGpuArmed;
     /** 上一帧换出是否偏慢：只有偏慢才在下一帧测一次 glFinish 归因。 */
     private boolean probeSlowSeen;
+    /** 本轮汇总窗口内 timer query 报出的最大 GPU 执行时间（ns）；-1 表示没有可取到的结果。 */
+    private long probeGpuExecMax=-1L;
     /** 诊断开关：true=连 scene 一起复用；false=只复用 context，每实例新建 scene。 */
     private static final boolean SHARE_SCENE=true;
     /** 建当前上下文用的 config，共享登记与重挂窗口都要它。 */
@@ -612,6 +614,7 @@ final class RenderLoop {
                 long gpuNs=gpuTimed?gpuTimer.end():-1L;
                 long swapStart=System.nanoTime();                 // 单独量 eglSwapBuffers，不含 glFinish
                 boolean okSw=swap("native");
+                if(gpuNs>probeGpuExecMax)probeGpuExecMax=gpuNs;
                 if(probeEnabled&&gpuNs>16_000_000L)
                     AliveLog.i("AliveClean","probe gpuexec ns="+(gpuNs/1_000_000f)+"ms mode="+mode+" t="+SystemClock.uptimeMillis());
                 if(probeEnabled&&probeSlowSeen)probeGpuArmed=true;
@@ -683,52 +686,29 @@ final class RenderLoop {
      * 与 glFinish 的墙钟等待区分开。查询异步读取（结果通常落后数帧），任何时刻都不阻塞渲染线程。
      * 仅在探针开启时启用；正式包不产生任何 GL 调用。
      */
+    /** 诊断用 GPU 计时器：转发到 native 的 GL_EXT_disjoint_timer_query 实现，结果异步读取不阻塞。 */
     private static final class GpuTimer{
-        private static final int TARGET_TIME_ELAPSED=0x88BF;   // GL_TIME_ELAPSED_EXT
-        private static final int QUERY_RESULT=0x8866;
-        private static final int QUERY_RESULT_AVAILABLE=0x8867;
-        private static final int GPU_DISJOINT=0x8FBB;          // GL_GPU_DISJOINT_EXT
-        private final int[] ids={0,0,0};
-        private final boolean[] running=new boolean[3];
-        private int slot;
-        boolean unsupported;
-        boolean ready(){
+        private boolean unsupported;
+        private boolean running;
+        private boolean ready(){
             if(unsupported)return false;
-            if(ids[0]!=0)return true;
-            GLES30.glGetError();                                // 清掉历史错误，便于判定本次
-            GLES30.glGenQueries(3,ids,0);
-            if(GLES30.glGetError()!=GLES30.GL_NO_ERROR||ids[0]==0){unsupported=true;return false;}
+            if(NativeGpuTimer.supported()==0){
+                unsupported=true;
+                AliveLog.w("AliveClean","probe gpuexec unavailable: timer query extension missing");
+                return false;
+            }
             return true;
         }
-        /** 开始一段计时；返回是否真的开始。 */
         boolean begin(){
-            if(!ready()||running[slot])return false;
-            GLES30.glGetError();
-            GLES30.glBeginQuery(TARGET_TIME_ELAPSED,ids[slot]);
-            if(GLES30.glGetError()!=GLES30.GL_NO_ERROR){unsupported=true;return false;}
-            running[slot]=true;return true;
+            if(running||!ready())return false;
+            if(NativeGpuTimer.begin()==0){unsupported=true;return false;}
+            running=true;return true;
         }
-        /** 结束计时并返回上一轮已完成查询的结果（ns），无可用结果返回 -1。 */
+        /** @return 上一轮结果的 ns；-1 暂无、-2 disjoint。 */
         long end(){
-            if(!running[slot])return -1L;
-            GLES30.glEndQuery(TARGET_TIME_ELAPSED);running[slot]=false;
-            long value=-1L;
-            for(int i=1;i<=ids.length;i++){
-                int idx=(slot+i)%ids.length;
-                if(!running[idx]&&ids[idx]!=0){
-                    int[] avail=new int[1];
-                    GLES30.glGetQueryObjectuiv(ids[idx],QUERY_RESULT_AVAILABLE,avail,0);
-                    if(avail[0]!=0){
-                        int[] disjoint=new int[1];
-                        GLES30.glGetIntegerv(GPU_DISJOINT,disjoint,0);
-                        int[] ns=new int[1];
-                        GLES30.glGetQueryObjectuiv(ids[idx],QUERY_RESULT,ns,0);
-                        value=disjoint[0]!=0?-2L:(ns[0]&0xFFFFFFFFL); // -2 = disjoint，本次结果不可信
-                    }
-                }
-            }
-            slot=(slot+1)%ids.length;
-            return value;
+            if(!running)return -1L;
+            running=false;
+            return NativeGpuTimer.end();
         }
     }
     private long probeBegin(){
@@ -771,6 +751,7 @@ final class RenderLoop {
         if(sw>=40_000_000L)probeSwOver40++;
         if(++probeFrames<30)return;
         AliveLog.i("AliveClean","probe frame n="+probeFrames+" mode="+mode
+                +" gpuExecMax="+probeGpuExecMax/1_000_000f+"ms"
                 +" effMax="+probeEffMax/1_000_000f+"ms renMax="+probeRenMax/1_000_000f+"ms"
                 +" swMax="+probeSwMax/1_000_000f+"ms gapMax="+probeGapMax/1_000_000f+"ms"
                 +" sw>=40ms:"+probeSwOver40+" sw>=80ms:"+probeSwOver80);

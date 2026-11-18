@@ -31,7 +31,7 @@ const GROUPS: usize = 4;
 /// copy / lock / home / aod / down / gaussianH / gaussianV / up / blend
 pub const PASSES: usize = 9;
 pub const LABELS: [&str; PASSES] = ["copy", "lock", "home", "aod", "down", "gh", "gv", "up", "blend"];
-const REPORT_EVERY: u32 = 10;
+const TTL_FRAMES: u32 = 240;
 
 struct State {
     ready: bool,
@@ -44,6 +44,15 @@ struct State {
     opened: [[bool; PASSES]; GROUPS],
     /// 本组里真正跑过的 pass（位掩码）。没跑的 query 永远不 available，不能参与汇总。
     ran: [u32; GROUPS],
+    /// 每组的出生帧号（用于 TTL 回收）。
+    born: [u32; GROUPS],
+    /// 本帧没抢到空闲组：此时 pass_begin/end 必须全部空转，绝不能沿用上一帧的 group。
+    no_group: bool,
+    /// 已完成样本的整帧总耗时（µs），用来算中位数而不是逐条打日志。
+    samples: [u32; 64],
+    sample_count: usize,
+    /// 各 pass 在样本窗内的累计耗时（ns），报的时候除以样本数就是均值。
+    sums: [u64; PASSES],
     group: usize,
     used: [bool; GROUPS],
     frames: u32,
@@ -59,6 +68,11 @@ static mut STATE: State = State {
     ids: [[0; PASSES]; GROUPS],
     opened: [[false; PASSES]; GROUPS],
     ran: [0; GROUPS],
+    born: [0; GROUPS],
+    no_group: false,
+    samples: [0; 64],
+    sample_count: 0,
+    sums: [0; PASSES],
     group: 0,
     used: [false; GROUPS],
     frames: 0,
@@ -145,9 +159,14 @@ pub fn frame_begin() {
         }
     }
     if picked == usize::MAX {
+        // 以前这里直接 return，s.group 还留着上一帧的值：后续 pass_begin 会把 query
+        // begin 到「上一帧已经结束」的 id 上，覆盖结果并打乱 ran 掩码，产出静默的错误数据。
+        s.no_group = true;
         return;
     }
+    s.no_group = false;
     s.group = picked;
+    s.born[picked] = s.frames;
     s.opened[picked] = [false; PASSES];
     s.ran[picked] = 0;
     unsafe{s.begin.unwrap()(TIME_ELAPSED_EXT, s.ids[picked][0]);} // 占位：立刻结束，保持配对
@@ -157,7 +176,7 @@ pub fn frame_begin() {
 
 pub fn pass_begin(pass: usize) {
     let s = unsafe { state() };
-    if !s.enabled || !s.used[s.group] || pass >= PASSES {
+    if !s.enabled || s.no_group || !s.used[s.group] || pass >= PASSES {
         return;
     }
     let begin = match s.begin {
@@ -174,7 +193,7 @@ pub fn pass_begin(pass: usize) {
 
 pub fn pass_end(pass: usize) {
     let s = unsafe { state() };
-    if !s.enabled || pass >= PASSES || !s.opened[s.group][pass] {
+    if !s.enabled || s.no_group || pass >= PASSES || !s.opened[s.group][pass] {
         return;
     }
     if let Some(end) = s.end {
@@ -183,26 +202,36 @@ pub fn pass_end(pass: usize) {
     s.opened[s.group][pass] = false;
 }
 
-/// 一帧结束：回收已完成的最老一组并汇总打印，然后释放它。
+/// 一帧结束：每帧都尝试回收（以前只在 frames%10==0 那帧回收，4 组最多撑 4 帧，
+/// 之后约 6 帧测不到，有效采样率只有四成）。最多回收两组，绝不等待。
 pub fn frame_end() {
     let s = unsafe { state() };
-    if !s.enabled || !s.used[s.group] {
+    if !s.enabled {
         return;
     }
+    s.no_group = false;
     let get = match s.get {
         Some(f) => f,
         None => return,
     };
-    if s.frames % REPORT_EVERY != 0 {
-        return;
-    }
+    let mut freed = 0;
     for index in 0..GROUPS {
+        if freed >= 2 {
+            break;
+        }
         if !s.used[index] {
             continue;
         }
         let mask = s.ran[index];
         if mask == 0 {
             s.used[index] = false;
+            freed += 1;
+            continue;
+        }
+        // TTL：某个 query 永远不 available（驱动丢查询等）时不能把组占死，否则测量会静默停摆。
+        if s.frames.wrapping_sub(s.born[index]) > TTL_FRAMES {
+            s.used[index] = false;
+            freed += 1;
             continue;
         }
         let mut all: u32 = 1;
@@ -223,8 +252,9 @@ pub fn frame_end() {
         let mut disjoint: i32 = 0;
         unsafe{glGetIntegerv(GPU_DISJOINT_EXT, &mut disjoint)};
         s.used[index] = false;
+        freed += 1;
         if disjoint != 0 {
-            return;
+            continue;
         }
         let mut values = [0i64; PASSES];
         let mut total = 0i64;
@@ -237,21 +267,53 @@ pub fn frame_end() {
             values[pass] = ns as i64;
             total += ns as i64;
         }
-        unsafe{log_report(&values, total, mask)};
-        return;
+        for pass in 0..PASSES { s.sums[pass] += values[pass].max(0) as u64; }
+        push_sample(total);
+        if s.sample_count >= 60 {
+            unsafe{report_samples()};
+        }
     }
 }
 
-unsafe fn log_report(values: &[i64; PASSES], total: i64, mask: u32) {
-    let mut text = String::from("probe passes");
+fn push_sample(total_ns: i64) {
+    let s = state();
+    let us = (total_ns / 1000).max(0).min(u32::MAX as i64) as u32;
+    if s.sample_count < s.samples.len() {
+        s.samples[s.sample_count] = us;
+        s.sample_count += 1;
+    }
+}
+
+/// 报中位数而不是逐帧最大值：偶发离群帧会把 max 拉飞，中位数才代表稳态成本。
+unsafe fn report_samples() {
+    let s = state();
+    let mut values = [0u32; 64];
+    let count = s.sample_count;
+    values[..count].copy_from_slice(&s.samples[..count]);
+    s.sample_count = 0;
+    let slice = &mut values[..count];
+    slice.sort_unstable();
+    let median = slice[count / 2];
+    let p95 = slice[(count * 95 / 100).min(count - 1)];
+    let mut means = [0u32; PASSES];
     for pass in 0..PASSES {
+        means[pass] = (s.sums[pass] / count as u64 / 1000) as u32;
+        s.sums[pass] = 0;
+    }
+    log_report(median, p95, count as u32, &means);
+}
+
+unsafe fn log_report(median_us: u32, p95_us: u32, count: u32, means: &[u32; PASSES]) {
+    let mut text = format!("probe passes total_med={}us total_p95={}us n={}", median_us, p95_us, count);
+    for pass in 0..PASSES {
+        if means[pass] == 0 {
+            continue;
+        }
         text.push(' ');
-        if mask & (1 << pass) == 0 { continue; }
         text.push_str(LABELS[pass]);
         text.push('=');
-        text.push_str(&format!("{:.2}", values[pass] as f64 / 1.0e6));
+        text.push_str(&means[pass].to_string());
     }
-    text.push_str(&format!(" total={:.2}", total as f64 / 1.0e6));
     let mut line = text.into_bytes();
     line.push(0);
     __android_log_print(4, b"AliveClean\0".as_ptr() as *const c_char,

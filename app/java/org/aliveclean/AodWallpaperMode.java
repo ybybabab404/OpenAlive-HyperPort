@@ -360,6 +360,51 @@ final class AodWallpaperMode {
      * system_server 侧恢复桌面槽。开机首次解锁时锁屏槽可能仍是我们的，而系统槽已经
      * 被 WPMS 换成 MIUI 静态壁纸；因此这里只查当前/system 槽，绝不复用 lockShowsOurs()。
      */
+    /**
+     * 用户应用了**系统壁纸**时，把壁纸组件从我们的动态壁纸交还给 MIUI。
+     *
+     * <p>为什么需要：MIUI 的编辑页/个性化页"应用系统壁纸"走的是
+     * {@code WallpaperManagerService.setWallpaper(位图)}，它只替换静态壁纸图，
+     * **不会清掉动态壁纸组件**。我们的 CleanWallpaper 还在，桌面就继续画我们的画面，
+     * 用户看到的就是"应用了系统壁纸却还是项目壁纸"。</p>
+     *
+     * <p>只在 setWallpaper / clearWallpaper 这两种"位图应用"来源上动手：
+     * 我们自己切换场景走的是 setWallpaperComponentWithFlags，不会被误伤。</p>
+     */
+    static void releaseWhenSystemWallpaperApplied(final Context context, final String source) {
+        if (context == null) return;
+        if (!"setWallpaper".equals(source) && !"clearWallpaper".equals(source)) return;
+        try {
+            WallpaperManager manager = WallpaperManager.getInstance(context);
+            if (!isCleanWallpaper(manager.getWallpaperInfo())) return;
+            // MIUI 的静态壁纸组件；拿不到就交给系统默认（null）。
+            ComponentName target = null;
+            for (String candidate : new String[]{
+                    "com.miui.miwallpaper/com.miui.miwallpaper.wallpaperservice.ImageWallpaper",
+                    "com.miui.miwallpaper/com.miui.miwallpaper.MiWallpaper"}) {
+                ComponentName parsed = ComponentName.unflattenFromString(candidate);
+                if (parsed == null) continue;
+                try {
+                    context.getPackageManager().getServiceInfo(parsed, 0);
+                    target = parsed;
+                    break;
+                } catch (Throwable ignored) {
+                }
+            }
+            try {
+                Method method = WallpaperManager.class.getMethod(
+                        "setWallpaperComponent", ComponentName.class);
+                method.invoke(manager, target);
+                AliveLog.i(HOME_TAG, "release wallpaper to system source=" + source
+                        + " target=" + target);
+            } catch (Throwable error) {
+                AliveLog.w(HOME_TAG, "release wallpaper failed source=" + source, error);
+            }
+        } catch (Throwable error) {
+            AliveLog.w(HOME_TAG, "release wallpaper check failed source=" + source, error);
+        }
+    }
+
     static void restoreHomeWhenForeign(final Context context, final String source) {
         if (context == null) return;
         synchronized (HOME_RESTORE_LOCK) {

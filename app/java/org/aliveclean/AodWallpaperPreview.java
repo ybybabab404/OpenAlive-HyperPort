@@ -31,6 +31,7 @@ public final class AodWallpaperPreview {
         // 编辑页（息屏与锁屏编辑）跑在 com.miui.aod:keyguardeditor，卡片壁纸同样是
         // GL 纹理，喂进去的也是占位图 —— 所以这套兜底必须在这个进程里也装一份。
         installImageGlWallpaperFallback(loader);
+        installWallpaperTypeInfoFallback(loader);
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
@@ -175,18 +176,72 @@ public final class AodWallpaperPreview {
     }
 
     private static Bitmap wallpaperForSlot(int slot) {
+        // 第一优先：我们自己记下的"真正被宿主当成真图喂进来的那一帧"。
+        Bitmap remembered = rememberedSlotWallpaper(slot);
+        if (remembered != null && !looksLikePlaceholder(remembered)) return remembered;
+        Bitmap fromSystem = decodeSlotFile(slot);
+        if (fromSystem != null && !looksLikePlaceholder(fromSystem)) return fromSystem;
+        // 最后才用进程里的缓存（可能是任意槽的图）。
+        return null;
+    }
+
+    /** 解码某个槽的系统静态壁纸文件；文件里可能就是占位图，交给调用方判内容。 */
+    private static Bitmap decodeSlotFile(int slot) {
         File file = new File(STATIC_WALLPAPER_DIR, slot == 2 ? "lock_wallpaper.jpg" : "home_wallpaper.jpg");
-        if (!file.isFile()) return systemWallpaperFresh();
+        if (!file.isFile()) return null;
         long stamp = file.lastModified() * 31L + file.length();
         if (slot == 2) {
-            Bitmap cachedLock = lockBitmap;
-            if (cachedLock != null && !cachedLock.isRecycled() && stamp == lockStamp) return cachedLock;
+            Bitmap cached = lockBitmap;
+            if (cached != null && !cached.isRecycled() && stamp == lockStamp) return cached;
             Bitmap decoded = BitmapFactory.decodeFile(file.getAbsolutePath());
             if (decoded != null) { lockBitmap = decoded; lockStamp = stamp; }
-            return decoded != null ? decoded : systemWallpaperFresh();
+            return decoded;
         }
         return systemWallpaperFresh();
     }
+
+    /** 每个槽"最近一次见到真图"的缓存（files/card_wallpaper_1|2.jpg）。 */
+    private static Bitmap rememberedSlotWallpaper(int slot) {
+        File file = slotCacheFile(slot);
+        if (!file.isFile()) return null;
+        long stamp = file.lastModified() * 31L + file.length();
+        if (slot == 2 ? stamp == lockRememberStamp : stamp == homeRememberStamp) {
+            Bitmap cached = slot == 2 ? lockRemembered : homeRemembered;
+            if (cached != null && !cached.isRecycled()) return cached;
+        }
+        Bitmap decoded = BitmapFactory.decodeFile(file.getAbsolutePath());
+        if (decoded == null) return null;
+        if (slot == 2) { lockRemembered = decoded; lockRememberStamp = stamp; }
+        else { homeRemembered = decoded; homeRememberStamp = stamp; }
+        return decoded;
+    }
+
+    private static File slotCacheFile(int slot) {
+        Context context = Xp.currentApplication();
+        if (context == null) return new File("/data/local/tmp/alive_slot_" + slot + ".jpg");
+        return new File(context.getFilesDir(), "card_wallpaper_" + slot + ".jpg");
+    }
+
+    /** 宿主喂进来的如果是真图，就把它记下来——下次它再给占位图时我们才有真图可用。 */
+    private static void rememberSlotWallpaper(int slot, Bitmap bitmap) {
+        if (bitmap == null || bitmap.isRecycled() || looksLikePlaceholder(bitmap)) return;
+        if (slot == 2) { lockRemembered = bitmap; lockRememberStamp = -1; }
+        else { homeRemembered = bitmap; homeRememberStamp = -1; }
+        final Bitmap copy = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+        final File file = slotCacheFile(slot);
+        new Thread(() -> {
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) {
+                copy.compress(Bitmap.CompressFormat.JPEG, 92, out);
+            } catch (Throwable error) {
+                AliveLog.w(TAG, "remember slot wallpaper failed slot=" + slot, error);
+            }
+        }, "alive-remember-wallpaper").start();
+    }
+
+    private static volatile long homeRememberStamp = -1;
+    private static volatile long lockRememberStamp = -1;
+    private static volatile Bitmap homeRemembered;
+    private static volatile Bitmap lockRemembered;
 
     private static volatile long lockStamp = -1;
     private static volatile Bitmap lockBitmap;
@@ -714,10 +769,14 @@ public final class AodWallpaperPreview {
                     for (int i = 0; i < param.args.length; i++) {
                         if (!(param.args[i] instanceof Bitmap)) continue;
                         Bitmap incoming = (Bitmap) param.args[i];
-                        if (!looksLikePlaceholder(incoming)) continue;
-                        Bitmap remembered = wallpaperForSlot(slotFromStack());
+                        int slot = slotFromStack();
+                        if (!looksLikePlaceholder(incoming)) {
+                            rememberSlotWallpaper(slot, incoming);
+                            continue;
+                        }
+                        Bitmap remembered = wallpaperForSlot(slot);
                         if (remembered == null) remembered = rememberedHomeWallpaper(context);
-                        if (remembered == null) continue;
+                        if (remembered == null || looksLikePlaceholder(remembered)) continue;
                         param.args[i] = Bitmap.createScaledBitmap(remembered,
                                 incoming.getWidth(), incoming.getHeight(), true);
                         AliveLog.i(TAG, "imageGL " + param.method.getName()
@@ -733,6 +792,66 @@ public final class AodWallpaperPreview {
             }
         }
         AliveLog.i(TAG, "imageGL fallback installed");
+    }
+
+    /**
+     * 编辑页（息屏与锁屏编辑）的卡片壁纸来自 {@code WallpaperTypeInfo.getBitmap()}：
+     * CombinedWallpaperView 拿它去建 GLTextureView，图是空的就只画出空态（灰占位）。
+     *
+     * <p>当前壁纸是第三方动态壁纸时宿主取不到那张图，位图就是 null/占位，
+     * 这里在数据对象构造完的那一刻补上对应槽位的真实壁纸。</p>
+     */
+    private static void installWallpaperTypeInfoFallback(ClassLoader loader) {
+        Class<?> typeInfo = Xp.findClassIfExists(
+                "com.miui.keyguard.editor.data.bean.WallpaperTypeInfo", loader);
+        if (typeInfo == null) {
+            AliveLog.w(TAG, "wallpaperTypeInfo fallback: missing");
+            return;
+        }
+        try {
+            Xp.hookAllConstructors(typeInfo, new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    Object info = param.thisObject;
+                    Bitmap current = null;
+                    try {
+                        Object value = Xp.getObjectField(info, "bitmap");
+                        if (value instanceof Bitmap) current = (Bitmap) value;
+                    } catch (Throwable ignored) {
+                    }
+                    if (current != null && !looksLikePlaceholder(current)) return;
+                    int slot = slotOfTypeInfo(info);
+                    Bitmap fill = wallpaperForSlot(slot);
+                    if (fill == null || looksLikePlaceholder(fill)) return;
+                    try {
+                        java.lang.reflect.Field field = typeInfo.getDeclaredField("bitmap");
+                        field.setAccessible(true);
+                        field.set(info, current == null ? fill
+                                : Bitmap.createScaledBitmap(fill, current.getWidth(),
+                                current.getHeight(), true));
+                        AliveLog.i(TAG, "wallpaperTypeInfo filled slot=" + slot);
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "wallpaperTypeInfo fill failed", error);
+                    }
+                }
+            });
+            AliveLog.i(TAG, "wallpaperTypeInfo fallback installed");
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "wallpaperTypeInfo fallback hook failed", error);
+        }
+    }
+
+    /** infoType 里带 HOME/LOCK 语义，用它判槽位；判不出就退回栈判定。 */
+    private static int slotOfTypeInfo(Object info) {
+        try {
+            Object type = Xp.getObjectField(info, "infoType");
+            if (type != null) {
+                String name = String.valueOf(type).toUpperCase(java.util.Locale.ROOT);
+                if (name.contains("LOCK")) return 2;
+                if (name.contains("HOME")) return 1;
+            }
+        } catch (Throwable ignored) {
+        }
+        return slotFromStack();
     }
 
     private static void installUf(ClassLoader loader) {

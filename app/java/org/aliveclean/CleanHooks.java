@@ -97,6 +97,8 @@ public final class CleanHooks extends XposedModule {
         AliveLog.i(TAG, "loaded into " + packageName + " pid=" + android.os.Process.myPid());
         if (themeManager) step("personalize entry", () -> PersonalizeEntry.install(loader));
         if (themeManager) step("tm wallpaper preview", () -> AodWallpaperPreview.installThemeManager(loader));
+        // 个性化页重进/应用后卡在「加载中」：宿主的 restoreTemplate 自己不会调，这里替它调。
+        if (themeManager) step("personalize loading fix", () -> PersonalizeLoadingFix.install(loader));
         if (miuiAod) step("aod settings hotfix", () -> AodSettingsGuard.install(loader));
         if (miuiAod) step("aod preview hide", () -> AodPreviewHider.install(loader));
         if (miuiAod) step("aod wallpaper preview", () -> AodWallpaperPreview.install(loader));

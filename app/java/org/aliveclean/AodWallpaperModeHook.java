@@ -140,10 +140,10 @@ final class AodWallpaperModeHook {
                     } else {
                         AliveLog.i(TAG, "home wallpaper restore skipped (past boot window) source=" + source);
                     }
-                    // 用户在编辑页/个性化页应用了系统壁纸（setWallpaper 走的是位图应用）时，
-                    // 系统只是把静态图画进了壁纸槽，**壁纸组件还是我们的**，桌面会继续显示
-                    // 我们的动态壁纸——看起来就是"应用了系统壁纸却没切过去"。这里主动交还。
-                    AodWallpaperMode.releaseWhenSystemWallpaperApplied(context, source);
+                    // 注意：这里**不**做"把组件交还系统"的判断。
+                    // 我们自己的「应用壁纸」内部也会调 setWallpaper/clearWallpaper，
+                    // 从这条一概判断的话，刚设好的动态壁纸会被立刻撤掉。
+                    // 交还只走编辑页那条明确信号：SceneProvider 的 releaseWallpaper 广播。
                     if (AodWallpaperMode.alive(context)) {
                         AodWallpaperMode.ensureEnabled(context);
                     } else {

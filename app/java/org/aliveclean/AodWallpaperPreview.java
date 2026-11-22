@@ -38,6 +38,7 @@ public final class AodWallpaperPreview {
         installEditorWallpaperFallback(loader);
         installEditorCurrentWallpaperFallback();
         installEditorProviderFallback(loader);
+        installEditorApplyRelease(loader);
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
@@ -1160,8 +1161,61 @@ public final class AodWallpaperPreview {
         }
     }
 
-    /** 当前模板那两个文件的内容是不是占位图；按文件戳缓存，避免每次开 fd 都解码。 */
-    private static final long[] TEMPLATE_WALLPAPER_STAMP = {-1, -1, -1};
+    /**
+     * 编辑页（息屏与锁屏编辑）点「应用」时，应用的是**系统壁纸**，MIUI 只更新自己的
+     * 模板数据，不会清掉我们的动态壁纸组件 —— 用户看到的就是"应用了系统壁纸，
+     * 桌面却还是项目壁纸"。所以在应用动作之后请我们自己的进程把组件交还 MIUI。
+     */
+    private static void installEditorApplyRelease(ClassLoader loader) {
+        Class<?> applier = Xp.findClassIfExists(
+                "com.miui.keyguard.editor.edit.base.TemplateApplier", loader);
+        if (applier == null) {
+            AliveLog.w(TAG, "editor apply: TemplateApplier missing");
+            return;
+        }
+        Xp.MethodHook hook = new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                if (param.args.length != 3 || !(param.args[0] instanceof Context)) return;
+                final Context context = (Context) param.args[0];
+                AliveLog.i(TAG, "editor apply: request wallpaper release");
+                // 应用流程本身是异步的（协程里还要写模板），所以等一下再交还组件，
+                // 免得 MIUI 那边刚把壁纸设成自己的静态图又被我们盖回来。
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(1200);
+                        context.getContentResolver().call(
+                                android.net.Uri.parse("content://org.aliveclean.scene"),
+                                "releaseWallpaper", "edit_apply", null);
+                        AliveLog.i(TAG, "editor apply: wallpaper released");
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "editor apply: wallpaper release failed", error);
+                    }
+                }, "alive-editor-release").start();
+            }
+        };
+        int count = 0;
+        // 方法名被 R8 混淆过（反编译里看到的 onApplyTemplate 只是还原后的名字），
+        // 所以按签名找：三个参数、第一个是 Context、最后一个是 TemplateApplierParams。
+        for (java.lang.reflect.Method method : applier.getDeclaredMethods()) {
+            java.lang.reflect.Method plain = method.isBridge() ? null : method;
+            if (plain == null) continue;
+            if (java.lang.reflect.Modifier.isAbstract(plain.getModifiers())) continue;
+            Class<?>[] types = plain.getParameterTypes();
+            if (types.length != 3) continue;
+            if (!Context.class.isAssignableFrom(types[0])) continue;
+            if (!(types[1].getName().contains("BaseTemplateView"))) continue;
+            if (!(types[2].getName().contains("TemplateApplierParams"))) continue;
+            try {
+                Xp.hookMethod(plain, hook);
+                count++;
+            } catch (Throwable error) {
+                AliveLog.w(TAG, "editor apply hook failed " + plain, error);
+            }
+        }
+        AliveLog.i(TAG, "editor apply release hooks=" + count);
+    }
+
+    /** 当前模板那两个文件的内容是不是占位图；按文件戳缓存，避免每次开 fd 都解码。 */    private static final long[] TEMPLATE_WALLPAPER_STAMP = {-1, -1, -1};
     private static final boolean[] TEMPLATE_WALLPAPER_GREY = {false, false, false};
 
     private static boolean templateWallpaperIsPlaceholder(int slot) {

@@ -17,6 +17,17 @@ public final class SceneProvider extends ContentProvider {
     @Override public Bundle call(String method,String argument,Bundle extras){
         Context c=getContext();
         if(c.checkCallingOrSelfPermission("android.permission.STATUS_BAR")!=android.content.pm.PackageManager.PERMISSION_GRANTED)throw new SecurityException("System UI permission required");
+        // 编辑页（息屏与锁屏编辑）点「应用」应用的是系统壁纸，MIUI 只写自己的模板数据，
+        // 不会清掉我们的动态壁纸组件；不在这里交还，用户会看到"应用了系统壁纸却还是项目壁纸"。
+        if("releaseWallpaper".equals(method)){
+            // 交还壁纸组件要 SET_WALLPAPER_COMPONENT，应用进程没有这个权限，
+            // 交给 system_server 那边的接收者去做（见 AodWallpaperModeHook）。
+            android.content.Intent intent=new android.content.Intent(AodWallpaperMode.ACTION_RELEASE_WALLPAPER);
+            intent.setPackage("android");
+            intent.putExtra("source",argument==null?"edit_apply":argument);
+            c.sendBroadcast(intent,AodWallpaperMode.PERMISSION_RELEASE_WALLPAPER);
+            return new Bundle();
+        }
         if(!"connect".equals(method)&&!"configuration".equals(method))throw new IllegalArgumentException("Unknown operation");
         try{
             Bundle result=new Bundle();

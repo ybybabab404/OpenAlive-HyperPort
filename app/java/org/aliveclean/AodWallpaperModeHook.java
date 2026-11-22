@@ -27,6 +27,57 @@ final class AodWallpaperModeHook {
         hooks += hookBind(service);
         hooks += hookMutations(service);
         AliveLog.i(TAG, "aod wallpaper restore hooks=" + hooks);
+        ensureReleaseReceiver(systemContext());
+    }
+
+    /** system_server 的 context；拿不到就等第一次壁纸变更时再从 WPMS 里取。 */
+    private static Context systemContext() {
+        try {
+            Class<?> thread = Class.forName("android.app.ActivityThread");
+            Object instance = Xp.callStaticMethod(thread, "currentActivityThread");
+            Object context = Xp.callMethod(instance, "getSystemContext");
+            return context instanceof Context ? (Context) context : null;
+        } catch (Throwable error) {
+            return null;
+        }
+    }
+
+    private static volatile boolean releaseReceiverReady = false;
+
+    /**
+     * 编辑页（息屏与锁屏编辑）点「应用」时，MIUI 只更新自己的模板数据，不动壁纸组件；
+     * 应用进程也没有 {@code SET_WALLPAPER_COMPONENT}，所以在这里（system_server）接一个
+     * 受签名权限保护的广播，收到就把壁纸组件交还 MIUI。
+     */
+    private static void ensureReleaseReceiver(Context context) {
+        if (releaseReceiverReady || context == null) return;
+        synchronized (AodWallpaperModeHook.class) {
+            if (releaseReceiverReady) return;
+            try {
+                android.content.BroadcastReceiver receiver =
+                        new android.content.BroadcastReceiver() {
+                            @Override public void onReceive(Context receiverContext, android.content.Intent intent) {
+                                AliveLog.i(TAG, "release wallpaper requested by broadcast");
+                                AodWallpaperMode.releaseWhenSystemWallpaperApplied(
+                                        receiverContext, "setWallpaper");
+                            }
+                        };
+                android.content.IntentFilter filter =
+                        new android.content.IntentFilter(AodWallpaperMode.ACTION_RELEASE_WALLPAPER);
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    context.registerReceiver(receiver, filter,
+                            AodWallpaperMode.PERMISSION_RELEASE_WALLPAPER, null,
+                            Context.RECEIVER_EXPORTED);
+                } else {
+                    context.registerReceiver(receiver, filter,
+                            AodWallpaperMode.PERMISSION_RELEASE_WALLPAPER, null);
+                }
+                releaseReceiverReady = true;
+                AliveLog.i(TAG, "release wallpaper receiver registered");
+            } catch (Throwable error) {
+                AliveLog.w(TAG, "release wallpaper receiver failed", error);
+            }
+        }
     }
 
     private static int hookBind(Class<?> service) {
@@ -74,6 +125,7 @@ final class AodWallpaperModeHook {
     private static void postCheck(Object service, final String source) {
         final Context context = serviceContext(service);
         if (context == null) return;
+        ensureReleaseReceiver(context);
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {

@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.aliveclean" android:versionCode="2" android:versionName="0.2.0">
   <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="35"/>
   <uses-permission android:name="android.permission.SET_WALLPAPER"/>
+  <permission android:name="org.aliveclean.permission.RELEASE_WALLPAPER" android:protectionLevel="signature"/>
+  <uses-permission android:name="org.aliveclean.permission.RELEASE_WALLPAPER"/>
   <uses-permission android:name="android.permission.AMBIENT_WALLPAPER"/>
   <uses-feature android:glEsVersion="0x00030000" android:required="true"/>
   <uses-feature android:name="android.software.live_wallpaper" android:required="true"/>

@@ -21,7 +21,27 @@ import java.lang.reflect.Method;
  */
 final class AodWallpaperMode {
     static final String KEY_MODE = "full_screen_aod_on";
-    static final String KEY_RESTORE = "alive_aod_restore_value";
+    /**
+     * "把壁纸组件交还 MIUI"的跨进程信号。
+     *
+     * <p>交还组件要 {@code SET_WALLPAPER_COMPONENT} 权限，只有 system_server 拿着，
+     * 所以在 WallpaperManagerService 里注册接收者，应用进程发一个受签名权限保护的广播。</p>
+     */
+    static final String ACTION_RELEASE_WALLPAPER = "org.aliveclean.action.RELEASE_WALLPAPER";
+    static final String PERMISSION_RELEASE_WALLPAPER =
+            "org.aliveclean.permission.RELEASE_WALLPAPER";
+
+    /** 最近一次"把组件交还给系统"的时间；这之后的一小段时间内不许再把壁纸抢回来。 */
+    private static volatile long releaseAtMs = 0L;
+
+    static long lastReleaseAtMs() {
+        return releaseAtMs;
+    }
+
+    /** 用户刚把壁纸交还给系统，恢复探测必须让路（否则会把 ImageWallpaper 又换回我们的）。 */
+    static boolean releaseInFlight() {
+        return android.os.SystemClock.elapsedRealtime() - releaseAtMs < 10_000L;
+    }    static final String KEY_RESTORE = "alive_aod_restore_value";
     static final String KEY_HAS_RESTORE = "alive_aod_restore_set";
     static final String KEY_ACTIVE = "alive_aod_active";
     private static final String TAG = "AliveHSHooks";
@@ -377,6 +397,9 @@ final class AodWallpaperMode {
         try {
             WallpaperManager manager = WallpaperManager.getInstance(context);
             if (!isCleanWallpaper(manager.getWallpaperInfo())) return;
+            // 交还动作要先记账：紧跟着的 bindWallpaperDescriptionLocked 会把
+            // "壁纸变成系统静态图"当成异常，开机 5 分钟内还会把我们的壁纸恢复回去。
+            releaseAtMs = android.os.SystemClock.elapsedRealtime();
             // MIUI 的静态壁纸组件；拿不到就交给系统默认（null）。
             ComponentName target = null;
             for (String candidate : new String[]{
@@ -407,6 +430,12 @@ final class AodWallpaperMode {
 
     static void restoreHomeWhenForeign(final Context context, final String source) {
         if (context == null) return;
+        // 用户刚在编辑页点了「应用」（把壁纸交还系统），这时候"壁纸不是我们的"是他要的结果，
+        // 不能按"重启后壁纸回落"那条逻辑抢回来。
+        if (releaseInFlight()) {
+            AliveLog.i(HOME_TAG, "home wallpaper restore skipped (release in flight) source=" + source);
+            return;
+        }
         synchronized (HOME_RESTORE_LOCK) {
             if (homeRestoreInFlight) {
                 AliveLog.i(HOME_TAG, "home wallpaper restore coalesced source=" + source);

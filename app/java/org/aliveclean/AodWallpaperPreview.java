@@ -58,7 +58,6 @@ public final class AodWallpaperPreview {
 
         installUf(loader);
         installShots(loader);
-        installPersonalizeTasks(loader);
 
         Class<?> helper = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.DeviceScreenshotHelper", loader);
@@ -106,59 +105,6 @@ public final class AodWallpaperPreview {
             AliveLog.i(TAG, "tm wallpaper preview hook count=" + count);
         } catch (Throwable error) {
             AliveLog.w(TAG, "tm wallpaper preview hook failed", error);
-        }
-    }
-
-    /**
-     * PersonalizeActivity loads its lock/desktop cards through these two helpers,
-     * not through TemplateApiImpl.  A live system wallpaper has no static bitmap
-     * there, so both return null and the host paints its grey placeholder.  Fall
-     * back to the current MIUI AOD template only while our wallpaper is active.
-     */
-    private static void installPersonalizeTasks(ClassLoader loader) {
-        hookPersonalizeTask(loader,
-                "com.android.thememanager.settings.personalize.task.LockScreenWpTool",
-                0, "lock");
-        hookPersonalizeTask(loader,
-                "com.android.thememanager.settings.personalize.task.DeskWpTool",
-                1, "desk");
-    }
-
-    private static void hookPersonalizeTask(ClassLoader loader, String className,
-                                             final int argCount, final String label) {
-        Class<?> task = Xp.findClassIfExists(className, loader);
-        if (task == null) {
-            AliveLog.w(TAG, "tm " + label + " preview: " + className + " missing");
-            return;
-        }
-        try {
-            Xp.MethodHook hook = new Xp.MethodHook() {
-                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    if (param.args.length != argCount) return;
-                    Bitmap original = param.getResult() instanceof Bitmap
-                            ? (Bitmap) param.getResult() : null;
-                    Context context = Xp.currentApplication();
-                    boolean alive = false;
-                    try {
-                        alive = context != null && AodWallpaperMode.alive(context);
-                    } catch (Throwable ignored) {
-                    }
-                    if (!alive) return;
-                    Bitmap preview = forHook(context);
-                    if (preview == null) return;
-                    Bitmap replacement = original == null ? preview
-                            : (original.getWidth() == preview.getWidth()
-                            && original.getHeight() == preview.getHeight() ? preview
-                            : scaleOrRecycle(preview, original.getWidth(), original.getHeight()));
-                    param.setResult(replacement);
-                    AliveLog.i(TAG, "tm " + label + " preview replaced "
-                            + replacement.getWidth() + "x" + replacement.getHeight());
-                }
-            };
-            int count = Xp.hookAllMethods(task, "toq", hook).size();
-            AliveLog.i(TAG, "tm " + label + " preview hook count=" + count);
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "tm " + label + " preview hook failed", error);
         }
     }
 
@@ -311,23 +257,7 @@ public final class AodWallpaperPreview {
         return bitmap;
     }
 
-    /**
-     * MIUI may rebuild template_current with its grey live-wallpaper placeholder after boot.
-     * That file is not evidence of the current scene, so use the applied photo first.
-     */
-    private static Bitmap fromAppliedPhoto(Context context) {
-        if (context == null) return null;
-        try {
-            return PhotoDecode.decode(context.getContentResolver(), AodWallpaperProvider.PHOTO, 2048);
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "aod wallpaper preview applied photo failed", error);
-            return null;
-        }
-    }
-
     private static synchronized Bitmap preview(Context context) {
-        Bitmap applied = fromAppliedPhoto(context);
-        if (applied != null) return applied;
         Bitmap provider = fromProvider(context);
         if (provider != null) return provider;
         File file = new File(TEMPLATE_DIR, "wallpaper_home");

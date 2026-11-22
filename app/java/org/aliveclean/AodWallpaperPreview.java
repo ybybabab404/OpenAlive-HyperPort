@@ -60,8 +60,13 @@ public final class AodWallpaperPreview {
         installUf(loader);
         installShots(loader);
         installScreenshotsFallback(loader);
-        // 这里进程刚加载，拿不到 Context（实测 hasContext=false），开关读不出来。
-        // 真正的安装推迟到第一次取图调用时（见 installShots 的钩子里）。
+        installWallpaperHelper(loader);
+        // 进程刚加载时就装（诊断要抓卡片构建，装晚了抓不到），开关走 SystemProperties。
+        if (cardDiagOn()) {
+            DIAG_INSTALLED = true;
+            installCardDiag(loader);
+            installImageViewDiag(loader);
+        }
         installPersonalizeTasks(loader);
 
         Class<?> helper = Xp.findClassIfExists(
@@ -213,30 +218,19 @@ public final class AodWallpaperPreview {
     private static volatile Boolean cardDiag;
     private static volatile boolean DIAG_INSTALLED;
 
-    /** 只用于排查：`settings put global alive_card_diag 1` 打开。 */
+    /** 只用于排查：`su 0 setprop persist.alive.card_diag 1` 打开（进程启动即生效）。 */
     private static boolean cardDiagOn() {
         Boolean cached = cardDiag;
         if (cached != null) return cached;
         boolean on = false;
-        Context context = null;
         try {
-            context = Xp.currentApplication();
-            if (context == null) {
-                // 模块在这个进程刚加载时 currentApplication() 还是空，直接问 ActivityThread。
-                try {
-                    context = (Context) Class.forName("android.app.ActivityThread")
-                            .getMethod("currentApplication").invoke(null);
-                } catch (Throwable ignored) {
-                }
-            }
-            if (context != null) {
-                on = android.provider.Settings.Global.getInt(
-                        context.getContentResolver(), "alive_card_diag", 0) == 1;
-            }
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "card diag switch failed", error);
+            // SystemProperties 是 @hide，SDK 里没有，只能反射。
+            Class<?> properties = Class.forName("android.os.SystemProperties");
+            Object value = properties.getMethod("get", String.class, String.class)
+                    .invoke(null, "persist.alive.card_diag", "0");
+            on = "1".equals(value);
+        } catch (Throwable ignored) {
         }
-        AliveLog.i(TAG, "card diag switch on=" + on + " hasContext=" + (context != null));
         cardDiag = on;
         return on;
     }
@@ -495,6 +489,78 @@ public final class AodWallpaperPreview {
                     }
                 }
             }
+            // 卡片的壁纸层是 CombinedWallpaperView 用 WallpaperTypeInfo.getBitmap() 建的；
+            // 图为空时 wallpaperLayer 就是 null（宿主日志 startWallpaperLayerShowAnimation:
+            // wallpaperLayer == null）。这里盯住这个数据对象的构造，看谁在造它、位图有没有。
+            Class<?> typeInfo = Xp.findClassIfExists(
+                    "com.miui.keyguard.editor.data.bean.WallpaperTypeInfo", loader);
+            if (typeInfo != null) {
+                Xp.hookAllConstructors(typeInfo, new Xp.MethodHook() {
+                    @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                        Bitmap bitmap = null;
+                        try {
+                            Object value = Xp.getObjectField(param.thisObject, "bitmap");
+                            if (value instanceof Bitmap) bitmap = (Bitmap) value;
+                        } catch (Throwable ignored) {
+                        }
+                        int n = DIAG_CALLS.incrementAndGet();
+                        if (n > 20) return;
+                        AliveLog.i(TAG, "wallpaperTypeInfo bitmap="
+                                + (bitmap == null ? "null" : bitmap.getWidth() + "x"
+                                + bitmap.getHeight()
+                                + (looksLikePlaceholder(bitmap) ? " placeholder" : " real"))
+                                + " by " + caller());
+                    }
+                });
+                AliveLog.i(TAG, "wallpaperTypeInfo diag installed");
+            } else {
+                AliveLog.w(TAG, "wallpaperTypeInfo class missing");
+            }
+            // 个性化页两张卡的数据来自 PersonalizeViewModel（两个 Bitmap 字段 + 一个
+            // SuperWallpaperSummaryData 协程）。这里把它的方法全打一遍，看谁来喂图、喂了什么。
+            Class<?> viewModel = Xp.findClassIfExists(
+                    "com.android.thememanager.settings.personalize.presenter.PersonalizeViewModel", loader);
+            if (viewModel != null) {
+                for (java.lang.reflect.Method method : viewModel.getDeclaredMethods()) {
+                    Class<?>[] types = method.getParameterTypes();
+                    Object[] args = new Object[types.length + 1];
+                    System.arraycopy(types, 0, args, 0, types.length);
+                    args[types.length] = new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            int n = DIAG_CALLS.incrementAndGet();
+                            if (n > 30) return;
+                            StringBuilder text = new StringBuilder();
+                            for (Object arg : param.args) {
+                                if (arg instanceof Bitmap) {
+                                    Bitmap bitmap = (Bitmap) arg;
+                                    text.append("argBitmap=").append(bitmap.getWidth()).append('x')
+                                            .append(bitmap.getHeight())
+                                            .append(looksLikePlaceholder(bitmap) ? "(placeholder)" : "(real)")
+                                            .append(' ');
+                                }
+                            }
+                            Object result = param.getResult();
+                            if (result instanceof Bitmap) {
+                                Bitmap bitmap = (Bitmap) result;
+                                text.append("resultBitmap=").append(bitmap.getWidth()).append('x')
+                                        .append(bitmap.getHeight())
+                                        .append(looksLikePlaceholder(bitmap) ? "(placeholder)" : "(real)");
+                            } else if (result != null && result.getClass().isArray()) {
+                                text.append("array=").append(java.lang.reflect.Array.getLength(result));
+                            }
+                            if (text.length() == 0) return;
+                            AliveLog.i(TAG, "viewModel " + param.method.getName() + " " + text);
+                        }
+                    };
+                    try {
+                        Xp.findAndHookMethod(viewModel, method.getName(), args);
+                    } catch (Throwable ignored) {
+                    }
+                }
+                AliveLog.i(TAG, "viewModel diag installed");
+            } else {
+                AliveLog.w(TAG, "viewModel class missing");
+            }
             AliveLog.i(TAG, "imageview diag installed");
         } catch (Throwable error) {
             AliveLog.w(TAG, "imageview diag failed", error);
@@ -513,6 +579,44 @@ public final class AodWallpaperPreview {
             if (++shown >= 6) break;
         }
         return text.toString();
+    }
+
+    /**
+     * 个性化卡片的壁纸图由 {@code WallpaperHelper.y(mode, isLock, context)} 提供
+     * （WallpaperCardView.getHomePreviewBitmap → 这个 → 拿不到就用 n() 的默认占位图）。
+     *
+     * <p>当前壁纸是第三方 live 壁纸时 MIUI 取不到家庭预览图，`y()` 返回 null，
+     * 卡片于是画默认占位（灰底 + 图标网格）。这里只在拿不到/拿到占位时，补上
+     * **用户自己那张桌面壁纸**（缓存或系统静态壁纸），拿到真图时一律不动。</p>
+     */
+    private static void installWallpaperHelper(ClassLoader loader) {
+        Class<?> helper = Xp.findClassIfExists(
+                "com.android.thememanager.basemodule.utils.WallpaperHelper", loader);
+        if (helper == null) {
+            AliveLog.w(TAG, "wallpaper helper: missing");
+            return;
+        }
+        Xp.MethodHook hook = new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                Bitmap result = param.getResult() instanceof Bitmap ? (Bitmap) param.getResult() : null;
+                if (result != null && !looksLikePlaceholder(result)) return;
+                Context context = Xp.currentApplication();
+                if (context == null) return;
+                Bitmap remembered = rememberedHomeWallpaper(context);
+                if (remembered == null) return;
+                param.setResult(result == null ? remembered
+                        : scaleOrRecycle(remembered.copy(Bitmap.Config.ARGB_8888, false),
+                                result.getWidth(), result.getHeight()));
+                AliveLog.i(TAG, "wallpaper helper " + param.method.getName()
+                        + " filled with remembered wallpaper");
+            }
+        };
+        try {
+            int count = Xp.hookAllMethods(helper, "y", hook).size();
+            AliveLog.i(TAG, "wallpaper helper y hook count=" + count);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "wallpaper helper hook failed", error);
+        }
     }
 
     private static void installUf(ClassLoader loader) {

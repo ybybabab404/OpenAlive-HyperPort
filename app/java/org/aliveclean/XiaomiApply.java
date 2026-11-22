@@ -19,7 +19,13 @@ import java.util.concurrent.TimeUnit;
  * docs/kb/troubleshooting/02-已定位Bug档案.md §12.13）。</p>
  */
 public final class XiaomiApply {
-    static void apply(Context c,XiaomiPacks.Pack p)throws Exception {
+    /** 应用进行中：UI 进程空闲自退必须让路。 */
+static volatile boolean applying;
+static void apply(Context c,XiaomiPacks.Pack p)throws Exception {
+    applying=true;
+    try{ applyInternal(c,p); } finally { applying=false; }
+}
+private static void applyInternal(Context c,XiaomiPacks.Pack p)throws Exception {
         if(android.os.Process.myUid()/100000!=0)throw new IOException("目前仅支持主用户");
         AliveLog.i(AliveLog.APPLY,"xiaomi apply start "+p.id);
         if (aodSwitchFromShell()) AodWallpaperMode.enter(c); else AliveLog.i(AliveLog.APPLY, "aod mode enter skipped: AOD is disabled");

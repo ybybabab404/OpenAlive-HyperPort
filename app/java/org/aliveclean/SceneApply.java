@@ -14,7 +14,13 @@ import java.lang.reflect.InvocationTargetException;
  * 锁屏槽仍是 MIUI 的静态图——只校验系统槽会让锁屏上出现两层（2026-11-16 修）。</p>
  */
 public final class SceneApply {
+    /** 应用进行中：UI 进程空闲自退必须让路，否则中途退出会把应用打断。 */
+    static volatile boolean applying;
     static void apply(Context context) throws Exception {
+        applying = true;
+        try { applyInternal(context); } finally { applying = false; }
+    }
+    private static void applyInternal(Context context) throws Exception {
         if (android.os.Process.myUid() / 100000 != 0) throw new java.io.IOException("目前仅支持主用户");
         AliveLog.i(AliveLog.APPLY, "scene apply start");
         AodWallpaperMode.enter(context);

@@ -24,8 +24,6 @@ public final class AodWallpaperPreview {
     private static final AtomicInteger SHOT_CALLS = new AtomicInteger();
     private static final AtomicInteger DIAG_CALLS = new AtomicInteger();
     private static final AtomicInteger UF_CALLS = new AtomicInteger();
-    private static final AtomicInteger TYPE_INFO_CALLS = new AtomicInteger();
-    private static final AtomicInteger PROVIDER_CALLS = new AtomicInteger();
 
     private AodWallpaperPreview() {}
 
@@ -33,10 +31,6 @@ public final class AodWallpaperPreview {
         // 编辑页（息屏与锁屏编辑）跑在 com.miui.aod:keyguardeditor，卡片壁纸同样是
         // GL 纹理，喂进去的也是占位图 —— 所以这套兜底必须在这个进程里也装一份。
         installImageGlWallpaperFallback(loader);
-        installWallpaperTypeInfoFallback(loader);
-        installWallpaperLayerFallback(loader);
-        installEditorWallpaperFallback(loader);
-        installEditorCurrentWallpaperFallback();
         installEditorProviderFallback(loader);
         installEditorApplyRelease(loader);
         Class<?> api = Xp.findClassIfExists(
@@ -806,210 +800,6 @@ public final class AodWallpaperPreview {
         }
         AliveLog.i(TAG, "imageGL fallback installed");
     }
-
-    /**
-     * 编辑页（息屏与锁屏编辑）的卡片壁纸来自 {@code WallpaperTypeInfo.getBitmap()}：
-     * CombinedWallpaperView 拿它去建 GLTextureView，图是空的就只画出空态（灰占位）。
-     *
-     * <p>当前壁纸是第三方动态壁纸时宿主取不到那张图，位图就是 null/占位，
-     * 这里在数据对象构造完的那一刻补上对应槽位的真实壁纸。</p>
-     */
-    private static void installWallpaperTypeInfoFallback(ClassLoader loader) {
-        Class<?> typeInfo = Xp.findClassIfExists(
-                "com.miui.keyguard.editor.data.bean.WallpaperTypeInfo", loader);
-        if (typeInfo == null) {
-            AliveLog.w(TAG, "wallpaperTypeInfo fallback: missing");
-            return;
-        }
-        try {
-            Xp.hookAllConstructors(typeInfo, new Xp.MethodHook() {
-                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    Object info = param.thisObject;
-                    Bitmap current = null;
-                    try {
-                        Object value = Xp.getObjectField(info, "bitmap");
-                        if (value instanceof Bitmap) current = (Bitmap) value;
-                    } catch (Throwable ignored) {
-                    }
-                    if (current != null && !looksLikePlaceholder(current)) {
-                        if (TYPE_INFO_CALLS.incrementAndGet() <= 8) {
-                            AliveLog.i(TAG, "wallpaperTypeInfo real bitmap "
-                                    + current.getWidth() + "x" + current.getHeight()
-                                    + " slot=" + slotOfTypeInfo(info));
-                        }
-                        return;
-                    }
-                    int slot = slotOfTypeInfo(info);
-                    Bitmap fill = wallpaperForSlot(slot);
-                    if (fill == null || looksLikePlaceholder(fill)) {
-                        if (TYPE_INFO_CALLS.incrementAndGet() <= 8) {
-                            AliveLog.i(TAG, "wallpaperTypeInfo no fill slot=" + slot
-                                    + " current=" + (current == null ? "null"
-                                    : current.getWidth() + "x" + current.getHeight()));
-                        }
-                        return;
-                    }
-                    try {
-                        java.lang.reflect.Field field = typeInfo.getDeclaredField("bitmap");
-                        field.setAccessible(true);
-                        field.set(info, current == null ? fill
-                                : Bitmap.createScaledBitmap(fill, current.getWidth(),
-                                current.getHeight(), true));
-                        AliveLog.i(TAG, "wallpaperTypeInfo filled slot=" + slot);
-                    } catch (Throwable error) {
-                        AliveLog.w(TAG, "wallpaperTypeInfo fill failed", error);
-                    }
-                }
-            });
-            AliveLog.i(TAG, "wallpaperTypeInfo fallback installed");
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "wallpaperTypeInfo fallback hook failed", error);
-        }
-    }
-
-    /** infoType 里带 HOME/LOCK 语义，用它判槽位；判不出就退回栈判定。 */
-    private static int slotOfTypeInfo(Object info) {
-        try {
-            Object type = Xp.getObjectField(info, "infoType");
-            if (type != null) {
-                String name = String.valueOf(type).toUpperCase(java.util.Locale.ROOT);
-                if (name.contains("LOCK")) return 2;
-                if (name.contains("HOME")) return 1;
-            }
-        } catch (Throwable ignored) {
-        }
-        return slotFromStack();
-    }
-
-    /**
-     * 编辑页的壁纸层由 {@code IWallpaperLayer.Companion.q/f7l8(...Bitmap...)} 建出来
-     * （CombinedWallpaperView 调它们拿 GLTextureView）。位图为空/占位时图层就是空的，
-     * 卡片只剩空态底图（灰占位）。这里在入参上补对应槽位的真实壁纸。
-     */
-    private static void installWallpaperLayerFallback(ClassLoader loader) {
-        String[] classes = {
-                "com.miui.keyguard.editor.edit.wallpaper.IWallpaperLayer$Companion",
-                "com.miui.keyguard.editor.edit.wallpaper.IWallpaperLayer",
-        };
-        int hooks = 0;
-        for (String name : classes) {
-            Class<?> type = Xp.findClassIfExists(name, loader);
-            if (type == null) continue;
-            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
-                // 接口上的方法体是 abstract，hook 它只会抛 IllegalArgumentException 刷屏，
-                // 真正的实现在 GLTextureView 里；这里只挂 Companion 上能拦到的方法。
-                if (java.lang.reflect.Modifier.isAbstract(method.getModifiers())) continue;
-                Class<?>[] types = method.getParameterTypes();
-                boolean takesBitmap = false;
-                for (Class<?> each : types) if (each == Bitmap.class) takesBitmap = true;
-                if (!takesBitmap) continue;
-                Object[] args = new Object[types.length + 1];
-                System.arraycopy(types, 0, args, 0, types.length);
-                args[types.length] = new Xp.MethodHook() {
-                    @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
-                        int slot = slotFromStack();
-                        for (int i = 0; i < param.args.length; i++) {
-                            if (!(param.args[i] instanceof Bitmap)) continue;
-                            Bitmap incoming = (Bitmap) param.args[i];
-                            if (!looksLikePlaceholder(incoming)) continue;
-                            Bitmap fill = wallpaperForSlot(slot);
-                            if (fill == null || looksLikePlaceholder(fill)) continue;
-                            param.args[i] = Bitmap.createScaledBitmap(fill,
-                                    incoming.getWidth(), incoming.getHeight(), true);
-                            AliveLog.i(TAG, "wallpaperLayer " + param.method.getName()
-                                    + " filled slot=" + slot);
-                        }
-                    }
-                };
-                try {
-                    Xp.findAndHookMethod(type, method.getName(), args);
-                    hooks++;
-                } catch (Throwable error) {
-                    AliveLog.w(TAG, "wallpaperLayer hook failed " + method.getName(), error);
-                }
-            }
-        }
-        AliveLog.i(TAG, "wallpaperLayer fallback hooks=" + hooks);
-    }
-
-    /**
-     * 编辑页（息屏与锁屏编辑）的卡片壁纸最终来自
-     * {@code MiuiWallpaperManager.v(which)} —— 它向 miwallpaper 服务要该槽位的预览图。
-     *
-     * <p>当前壁纸换成我们的第三方动态壁纸后，MIUI 生成不出静态预览，于是把一张
-     * "灰底 + 图片图标"的占位图写进
-     * {@code /data/system/theme_magic/users/0/wallpaper/image/lock_wallpaper.jpg}，
-     * 这个接口拿到的就是它，编辑页卡片于是整块变灰（实测该文件内容就是这张占位图）。
-     * 所以只在这一层判内容：拿到真图一律不动，拿到占位/空才补上用户自己那张壁纸。</p>
-     */
-    private static void installEditorWallpaperFallback(ClassLoader loader) {
-        Class<?> manager = Xp.findClassIfExists(
-                "com.miui.miwallpaper.MiuiWallpaperManager", loader);
-        if (manager == null) {
-            AliveLog.w(TAG, "editor wallpaper: MiuiWallpaperManager missing");
-            return;
-        }
-        int hooks = 0;
-        for (java.lang.reflect.Method method : manager.getDeclaredMethods()) {
-            if (method.getReturnType() != Bitmap.class) continue;
-            Class<?>[] types = method.getParameterTypes();
-            boolean hasWhich = false;
-            boolean supported = true;
-            for (Class<?> type : types) {
-                if (type == int.class) hasWhich = true;
-                // 取预览图这条路上只有 which / 宽高 / Context；收流或别的对象的不是它。
-                else if (type != Context.class) supported = false;
-            }
-            if (!hasWhich || !supported) continue;
-            Object[] args = new Object[types.length + 1];
-            System.arraycopy(types, 0, args, 0, types.length);
-            args[types.length] = new Xp.MethodHook() {
-                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
-                    Bitmap result = param.getResult() instanceof Bitmap
-                            ? (Bitmap) param.getResult() : null;
-                    if (result != null && !looksLikePlaceholder(result)) return;
-                    int slot = slotOfWhichArgs(param.args);
-                    Bitmap fill = editorRealWallpaper(slot);
-                    if (fill == null) return;
-                    param.setResult(result == null ? fill
-                            : Bitmap.createScaledBitmap(fill, result.getWidth(),
-                            result.getHeight(), true));
-                    AliveLog.i(TAG, "editor wallpaper " + param.method.getName()
-                            + " placeholder replaced slot=" + slot);
-                }
-            };
-            try {
-                Xp.findAndHookMethod(manager, method.getName(), args);
-                hooks++;
-            } catch (Throwable error) {
-                AliveLog.w(TAG, "editor wallpaper hook failed " + method.getName(), error);
-            }
-        }
-        AliveLog.i(TAG, "editor wallpaper fallback hooks=" + hooks);
-    }
-
-    /** MIUI 的 which：1/4/5 桌面（含小桌面、折叠屏桌面），2/6/10 锁屏。 */
-    private static int slotOfWhichArgs(Object[] args) {
-        for (Object arg : args) {
-            if (!(arg instanceof Integer)) continue;
-            int value = (Integer) arg;
-            if (value == 2 || value == 6 || value == 10) return 2;
-            if (value == 1 || value == 4 || value == 5) return 1;
-        }
-        return slotFromStack();
-    }
-
-    /**
-     * 编辑页用的真壁纸。锁屏那张要特别注意：MIUI 写进
-     * {@code image/lock_wallpaper.jpg} 的可能就是占位图，真正那张锁屏壁纸被留在
-     * {@code currentWallpaper/wallpaper_lock_origin}，所以它才是锁屏槽的最后兜底。
-     */
-    private static Bitmap editorRealWallpaper(int slot) {
-        Bitmap fromSlot = wallpaperForSlot(slot);
-        if (fromSlot != null && !looksLikePlaceholder(fromSlot)) return fromSlot;
-        return slot == 2 ? lockOriginWallpaper() : null;
-    }
-
     private static final String LOCK_ORIGIN_PATH =
             "/data/system/theme_magic/users/0/wallpaper/currentWallpaper/wallpaper_lock_origin";
     private static volatile Bitmap lockOrigin;
@@ -1032,56 +822,6 @@ public final class AodWallpaperPreview {
             return null;
         }
     }
-
-    /**
-     * 编辑页卡片读的是当前模板自己的壁纸文件
-     * {@code /data/user_de/0/com.miui.aod/files/templates/current/wallpaper}
-     * （桌面槽是 {@code wallpaper_home}）。
-     *
-     * <p>动态壁纸接管后 MIUI 把这两个文件的内容写成了"灰底 + 图片图标"的占位图
-     * （实测 335556 字节，与 {@code image/lock_wallpaper.jpg} 一模一样），
-     * 编辑页卡片于是整块变灰。这条路径不经过 MiuiWallpaperManager，也不经过
-     * WallpaperTypeInfo，只在宿主按路径解码时出现，所以在这里换掉。</p>
-     */
-    private static void installEditorCurrentWallpaperFallback() {
-        Xp.MethodHook hook = new Xp.MethodHook() {
-            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
-                if (param.args.length == 0 || !(param.args[0] instanceof String)) return;
-                String path = (String) param.args[0];
-                // 先把绝大多数解码（图标、字体、截图）用一次子串判断挡掉，避免影响性能。
-                if (!path.contains("/templates/current/") && !path.contains("/template_current/")) return;
-                int slot = slotOfTemplateWallpaperPath(path);
-                if (slot == 0) return;
-                Bitmap result = param.getResult() instanceof Bitmap
-                        ? (Bitmap) param.getResult() : null;
-                if (result != null && !looksLikePlaceholder(result)) return;
-                Bitmap fill = editorRealWallpaper(slot);
-                if (fill == null) return;
-                param.setResult(result == null ? fill
-                        : Bitmap.createScaledBitmap(fill, result.getWidth(),
-                        result.getHeight(), true));
-                AliveLog.i(TAG, "editor current wallpaper " + path
-                        + " placeholder replaced slot=" + slot);
-            }
-        };
-        int hooks = 0;
-        try {
-            Xp.findAndHookMethod(android.graphics.BitmapFactory.class, "decodeFile",
-                    String.class, hook);
-            hooks++;
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "editor current hook failed decodeFile", error);
-        }
-        try {
-            Xp.findAndHookMethod(android.graphics.BitmapFactory.class, "decodeFile",
-                    String.class, android.graphics.BitmapFactory.Options.class, hook);
-            hooks++;
-        } catch (Throwable error) {
-            AliveLog.w(TAG, "editor current hook failed decodeFile(options)", error);
-        }
-        AliveLog.i(TAG, "editor current wallpaper hooks=" + hooks);
-    }
-
     /** 当前模板目录里的两个壁纸文件：wallpaper 是锁屏，wallpaper_home 是桌面。
      *  provider 的 uri 是 {@code /template_current/...}，磁盘路径是
      *  {@code .../files/templates/current/...}，两种后缀都要认。 */
@@ -1116,11 +856,6 @@ public final class AodWallpaperPreview {
                     new Xp.MethodHook() {
                         @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                             if (param.args.length < 2) return;
-                            if (PROVIDER_CALLS.incrementAndGet() <= 30) {
-                                AliveLog.i(TAG, "editor provider call " + param.args[0]
-                                        + " mode=" + param.args[1] + " result="
-                                        + (param.getResult() == null ? "null" : "fd"));
-                            }
                             if (!"r".equals(param.args[1])) return;
                             if (!(param.args[0] instanceof android.net.Uri)) return;
                             String path = ((android.net.Uri) param.args[0]).getPath();
@@ -1132,10 +867,8 @@ public final class AodWallpaperPreview {
                             if (opened != null && !templateWallpaperIsPlaceholder(slot)) return;
                             File real = realWallpaperFile(slot);
                             if (real == null) {
-                                if (PROVIDER_CALLS.get() <= 30) {
-                                    AliveLog.i(TAG, "editor provider slot=" + slot
-                                            + " real wallpaper unavailable");
-                                }
+                                AliveLog.i(TAG, "editor provider slot=" + slot
+                                        + " no real wallpaper to fall back to");
                                 return;
                             }
                             try {

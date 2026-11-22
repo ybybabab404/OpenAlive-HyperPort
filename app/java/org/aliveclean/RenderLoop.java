@@ -41,6 +41,16 @@ final class RenderLoop {
     private long probeGpuExecMax=-1L;
     /** 诊断开关：true=连 scene 一起复用；false=只复用 context，每实例新建 scene。 */
     private static final boolean SHARE_SCENE=true;
+    /**
+     * 本实例是否参与进程级共享 GL 复用。
+     *
+     * <p>共享池里同一个 EGL context 同一时刻只能在一个线程 current，多实例并存时会互相抢。
+     * 壁纸服务 + 一个预览这种"一大一小"的组合靠 {@link SharedGl} 的尺寸/模式键天然错开，
+     * 但首页三张同尺寸预览卡的键完全一样，会全部租到同一个 context 上互相踩 ——
+     * 表现就是预览跑一会儿就黑掉（swap 报 12288/12290，渲染线程直接退出）。
+     * 所以这类"同尺寸多实例并存"的预览一律独占。</p>
+     */
+    private final boolean shareGl;
     /** 建当前上下文用的 config，共享登记与重挂窗口都要它。 */
     private EGLConfig lastConfig;
     private WallpaperRenderer cosmic;
@@ -98,7 +108,13 @@ final class RenderLoop {
     private AodRegion aodRegion;
     private int displayId;
     private volatile boolean closed;
-    private final Runnable renderTask=()->render(frameTime);
+    /**
+     * 渲染一帧。异常必须在这里兜住：这是跑在 {@code AliveGL} HandlerThread 上的任务，
+     * 一旦异常逃到 Looper（共享 context 被别的实例抢走时 swap 会报 12288/12290），
+     * 整个线程会直接退出，之后所有 post 全部石沉大海 —— 表现就是预览"过一会就黑掉"，
+     * 而且再也不会自己恢复。
+     */
+    private final Runnable renderTask=()->{try{render(frameTime);}catch(Throwable error){AliveLog.e("AliveClean","render failed",error);try{release();}catch(Throwable ignored){}}};
 
     private final Choreographer.FrameCallback frame=this::onVsync;
     private final Runnable reloadTask=()->reloadScene();
@@ -108,7 +124,8 @@ final class RenderLoop {
     private boolean cropQueued,cropFinal;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener changes=(p,key)->reload();
     RenderLoop(Context context){this(context,SceneOptions.APPLIED);}
-    RenderLoop(Context context,String name){Context app=context.getApplicationContext();this.context=app!=null?app:context;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
+    RenderLoop(Context context,String name){this(context,name,true);}
+    RenderLoop(Context context,String name,boolean shareGl){Context app=context.getApplicationContext();this.context=app!=null?app:context;this.shareGl=shareGl;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
     void onFirstFrame(Runnable listener){firstFrame=listener;}
     void attach(Surface surface,int w,int h){queueAttach(surface,w,h,false);}
 
@@ -399,7 +416,7 @@ final class RenderLoop {
         }
         if(options.lock==3||options.home==9){loadAuxiliary(1,"shader/photo/lock/groundGlass/gray.png",false);loadAuxiliary(2,"shader/photo/lock/groundGlass/mask.png",true);}
         if(options.aod==101)loadAuxiliary(3,"shader/photo/aod/fullAod/gray.png",false);
-        if(lastConfig!=null){
+        if(shareGl&&lastConfig!=null){
             SharedGl.adopt(display,egl,lastConfig);
             SharedGl.publish(instanceToken,scene,photo,decorator,auxiliary,aspect,width,height,options.aod,lock,home,options.photo,options.cosmic,vivoKey(options));
             sharedLease=true;
@@ -428,7 +445,7 @@ final class RenderLoop {
     private void init(Surface surface,int w,int h)throws IOException{
         if(!NativeScene.available){if(!nativeMissingLogged){nativeMissingLogged=true;AliveLog.w("AliveClean","native library unavailable; render loop idle (restart needed after update)");}return;}
         SceneOptions options=new SceneOptions(preferences);
-        SharedGl.Lease lease=SharedGl.acquire(surface,w,h,options.aod,options.lock,options.home,options.photo,options.cosmic,vivoKey(options));
+        SharedGl.Lease lease=shareGl?SharedGl.acquire(surface,w,h,options.aod,options.lock,options.home,options.photo,options.cosmic,vivoKey(options)):null;
         if(lease!=null){
             attachedSurface=surface;width=w;height=h;attachedWidth=w;attachedHeight=h;
             // 关键：swap() 用的是实例字段 display/window，复用路径必须把它们一并赋回，

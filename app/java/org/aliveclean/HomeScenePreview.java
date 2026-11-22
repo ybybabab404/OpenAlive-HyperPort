@@ -42,7 +42,9 @@ final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceT
     private void releaseSurface(){if(renderer!=null){renderer.close();renderer=null;}if(surface!=null){surface.release();surface=null;}}
     private void attach(SurfaceTexture value,int width,int height){
         if(!active||card!=null||renderer!=null)return;
-        renderer=new RenderLoop(getContext());renderer.mode(mode,false);surface=new Surface(value);renderer.attach(surface,width,height);renderer.visible(true);
+        // 三张卡尺寸一样、配置也一样，参与共享 GL 会全部租到同一个 context 上互相抢，
+        // 结果就是预览跑一会儿黑掉；这里每个预览独占自己的上下文。
+        renderer=new RenderLoop(getContext(),SceneOptions.APPLIED,false);renderer.mode(mode,false);surface=new Surface(value);renderer.attach(surface,width,height);renderer.visible(true);
     }
     public void onSurfaceTextureAvailable(SurfaceTexture value,int width,int height){attach(value,width,height);}
     public void onSurfaceTextureSizeChanged(SurfaceTexture value,int width,int height){releaseSurface();attach(value,width,height);}

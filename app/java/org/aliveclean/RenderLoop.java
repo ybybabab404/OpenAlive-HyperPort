@@ -255,7 +255,7 @@ final class RenderLoop {
             Surface surface=attachedSurface;release();
             if(surface!=null&&surface.isValid()){init(surface,width,height);schedule();}return;
         }if(motion!=null){motion.close();motion=null;}closeFrame();closeCosmic();if(scene!=0)NativeScene.destroy(scene);scene=0;GLES30.glDeleteTextures(1,new int[]{photo},0);photo=0;clearAuxiliary();if(options.cosmic==0)photo=loadPhoto(options.photo,true);createScene(options);schedule();}catch(Exception e){AliveLog.e("AliveClean","Scene reload failed",e);release();}}
-    void close(){if(closed)return;closed=true;preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
+    void close(){if(closed)return;closed=true;unholdPhoto();preferences.unregisterOnSharedPreferenceChangeListener(changes);handler.post(()->{release();thread.quitSafely();});}
     /** 实验：AOD 段用自建定时器驱动，绕过 doze 下 Choreographer 的降频。验证完必须定论。 */
     private static final boolean AOD_TIMER_DRIVEN=true;
     private static final long AOD_FRAME_MS=8L;
@@ -528,7 +528,13 @@ final class RenderLoop {
         int id=upload(bitmap);
         return id;
     }
+    /** 主照片解码（带缓存）会占住静态缓存，所以统一从这里计数。 */
     private int loadPhoto(String name,boolean primary){
+        int id=decodePhoto(name,primary);
+        if(primary)holdPhoto();
+        return id;
+    }
+    private int decodePhoto(String name,boolean primary){
         File file=new File(context.getFilesDir(),name);
 
         if(primary&&!preview){
@@ -803,6 +809,39 @@ final class RenderLoop {
     private static Bitmap cachedPhotoBitmap;
     private static String cachedPhotoKey;
     private static final Object PHOTO_CACHE_LOCK=new Object();
+    /**
+     * 解码缓存的持有者计数与空闲释放。
+     *
+     * <p>这份缓存是给"每次进 AOD 都要重建 EGL 上下文"用的（解码实测 146–199ms），
+     * 但壁纸在桌面挂一整天时它也是几十兆位图。所以按持有者计数：还有实例在用就不动，
+     * 全部退出（关屏/退编辑页/进程只剩服务）且空闲 {@link #PHOTO_IDLE_MS} 之后放掉。
+     * 30 秒的延迟是为了不干扰"反复进出 AOD/编辑页"这种正当复用。</p>
+     */
+    private static final long PHOTO_IDLE_MS=30_000L;
+    private static int photoUsers;
+    private static final android.os.Handler PHOTO_RELEASE_HANDLER=
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final Runnable PHOTO_RELEASE=()->{
+        synchronized(PHOTO_CACHE_LOCK){
+            if(photoUsers>0||cachedPhotoBitmap==null)return;
+            if(!cachedPhotoBitmap.isRecycled())cachedPhotoBitmap.recycle();
+            cachedPhotoBitmap=null;cachedPhotoKey=null;
+            AliveLog.i("AliveClean","photo cache released (idle "+PHOTO_IDLE_MS+"ms)");
+        }
+    };
+    /** 本实例是否已经计入持有者（每实例只计一次，close 时归还）。 */
+    private boolean photoHeld;
+    private void holdPhoto(){
+        if(photoHeld)return;
+        synchronized(PHOTO_CACHE_LOCK){photoHeld=true;photoUsers++;}
+        PHOTO_RELEASE_HANDLER.removeCallbacks(PHOTO_RELEASE);
+    }
+    private void unholdPhoto(){
+        if(!photoHeld)return;
+        synchronized(PHOTO_CACHE_LOCK){photoHeld=false;if(photoUsers>0)photoUsers--;}
+        PHOTO_RELEASE_HANDLER.removeCallbacks(PHOTO_RELEASE);
+        PHOTO_RELEASE_HANDLER.postDelayed(PHOTO_RELEASE,PHOTO_IDLE_MS);
+    }
     private boolean nativeMissingLogged;
     private void retrySurface(Surface surface,int w,int h){
         if(closed)return;

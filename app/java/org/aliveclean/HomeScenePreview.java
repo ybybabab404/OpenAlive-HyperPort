@@ -38,7 +38,13 @@ final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceT
         if(card==null&&texture.isAvailable())attach(texture.getSurfaceTexture(),texture.getWidth(),texture.getHeight());
     }
     boolean openXiaomi(){if(card==null)return false;getContext().startActivity(XiaomiPreviewActivity.intent(getContext(),card.pack,mode));return true;}
-    void stop(){active=false;releaseSurface();if(clock!=null)clock.scene(false);if(xiaomiClock!=null)xiaomiClock.active(false);}
+    void stop(){
+        active=false;releaseSurface();
+        // 退出就把缩略图放掉：三张卡各一张原尺寸缩略图，留在卡槽里等于
+        // 让 App 回到后台之后还替用户"记住"这几兆位图（onResume 会重新 load）。
+        thumbnail.setImageBitmap(null);card=null;
+        if(clock!=null)clock.scene(false);if(xiaomiClock!=null)xiaomiClock.active(false);
+    }
     private void releaseSurface(){if(renderer!=null){renderer.close();renderer=null;}if(surface!=null){surface.release();surface=null;}}
     private void attach(SurfaceTexture value,int width,int height){
         if(!active||card!=null||renderer!=null)return;

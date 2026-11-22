@@ -85,16 +85,21 @@ public final class AodWallpaperPreview {
                                 + " alive=" + alive);
                     }
                     if (!alive) return;
-                    Bitmap preview = forHook(context);
-                    if (preview == null) return;
-                    Bitmap replacement = original == null ? preview
-                            : (original.getWidth() == preview.getWidth()
-                            && original.getHeight() == preview.getHeight()
-                            ? preview
-                            : scaleOrRecycle(preview, original.getWidth(), original.getHeight()));
-                    param.setResult(replacement);
-                    AliveLog.i(TAG, "tm ni7 replaced " + replacement.getWidth()
-                            + "x" + replacement.getHeight());
+                    // 这个方法是"当前桌面壁纸的截图"，个性化页的锁屏卡/桌面卡都用它。
+                    // 当前壁纸换成我们的动态壁纸后宿主截不到图，只能给灰白占位
+                    // （实测 1200x2608 纯灰），卡片就整块变灰。所以：
+                    //   · 拿到真图时先缓存一份 —— 那就是用户自己设置的那张壁纸；
+                    //   · 只拿到占位时回吐这份缓存，卡片始终是用户那张壁纸，
+                    //     既不会变灰，也不会被换成"当前样式的壁纸"。
+                    if (original != null && !looksLikePlaceholder(original)) {
+                        rememberHomeWallpaper(context, original);
+                        return;
+                    }
+                    Bitmap remembered = rememberedHomeWallpaper(context);
+                    if (remembered == null) return;   // 没有历史快照时不猜，保持宿主原样
+                    param.setResult(remembered);
+                    AliveLog.i(TAG, "tm ni7 placeholder replaced by remembered wallpaper "
+                            + remembered.getWidth() + "x" + remembered.getHeight());
                 }
             };
 
@@ -292,6 +297,34 @@ public final class AodWallpaperPreview {
             Object value = Xp.getObjectField(api, "context");
             return value instanceof Context ? (Context) value : null;
         } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** 缓存用户那张"真正的桌面壁纸"（宿主能截到图的时刻顺手存一份）。 */
+    private static void rememberHomeWallpaper(Context context, Bitmap bitmap) {
+        File file = new File(context.getFilesDir(), "home_wallpaper_cache.jpg");
+        if (file.isFile() && System.currentTimeMillis() - file.lastModified() < 60_000L) return;
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(file)) {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "remember home wallpaper failed", error);
+        }
+    }
+
+    private static Bitmap rememberedHomeWallpaper(Context context) {
+        File file = new File(context.getFilesDir(), "home_wallpaper_cache.jpg");
+        if (!file.isFile()) {
+            // 还没缓存过：用系统里那张真实的静态桌面壁纸当底（用户自己设的那张）。
+            // 绝不能拿"当前样式的壁纸"凑数。
+            Bitmap seed = systemStaticWallpaper(1);
+            if (seed != null) rememberHomeWallpaper(context, seed);
+            return seed;
+        }
+        try {
+            return BitmapFactory.decodeFile(file.getAbsolutePath());
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "remembered home wallpaper decode failed", error);
             return null;
         }
     }

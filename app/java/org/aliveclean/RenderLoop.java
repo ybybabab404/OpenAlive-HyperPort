@@ -817,37 +817,58 @@ final class RenderLoop {
     private static String cachedPhotoKey;
     private static final Object PHOTO_CACHE_LOCK=new Object();
     /**
-     * 解码缓存的持有者计数与空闲释放。
+     * 解码缓存：只按"最近有没有用到"来放，不按"还有没有实例"。
      *
-     * <p>这份缓存是给"每次进 AOD 都要重建 EGL 上下文"用的（解码实测 146–199ms），
-     * 但壁纸在桌面挂一整天时它也是几十兆位图。所以按持有者计数：还有实例在用就不动，
-     * 全部退出（关屏/退编辑页/进程只剩服务）且空闲 {@link #PHOTO_IDLE_MS} 之后放掉。
-     * 30 秒的延迟是为了不干扰"反复进出 AOD/编辑页"这种正当复用。</p>
+     * <p>这份缓存的用途是省掉每次进 AOD 重建 EGL 上下文时的解码（实测 62ms，
+     * provider 冷路径 146–199ms）。可壁纸服务是常驻的、几乎从不 {@code close()}，
+     * 早期按"持有者归零才放"写，等于桌面挂一天它就一天不放——实测壁纸进程里
+     * 常驻 12 MB（{@code Bitmap (malloced)} 那一行）。</p>
+     *
+     * <p>所以改成看空闲时长：{@link #PHOTO_IDLE_MS} 内没被用过就丢掉。
+     * 90 秒足够覆盖"来回进出 AOD / 编辑页"这种正当复用，又不会让一张壁纸在桌面
+     * 挂一整晚还占着。丢掉之后只是一次 cache miss，重新解码即可（Bitmap 已经上传成
+     * GL 纹理，回收它不影响正在显示的画面）。</p>
      */
-    private static final long PHOTO_IDLE_MS=30_000L;
-    private static int photoUsers;
+    private static final long PHOTO_IDLE_MS=90_000L;
+    private static volatile long photoLastUseMs;
+    private static boolean photoCheckPending;
     private static final android.os.Handler PHOTO_RELEASE_HANDLER=
             new android.os.Handler(android.os.Looper.getMainLooper());
-    private static final Runnable PHOTO_RELEASE=()->{
+    /** 非 final：它自己会重新投递自己，字段初始化器里不能自引用。 */
+    private static Runnable PHOTO_IDLE_CHECK;
+    static{
+        PHOTO_IDLE_CHECK=()->{
         synchronized(PHOTO_CACHE_LOCK){
-            if(photoUsers>0||cachedPhotoBitmap==null)return;
+            photoCheckPending=false;
+            if(cachedPhotoBitmap==null)return;
+            long idle=android.os.SystemClock.uptimeMillis()-photoLastUseMs;
+            if(idle<PHOTO_IDLE_MS){
+                photoCheckPending=true;
+                PHOTO_RELEASE_HANDLER.postDelayed(PHOTO_IDLE_CHECK,PHOTO_IDLE_MS-idle);
+                return;
+            }
             if(!cachedPhotoBitmap.isRecycled())cachedPhotoBitmap.recycle();
             cachedPhotoBitmap=null;cachedPhotoKey=null;
-            AliveLog.i("AliveClean","photo cache released (idle "+PHOTO_IDLE_MS+"ms)");
+            AliveLog.i("AliveClean","photo cache released (idle "+(idle/1000)+"s)");
         }
-    };
-    /** 本实例是否已经计入持有者（每实例只计一次，close 时归还）。 */
+        };
+    }
+    private static void schedulePhotoIdleCheck(){
+        if(photoCheckPending||cachedPhotoBitmap==null)return;
+        photoCheckPending=true;
+        PHOTO_RELEASE_HANDLER.postDelayed(PHOTO_IDLE_CHECK,PHOTO_IDLE_MS);
+    }
+    /** 本实例是否已经计入持有者（每实例只计一次）。 */
     private boolean photoHeld;
     private void holdPhoto(){
-        if(photoHeld)return;
-        synchronized(PHOTO_CACHE_LOCK){photoHeld=true;photoUsers++;}
-        PHOTO_RELEASE_HANDLER.removeCallbacks(PHOTO_RELEASE);
+        photoHeld=true;
+        synchronized(PHOTO_CACHE_LOCK){photoLastUseMs=android.os.SystemClock.uptimeMillis();}
+        schedulePhotoIdleCheck();
     }
     private void unholdPhoto(){
-        if(!photoHeld)return;
-        synchronized(PHOTO_CACHE_LOCK){photoHeld=false;if(photoUsers>0)photoUsers--;}
-        PHOTO_RELEASE_HANDLER.removeCallbacks(PHOTO_RELEASE);
-        PHOTO_RELEASE_HANDLER.postDelayed(PHOTO_RELEASE,PHOTO_IDLE_MS);
+        photoHeld=false;
+        // 实例退出时顺手看一眼：如果缓存已经放掉就不需要再动，否则等空闲计时到期。
+        schedulePhotoIdleCheck();
     }
     private boolean nativeMissingLogged;
     private void retrySurface(Surface surface,int w,int h){

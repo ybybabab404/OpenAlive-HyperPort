@@ -32,7 +32,9 @@ public final class SceneProvider extends ContentProvider {
         try{
             Bundle result=new Bundle();
             if("connect".equals(method))result.putBinder("channel",SceneChannel.connect(c,extras==null?null:extras.getBinder("owner"),extras==null?0:extras.getInt("clock_api",0),extras==null?null:extras.getBinder("clock_feedback")));
-            SceneOptions options=new SceneOptions(c.getSharedPreferences(SceneOptions.APPLIED,0));
+            // provider 与壁纸服务同在 :wallpaper 进程，但配置由主进程写：跨进程读偏好表会拿到旧值，
+        // 所以这里和壁纸渲染一样走磁盘快照。
+        SceneOptions options=SceneOptions.load(c,SceneOptions.APPLIED);
             result.putInt("aod",options.aod);
             result.putBoolean("vivo_wallpaper",options.vivo!=null);
 

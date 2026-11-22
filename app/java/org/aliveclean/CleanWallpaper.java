@@ -39,6 +39,14 @@ public final class CleanWallpaper extends WallpaperService {
         int lastDisplayState=android.view.Display.STATE_UNKNOWN;
         int lastRotation=-1;
         boolean dimObserverRegistered;
+    boolean sceneObserverRegistered;
+    /** 主进程改了 applied 就会 notifyChange 到这里：壁纸在独立进程，只能靠这条通道知道该重新载入了。 */
+    private final android.database.ContentObserver sceneChange=new android.database.ContentObserver(
+            new android.os.Handler(android.os.Looper.getMainLooper())){
+        @Override public void onChange(boolean self){
+            if(renderer!=null){AliveLog.i("AliveClean","scene config changed (cross-process)");renderer.reload();}
+        }
+    };
         int lastSentMode=-1;
         boolean screenOn=true;
         int lockGraceToken;
@@ -93,6 +101,14 @@ public final class CleanWallpaper extends WallpaperService {
         }};
         @Override public void onCreate(SurfaceHolder holder){
             super.onCreate(holder);RUNNING=true;renderer=new RenderLoop(CleanWallpaper.this,isPreview()?SceneOptions.DRAFT:SceneOptions.APPLIED);
+            // 壁纸服务跑在 :wallpaper 独立进程（见 AndroidManifest）：跨进程读偏好表永远拿到旧值，
+            // 所以配置一律从磁盘快照读，改动由主进程 notifyChange 通知过来再重新载入。
+            final String appliedName=isPreview()?SceneOptions.DRAFT:SceneOptions.APPLIED;
+            renderer.optionsSource(()->SceneOptions.load(CleanWallpaper.this,appliedName));
+            try{
+                getContentResolver().registerContentObserver(SceneProvider.CONFIGURATION,false,sceneChange);
+                sceneObserverRegistered=true;
+            }catch(RuntimeException error){AliveLog.w("AliveClean","scene change observer unavailable",error);}
             readWallpaperDim();
             try{getContentResolver().registerContentObserver(android.provider.Settings.Secure.getUriFor("oplus_customize_settings_dark_wallpaper"),false,dimSetting);dimObserverRegistered=true;}
             catch(RuntimeException error){AliveLog.w("AliveClean","Wallpaper dim observer unavailable",error);}
@@ -406,6 +422,7 @@ public final class CleanWallpaper extends WallpaperService {
             SceneChannel.remove(this);displayManager.unregisterDisplayListener(displays);unregisterReceiver(state);
             if(regionObserverRegistered)getContentResolver().unregisterContentObserver(area);
             if(dimObserverRegistered)getContentResolver().unregisterContentObserver(dimSetting);
+        if(sceneObserverRegistered)getContentResolver().unregisterContentObserver(sceneChange);
             renderer.close();RUNNING=false;super.onDestroy();
         }
     }

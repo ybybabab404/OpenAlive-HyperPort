@@ -123,6 +123,13 @@ final class RenderLoop {
     private float pendingCropX=.5f,pendingCropY=.5f,pendingCropZoom=1;
     private boolean cropQueued,cropFinal;
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener changes=(p,key)->reload();
+    /**
+     * 配置读取器。默认读本进程的 {@code SharedPreferences}；壁纸服务跑在独立进程时改成
+     * 每次从磁盘文件解析——跨进程读偏好表会一直拿到旧值，见 SceneOptions.load()。
+     */
+    private java.util.function.Supplier<SceneOptions> optionsSource;
+    void optionsSource(java.util.function.Supplier<SceneOptions> source){this.optionsSource=source;}
+    private SceneOptions readOptions(){java.util.function.Supplier<SceneOptions> source=optionsSource;return source!=null?source.get():new SceneOptions(preferences);}
     RenderLoop(Context context){this(context,SceneOptions.APPLIED);}
     RenderLoop(Context context,String name){this(context,name,true);}
     RenderLoop(Context context,String name,boolean shareGl){Context app=context.getApplicationContext();this.context=app!=null?app:context;this.shareGl=shareGl;preview=SceneOptions.DRAFT.equals(name);preferences=context.getSharedPreferences(name,0);thread.start();handler=new Handler(thread.getLooper());preferences.registerOnSharedPreferenceChangeListener(changes);}
@@ -244,7 +251,7 @@ final class RenderLoop {
     });}
     void reload(){if(!closed){handler.removeCallbacks(reloadTask);handler.post(reloadTask);}}
     private void reloadScene(){if(scene==0&&cosmic==null&&vivo==null)return;try{
-        SceneOptions options=new SceneOptions(preferences);
+        SceneOptions options=readOptions();
         if(cosmic instanceof StereoRenderer&&renderedOptions!=null&&options.cosmic==renderedOptions.cosmic&&options.cosmicKeepLock==renderedOptions.cosmicKeepLock){
             ((StereoRenderer)cosmic).configure(options.stereoSensitivity,options.stereoAodAnimation);
             renderedOptions=options;stereoAodAnimation=options.stereoAodAnimation;updateCosmicLifecycle();schedule();return;
@@ -444,7 +451,7 @@ final class RenderLoop {
     private void clearAuxiliary(){GLES30.glDeleteTextures(auxiliary.length,auxiliary,0);java.util.Arrays.fill(auxiliary,0);}
     private void init(Surface surface,int w,int h)throws IOException{
         if(!NativeScene.available){if(!nativeMissingLogged){nativeMissingLogged=true;AliveLog.w("AliveClean","native library unavailable; render loop idle (restart needed after update)");}return;}
-        SceneOptions options=new SceneOptions(preferences);
+        SceneOptions options=readOptions();
         SharedGl.Lease lease=shareGl?SharedGl.acquire(surface,w,h,options.aod,options.lock,options.home,options.photo,options.cosmic,vivoKey(options)):null;
         if(lease!=null){
             attachedSurface=surface;width=w;height=h;attachedWidth=w;attachedHeight=h;

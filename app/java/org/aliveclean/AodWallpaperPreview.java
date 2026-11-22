@@ -145,6 +145,35 @@ public final class AodWallpaperPreview {
                 "com.android.thememanager.settings.personalize.task.LockScreenWpTool", 0, "lock", 2);
     }
 
+    /**
+     * 系统当前桌面壁纸的位图，**跟着文件变化走**。
+     *
+     * <p>用户换壁纸时 MIUI 会重写 /data/system/theme_magic/.../home_wallpaper.jpg，
+     * 所以这里用 mtime+size 做失效判断：文件一变就重新解码。若只用一份写死的缓存，
+     * 换了壁纸卡片还显示旧图 —— 那正是"壁纸更新不了"。</p>
+     */
+    private static volatile long staticStamp = -1;
+    private static volatile Bitmap staticBitmap;
+
+    private static Bitmap systemWallpaperFresh() {
+        File file = new File(STATIC_WALLPAPER_DIR, "home_wallpaper.jpg");
+        if (!file.isFile()) return null;
+        long stamp = file.lastModified() * 31L + file.length();
+        Bitmap cachedBitmap = staticBitmap;
+        if (cachedBitmap != null && !cachedBitmap.isRecycled() && stamp == staticStamp) return cachedBitmap;
+        try {
+            Bitmap decoded = BitmapFactory.decodeFile(file.getAbsolutePath());
+            if (decoded != null) {
+                staticBitmap = decoded;
+                staticStamp = stamp;
+            }
+            return decoded;
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "static wallpaper decode failed", error);
+            return null;
+        }
+    }
+
     /** 系统里那张静态壁纸（用户自己设置的），which: 1 桌面 / 2 锁屏。 */
     private static final String STATIC_WALLPAPER_DIR = "/data/system/theme_magic/users/0/wallpaper/image/";
 
@@ -650,7 +679,8 @@ public final class AodWallpaperPreview {
                         if (!(param.args[i] instanceof Bitmap)) continue;
                         Bitmap incoming = (Bitmap) param.args[i];
                         if (!looksLikePlaceholder(incoming)) continue;
-                        Bitmap remembered = rememberedHomeWallpaper(context);
+                        Bitmap remembered = systemWallpaperFresh();
+                        if (remembered == null) remembered = rememberedHomeWallpaper(context);
                         if (remembered == null) continue;
                         param.args[i] = Bitmap.createScaledBitmap(remembered,
                                 incoming.getWidth(), incoming.getHeight(), true);

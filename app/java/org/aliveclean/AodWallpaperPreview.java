@@ -28,6 +28,9 @@ public final class AodWallpaperPreview {
     private AodWallpaperPreview() {}
 
     public static void install(ClassLoader loader) {
+        // 编辑页（息屏与锁屏编辑）跑在 com.miui.aod:keyguardeditor，卡片壁纸同样是
+        // GL 纹理，喂进去的也是占位图 —— 所以这套兜底必须在这个进程里也装一份。
+        installImageGlWallpaperFallback(loader);
         Class<?> api = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.data.template.TemplateApiImpl", loader);
         if (api == null) {
@@ -154,6 +157,39 @@ public final class AodWallpaperPreview {
      */
     private static volatile long staticStamp = -1;
     private static volatile Bitmap staticBitmap;
+
+    /** 桌面槽 / 锁屏槽：个性化页和编辑页都是两张卡，锁屏卡必须用锁屏那张图。 */
+    private static int slotFromStack() {
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+            String name = element.getClassName();
+            // 只看**类名**：包名 com.miui.keyguard.editor.* 里两个槽都有代码，
+            // 用包名判断会把桌面卡也认成锁屏卡（实测两张卡都变成了锁屏壁纸）。
+            String simple = name.substring(name.lastIndexOf('.') + 1).toLowerCase();
+            if (simple.isEmpty()) continue;
+            // CombinedWallpaperView 同时服务两个槽，不能作为判据。
+            if (simple.contains("combinedwallpaper")) continue;
+            if (simple.contains("lock") || simple.contains("keyguard")) return 2;
+            if (simple.contains("home") || simple.contains("desk")) return 1;
+        }
+        return 1;
+    }
+
+    private static Bitmap wallpaperForSlot(int slot) {
+        File file = new File(STATIC_WALLPAPER_DIR, slot == 2 ? "lock_wallpaper.jpg" : "home_wallpaper.jpg");
+        if (!file.isFile()) return systemWallpaperFresh();
+        long stamp = file.lastModified() * 31L + file.length();
+        if (slot == 2) {
+            Bitmap cachedLock = lockBitmap;
+            if (cachedLock != null && !cachedLock.isRecycled() && stamp == lockStamp) return cachedLock;
+            Bitmap decoded = BitmapFactory.decodeFile(file.getAbsolutePath());
+            if (decoded != null) { lockBitmap = decoded; lockStamp = stamp; }
+            return decoded != null ? decoded : systemWallpaperFresh();
+        }
+        return systemWallpaperFresh();
+    }
+
+    private static volatile long lockStamp = -1;
+    private static volatile Bitmap lockBitmap;
 
     private static Bitmap systemWallpaperFresh() {
         File file = new File(STATIC_WALLPAPER_DIR, "home_wallpaper.jpg");
@@ -679,7 +715,7 @@ public final class AodWallpaperPreview {
                         if (!(param.args[i] instanceof Bitmap)) continue;
                         Bitmap incoming = (Bitmap) param.args[i];
                         if (!looksLikePlaceholder(incoming)) continue;
-                        Bitmap remembered = systemWallpaperFresh();
+                        Bitmap remembered = wallpaperForSlot(slotFromStack());
                         if (remembered == null) remembered = rememberedHomeWallpaper(context);
                         if (remembered == null) continue;
                         param.args[i] = Bitmap.createScaledBitmap(remembered,

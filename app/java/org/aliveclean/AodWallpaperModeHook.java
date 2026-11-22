@@ -79,7 +79,15 @@ final class AodWallpaperModeHook {
             public void run() {
                 try {
                     // 桌面槽独立判定：锁屏是我们的并不代表桌面也已恢复。
-                    AodWallpaperMode.restoreHomeWhenForeign(context, source);
+                    // 只在开机后的一小段时间内把桌面壁纸恢复成我们的（解决"重启解锁后
+                    // 桌面壁纸回落"）。用户后来在个性化/编辑页主动应用系统壁纸时，
+                    // 系统自己会把组件换成 MIUI 静态壁纸 —— 那是用户要的结果，不能抢回来。
+                    long sinceBoot = android.os.SystemClock.elapsedRealtime();
+                    if (sinceBoot < 5 * 60 * 1000L) {
+                        AodWallpaperMode.restoreHomeWhenForeign(context, source);
+                    } else {
+                        AliveLog.i(TAG, "home wallpaper restore skipped (past boot window) source=" + source);
+                    }
                     if (AodWallpaperMode.alive(context)) {
                         AodWallpaperMode.ensureEnabled(context);
                     } else {

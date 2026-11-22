@@ -98,17 +98,28 @@ def tap_text(label, timeout=20, fallback=None):
     return False
 
 
+PROCESSES = [PKG, PKG + ":wallpaper"]
+
+
 def meminfo():
-    out = shell("dumpsys meminfo %s" % PKG).stdout
+    """把包里所有进程的占用加起来。
+
+    壁纸服务在 :wallpaper，界面在主进程，只量其中一个没有意义——
+    重构要证明的是"整个包一共占多少"。
+    """
     values = {}
-    for name in METRICS:
-        # 必须锚在行首：否则 "GL mtrack" 会匹配到 "EGL mtrack" 里。
-        hit = re.search(r"(?m)^\s*" + re.escape(name) + r":?\s+(\d+)", out)
-        if hit:
-            values[name] = int(hit.group(1))
-    # oom_adj 决定这块内存会被谁先回收，也是"会不会被墓碑盯上"的直接线索。
-    procs = shell("ps -A -o PID,PIDNAME 2>/dev/null | grep %s" % PKG).stdout
-    values["processes"] = len([l for l in procs.splitlines() if PKG in l])
+    seen = 0
+    for process in PROCESSES:
+        out = shell("dumpsys meminfo '%s'" % process).stdout
+        if "MEMINFO in pid" not in out:
+            continue
+        seen += 1
+        for name in METRICS:
+            # 必须锚在行首：否则 "GL mtrack" 会匹配到 "EGL mtrack" 里。
+            hit = re.search(r"(?m)^\s*" + re.escape(name) + r":?\s+(\d+)", out)
+            if hit:
+                values[name] = values.get(name, 0) + int(hit.group(1))
+    values["processes"] = seen
     return values
 
 
@@ -158,24 +169,19 @@ def scene_editor_background():
     time.sleep(8)
 
 
-def scene_pure_service():
-    """杀掉进程让系统重绑壁纸服务，得到"只有壁纸服务"的占用。
+def scene_wallpaper_only():
+    """回桌面等主进程空闲自退，量"只剩壁纸进程"的占用。
 
-    这是"进后台把 UI 全回收"的理论下限：Activity 销毁只能回收 Java 对象，
-    类加载与 ART/JIT 那部分内存只有进程重启才还回去。两个数一减，就是 UI 残留。
-    注意：force-stop 会把壁纸组件撤掉，所以这里用 kill -9（组件保留，系统会重绑）。
+    这是 UI 进程空闲回收真正能拿到的数：Activity 销毁只能还 Java 对象，
+    类加载与 ART/JIT 那部分只有进程退出才还回去。主进程自退后再多等几秒，
+    让壁纸进程重新回稳。
     """
-    pid = shell("pidof %s" % PKG).stdout.strip().split()
-    if not pid:
-        raise RuntimeError("进程没在跑")
-    shell("su 0 kill -9 %s" % pid[0])
-    for _ in range(12):
-        time.sleep(2)
-        if shell("pidof %s" % PKG).stdout.strip():
+    key("KEYCODE_HOME")
+    for _ in range(20):
+        time.sleep(3)
+        if len([l for l in shell("ps -A").stdout.splitlines() if PKG in l and "wallpaper" not in l]) == 0:
             break
-    time.sleep(8)
-    if PKG not in shell("dumpsys wallpaper | grep -m1 mWallpaperComponent").stdout:
-        raise RuntimeError("壁纸组件没恢复，跳过")
+    time.sleep(6)
 
 
 SCENES = [
@@ -184,7 +190,7 @@ SCENES = [
     ("editor", "编辑页前台", scene_editor),
     ("editor_background", "编辑页进后台 8 秒", scene_editor_background),
     # 放最后：它会杀掉进程，前面那些场景必须已经采完。
-    ("pure_service", "只有壁纸服务（kill 后系统重绑）", scene_pure_service),
+    ("wallpaper_only", "只剩壁纸进程（UI 已自退）", scene_wallpaper_only),
 ]
 
 

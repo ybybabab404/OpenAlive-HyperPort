@@ -32,7 +32,7 @@ fn bits(v:f32)->u64{v.to_bits() as u64}
 struct Scene {
     quad:Quad, copy:Program, lock_program:Program, aod_program:Program,
     home_program:Program, home_effect_program:Program, blend:Program, down:Program, gaussian:Program, up:Program,
-    targets:Vec<Target>, images:[Image;6], color:[f32;3], frame:Option<[f32;36]>, effects:Option<[f32;20]>, frame_crop:[f32;4],
+    targets:Vec<Target>, blur_a:Option<Target>, blur_b:Option<Target>, images:[Image;6], color:[f32;3], frame:Option<[f32;36]>, effects:Option<[f32;20]>, frame_crop:[f32;4],
     w:i32, h:i32, aod:i32, lock:i32, home:i32,
     /// 上一次模糊结果的身份：(源槽位, 源内容签名, radius 位模式, limit 位模式)。
     /// 命中就说明「模糊的输入一个字节都没变」，四个全尺寸 pass 可以整段跳过；
@@ -55,8 +55,10 @@ struct Scene {
 
 impl Scene {
     unsafe fn new(w:i32,h:i32,aod:i32,lock:i32,home:i32)->Result<Self,String> {
+        // 只有 0..3 是每条渲染路径都用的；模糊用的两张全屏缓冲改成按需分配（见 blurred()）：
+        // 1200×2608 下每张 12.5 MB，磨砂/景深之外一次都用不到。
         let mut targets=Vec::new();
-        for _ in 0..6 { targets.push(Target::new(w,h)?); }
+        for _ in 0..4 { targets.push(Target::new(w,h)?); }
         let lock_path=match lock {
             1=>"photo/lock/straightGlass/straight_glass",2=>"photo/lock/curveGlass/curve_glass",
             3=>"photo/lock/groundGlass/ground_glass",5=>"photo/lock/fillMask/fill_mask",
@@ -93,7 +95,7 @@ impl Scene {
             quad:Quad::new(),copy:Program::new(COPY_V,COPY_F)?,lock_program:program(lock_path)?,
             aod_program,home_program:program(home_path)?,home_effect_program:program(home_effect_path)?,blend:program(blend_path)?,
             down:program("blur/down_sample")?,gaussian:program("blur/gaussian")?,up:program("blur/up_sample")?,
-            targets,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),copy_key:None,home_key:None,lock_key:None,out_direct:false,
+            targets,blur_a:None,blur_b:None,images:[Image::default();6],color:[0.15,0.27,0.32],frame:None,effects:None,frame_crop:[0.5,0.5,1.,0.],w,h,aod,lock,home,blur_cache:None,sig_lock:0,sig_home:0,kernel_key:None,kernel:(1.,Vec::new(),Vec::new()),copy_key:None,home_key:None,lock_key:None,out_direct:false,
         })
     }
     fn copy(&mut self,input:u32,target:usize,aspect:f32,flip:bool) {
@@ -115,7 +117,11 @@ impl Scene {
     fn blurred(&mut self,input:u32,source:(i32,u64),radius:f32,limit:f32)->u32 {
         if radius<2. { return input; }
         let key=(source.0,source.1,radius.to_bits(),limit.to_bits());
-        if self.blur_cache==Some(key) { return self.targets[5].texture; }
+        if self.blur_cache==Some(key) { if let Some(b)=&self.blur_b { return b.texture; } }
+        // 两张全屏缓冲按需分配：只有磨砂玻璃/景深这类样式会真正走到模糊，
+        // 其余样式一次都用不到，常驻就是白占 25 MB。分不出来就退化成不模糊，不抛错。
+        if self.blur_a.is_none() { match unsafe { Target::new(self.w,self.h) } { Ok(t)=>self.blur_a=Some(t), Err(_)=>return input } }
+        if self.blur_b.is_none() { match unsafe { Target::new(self.w,self.h) } { Ok(t)=>self.blur_b=Some(t), Err(_)=>return input } }
         // 核只由 radius/limit 决定：参数没变就复用，省掉每帧重算与两次 uniform 数组上传。
         if self.kernel_key!=Some((radius.to_bits(),limit.to_bits())) {
             let(factor,weights,offsets)=blur::kernel_with_limit(radius,limit);
@@ -124,18 +130,20 @@ impl Scene {
         }
         let factor=self.kernel.0;let s=1./factor;
         let matrix=[s,0.,0.,0.,s,0.,(1.-s)/2.,(1.-s)/2.,1.];
-        pp::pass_begin(4);self.targets[4].bind();self.down.bind();self.down.f("u_scale",s);self.down.texture("u_photo",0,input);self.quad.draw();pp::pass_end(4);
-        for (src,dst,horizontal) in [(4,5,1),(5,4,0)] {
-            self.targets[dst].bind();self.gaussian.bind();self.gaussian.texture("u_blur_texture",0,self.targets[src].texture);
+        pp::pass_begin(4);self.blur_a.as_ref().unwrap().bind();self.down.bind();self.down.f("u_scale",s);self.down.texture("u_photo",0,input);self.quad.draw();pp::pass_end(4);
+        for (src,dst,horizontal) in [(4u8,5u8,1),(5u8,4u8,0)] {
+            let tex=if src==4 { self.blur_a.as_ref().unwrap().texture } else { self.blur_b.as_ref().unwrap().texture };
+            if dst==5 { self.blur_b.as_ref().unwrap().bind(); } else { self.blur_a.as_ref().unwrap().bind(); }
+            self.gaussian.bind();self.gaussian.texture("u_blur_texture",0,tex);
             self.gaussian.f("u_scale",s);self.gaussian.m3("u_texture_matrix",&matrix);
             self.gaussian.array("u_weights",&self.kernel.1);self.gaussian.array("u_offsets",&self.kernel.2);self.gaussian.i("u_radius",self.kernel.1.len() as i32);
             self.gaussian.i("u_horizontal",horizontal);self.gaussian.v2("u_step",1./self.w as f32,1./self.h as f32);
             self.gaussian.f("u_texture_min",(1.-s)/2.);self.gaussian.f("u_texture_max",(1.+s)/2.);
             let label=if horizontal==1{5}else{6};pp::pass_begin(label);self.quad.draw();pp::pass_end(label);
         }
-        pp::pass_begin(7);self.targets[5].bind();self.up.bind();self.up.texture("u_photo",0,self.targets[4].texture);self.up.m3("u_texture_matrix",&matrix);self.quad.draw();pp::pass_end(7);
+        pp::pass_begin(7);self.blur_b.as_ref().unwrap().bind();self.up.bind();self.up.texture("u_photo",0,self.blur_a.as_ref().unwrap().texture);self.up.m3("u_texture_matrix",&matrix);self.quad.draw();pp::pass_end(7);
         self.blur_cache=Some(key);
-        self.targets[5].texture
+        self.blur_b.as_ref().unwrap().texture
     }
     /// aod pass 的输出目标：稳态下 blend 只是把 targets[2] 原样搬到屏幕上（推导见 draw），
     /// 这时直接画窗口 surface，省掉一整趟全屏读+写。

@@ -58,6 +58,7 @@ public final class AodWallpaperPreview {
 
         installUf(loader);
         installShots(loader);
+        installPersonalizeTasks(loader);
 
         Class<?> helper = Xp.findClassIfExists(
                 "com.miui.keyguard.editor.utils.DeviceScreenshotHelper", loader);
@@ -105,6 +106,90 @@ public final class AodWallpaperPreview {
             AliveLog.i(TAG, "tm wallpaper preview hook count=" + count);
         } catch (Throwable error) {
             AliveLog.w(TAG, "tm wallpaper preview hook failed", error);
+        }
+    }
+
+    /**
+     * 个性化页的「桌面壁纸卡」在宿主取不到静态图时会画灰占位。
+     *
+     * <p>原因：卡片要的是"当前壁纸的静态帧"，而当前壁纸是我们的动态壁纸
+     * （CleanWallpaper），宿主的 ImageWallpaper 取图路径对它失效，结果返回 null。
+     * 之前这里是把卡片强行换成"当前样式的壁纸"，那是错的——用户要的是卡片原来那张
+     * 壁纸。所以现在只在**宿主自己返回 null**（灰占位）时，补系统里那张真正的静态壁纸
+     * 图（用户设置的桌面/锁屏壁纸），宿主能取到图时一律不动它。</p>
+     */
+    private static void installPersonalizeTasks(ClassLoader loader) {
+        hookPersonalizeNull(loader,
+                "com.android.thememanager.settings.personalize.task.DeskWpTool", 0, "desk", 1);
+        hookPersonalizeNull(loader,
+                "com.android.thememanager.settings.personalize.task.LockScreenWpTool", 0, "lock", 2);
+    }
+
+    /** 系统里那张静态壁纸（用户自己设置的），which: 1 桌面 / 2 锁屏。 */
+    private static final String STATIC_WALLPAPER_DIR = "/data/system/theme_magic/users/0/wallpaper/image/";
+
+    private static Bitmap systemStaticWallpaper(int which) {
+        File file = new File(STATIC_WALLPAPER_DIR, which == 2 ? "lock_wallpaper.jpg" : "home_wallpaper.jpg");
+        if (!file.isFile()) return null;
+        try {
+            return BitmapFactory.decodeFile(file.getAbsolutePath());
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "static wallpaper decode failed " + file, error);
+            return null;
+        }
+    }
+
+    /**
+     * 宿主画不出来时给的是它自己的灰白占位图（整块纯灰 + 图标网格），
+     * 采样若干点判断是否接近均匀灰。真照片/真壁纸不可能满足这条。
+     */
+    private static boolean looksLikePlaceholder(Bitmap bitmap) {
+        if (bitmap == null || bitmap.isRecycled()) return true;
+        int w = bitmap.getWidth(), h = bitmap.getHeight();
+        if (w < 8 || h < 8) return true;
+        int min = 255, max = 0, sum = 0, count = 0;
+        for (int y = 1; y <= 8; y++) {
+            for (int x = 1; x <= 8; x++) {
+                int pixel = bitmap.getPixel(w * x / 9, h * y / 9);
+                int r = (pixel >> 16) & 0xff, g = (pixel >> 8) & 0xff, b = pixel & 0xff;
+                int value = (r + g + b) / 3;
+                min = Math.min(min, value);
+                max = Math.max(max, value);
+                sum += value;
+                count++;
+            }
+        }
+        int average = sum / count;
+        // 占位图有三种：灰底(0x86)、白卡片(0xF5)和纯黑；共同点是采样点几乎没变化。
+        return max - min < 24 && average > 90;
+    }
+
+    private static void hookPersonalizeNull(ClassLoader loader, String className,
+                                            final int argCount, final String label, final int which) {
+        Class<?> task = Xp.findClassIfExists(className, loader);
+        if (task == null) {
+            AliveLog.w(TAG, "tm " + label + " card: " + className + " missing");
+            return;
+        }
+        try {
+            Xp.MethodHook hook = new Xp.MethodHook() {
+                @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    if (param.args.length != argCount) return;
+                    // 宿主自己画得出真图时一律不动；它画的"灰占位"是一张真实位图
+                    // （纯灰网格），所以只判 null 不够，还要看内容。
+                    if (param.getResult() instanceof Bitmap
+                            && !looksLikePlaceholder((Bitmap) param.getResult())) return;
+                    if (param.getResult() != null && !(param.getResult() instanceof Bitmap)) return;
+                    Bitmap bitmap = systemStaticWallpaper(which);
+                    if (bitmap == null) return;
+                    param.setResult(bitmap);
+                    AliveLog.i(TAG, "tm " + label + " card grey fixed by static wallpaper");
+                }
+            };
+            int count = Xp.hookAllMethods(task, "toq", hook).size();
+            AliveLog.i(TAG, "tm " + label + " card hook count=" + count);
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "tm " + label + " card hook failed", error);
         }
     }
 

@@ -61,6 +61,7 @@ public final class AodWallpaperPreview {
         installShots(loader);
         installScreenshotsFallback(loader);
         installWallpaperHelper(loader);
+        installImageGlWallpaperFallback(loader);
         // 进程刚加载时就装（诊断要抓卡片构建，装晚了抓不到），开关走 SystemProperties。
         if (cardDiagOn()) {
             DIAG_INSTALLED = true;
@@ -617,6 +618,55 @@ public final class AodWallpaperPreview {
         } catch (Throwable error) {
             AliveLog.w(TAG, "wallpaper helper hook failed", error);
         }
+    }
+
+    /**
+     * 卡片壁纸真正的消费点：宿主的 {@code com.miui.miwallpaper.opengl.ImageGLWallpaper}
+     * 由 {@code AnimImageGLProgram} 喂一张位图上去做纹理。当前壁纸是第三方 live 壁纸时，
+     * 喂进去的是 **680x1509 的占位位图**（诊断日志实锤），于是卡片画出来就是灰底 + 图标网格。
+     *
+     * <p>这里在入参这一层把占位图换成用户自己那张桌面壁纸（缓存/系统静态壁纸），
+     * 尺寸按宿主期望的缩放；喂进来的是真图时一律不动。</p>
+     */
+    private static void installImageGlWallpaperFallback(ClassLoader loader) {
+        Class<?> imageGl = Xp.findClassIfExists(
+                "com.miui.miwallpaper.opengl.ImageGLWallpaper", loader);
+        if (imageGl == null) {
+            AliveLog.w(TAG, "imageGL fallback: missing");
+            return;
+        }
+        for (java.lang.reflect.Method method : imageGl.getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            boolean takesBitmap = false;
+            for (Class<?> type : types) if (type == Bitmap.class) takesBitmap = true;
+            if (!takesBitmap) continue;
+            Object[] args = new Object[types.length + 1];
+            System.arraycopy(types, 0, args, 0, types.length);
+            args[types.length] = new Xp.MethodHook() {
+                @Override protected void beforeHookedMethod(Xp.MethodHookParam param) {
+                    Context context = Xp.currentApplication();
+                    if (context == null) return;
+                    for (int i = 0; i < param.args.length; i++) {
+                        if (!(param.args[i] instanceof Bitmap)) continue;
+                        Bitmap incoming = (Bitmap) param.args[i];
+                        if (!looksLikePlaceholder(incoming)) continue;
+                        Bitmap remembered = rememberedHomeWallpaper(context);
+                        if (remembered == null) continue;
+                        param.args[i] = Bitmap.createScaledBitmap(remembered,
+                                incoming.getWidth(), incoming.getHeight(), true);
+                        AliveLog.i(TAG, "imageGL " + param.method.getName()
+                                + " placeholder fed with remembered wallpaper "
+                                + incoming.getWidth() + "x" + incoming.getHeight());
+                    }
+                }
+            };
+            try {
+                Xp.findAndHookMethod(imageGl, method.getName(), args);
+            } catch (Throwable error) {
+                AliveLog.w(TAG, "imageGL fallback hook failed " + method.getName(), error);
+            }
+        }
+        AliveLog.i(TAG, "imageGL fallback installed");
     }
 
     private static void installUf(ClassLoader loader) {

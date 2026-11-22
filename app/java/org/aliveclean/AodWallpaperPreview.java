@@ -22,6 +22,7 @@ public final class AodWallpaperPreview {
     private static long cachedStamp = -1;
     private static final AtomicInteger TM_CALLS = new AtomicInteger();
     private static final AtomicInteger SHOT_CALLS = new AtomicInteger();
+    private static final AtomicInteger DIAG_CALLS = new AtomicInteger();
     private static final AtomicInteger UF_CALLS = new AtomicInteger();
 
     private AodWallpaperPreview() {}
@@ -58,6 +59,9 @@ public final class AodWallpaperPreview {
 
         installUf(loader);
         installShots(loader);
+        installScreenshotsFallback(loader);
+        // 这里进程刚加载，拿不到 Context（实测 hasContext=false），开关读不出来。
+        // 真正的安装推迟到第一次取图调用时（见 installShots 的钩子里）。
         installPersonalizeTasks(loader);
 
         Class<?> helper = Xp.findClassIfExists(
@@ -76,6 +80,11 @@ public final class AodWallpaperPreview {
                     try {
                         alive = context != null && AodWallpaperMode.alive(context);
                     } catch (Throwable ignored) {
+                    }
+                    if (!DIAG_INSTALLED && cardDiagOn()) {
+                        DIAG_INSTALLED = true;
+                        installCardDiag(param.method.getDeclaringClass().getClassLoader());
+                        installImageViewDiag();
                     }
                     int n = TM_CALLS.incrementAndGet();
                     if (n <= 6) {
@@ -151,22 +160,19 @@ public final class AodWallpaperPreview {
     private static boolean looksLikePlaceholder(Bitmap bitmap) {
         if (bitmap == null || bitmap.isRecycled()) return true;
         int w = bitmap.getWidth(), h = bitmap.getHeight();
-        if (w < 8 || h < 8) return true;
-        int min = 255, max = 0, sum = 0, count = 0;
-        for (int y = 1; y <= 8; y++) {
-            for (int x = 1; x <= 8; x++) {
-                int pixel = bitmap.getPixel(w * x / 9, h * y / 9);
-                int r = (pixel >> 16) & 0xff, g = (pixel >> 8) & 0xff, b = pixel & 0xff;
-                int value = (r + g + b) / 3;
-                min = Math.min(min, value);
-                max = Math.max(max, value);
-                sum += value;
-                count++;
+        if (w < 16 || h < 16) return true;
+        // 占位图是"灰底 + 图标网格"，特点是颜色极少（实测量化后有几百种以内），
+        // 真照片/真壁纸在同样粒度下有上千种。用颜色数判，比"是否均匀"可靠。
+        java.util.HashSet<Integer> colors = new java.util.HashSet<>();
+        for (int y = 0; y < 48; y++) {
+            for (int x = 0; x < 24; x++) {
+                int pixel = bitmap.getPixel(w * x / 24, h * y / 48);
+                colors.add((pixel & 0xff000000) | ((pixel >> 16 & 0xf8) << 16)
+                        | ((pixel >> 8 & 0xf8) << 8) | (pixel & 0xf8) >> 3);
+                if (colors.size() > 400) return false;
             }
         }
-        int average = sum / count;
-        // 占位图有三种：灰底(0x86)、白卡片(0xF5)和纯黑；共同点是采样点几乎没变化。
-        return max - min < 24 && average > 90;
+        return true;
     }
 
     private static void hookPersonalizeNull(ClassLoader loader, String className,
@@ -196,6 +202,236 @@ public final class AodWallpaperPreview {
         } catch (Throwable error) {
             AliveLog.w(TAG, "tm " + label + " card hook failed", error);
         }
+    }
+
+    /**
+     * 诊断：把个性化卡片取图相关的类里所有返 Bitmap 的方法都打一行。
+     *
+     * <p>为了回答"灰度占位图到底是谁给的"——前面已经证实 ni7 的返回值不被卡片采用、
+     * toq 一次不触发，所以只能靠这个把真实调用点打出来，再针对那一处修。</p>
+     */
+    private static volatile Boolean cardDiag;
+    private static volatile boolean DIAG_INSTALLED;
+
+    /** 只用于排查：`settings put global alive_card_diag 1` 打开。 */
+    private static boolean cardDiagOn() {
+        Boolean cached = cardDiag;
+        if (cached != null) return cached;
+        boolean on = false;
+        Context context = null;
+        try {
+            context = Xp.currentApplication();
+            if (context == null) {
+                // 模块在这个进程刚加载时 currentApplication() 还是空，直接问 ActivityThread。
+                try {
+                    context = (Context) Class.forName("android.app.ActivityThread")
+                            .getMethod("currentApplication").invoke(null);
+                } catch (Throwable ignored) {
+                }
+            }
+            if (context != null) {
+                on = android.provider.Settings.Global.getInt(
+                        context.getContentResolver(), "alive_card_diag", 0) == 1;
+            }
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "card diag switch failed", error);
+        }
+        AliveLog.i(TAG, "card diag switch on=" + on + " hasContext=" + (context != null));
+        cardDiag = on;
+        return on;
+    }
+
+    private static void installCardDiag(ClassLoader loader) {
+        String[] classes = {
+                "com.android.thememanager.settings.personalize.task.LockScreenWpTool",
+                "com.android.thememanager.settings.personalize.task.DeskWpTool",
+                "com.android.thememanager.settings.personalize.task.DeskPreviewTool",
+                "com.miui.keyguard.editor.utils.Screenshots",
+                "com.miui.keyguard.editor.utils.DeviceScreenshotHelper",
+                "com.miui.keyguard.editor.utils.BitmapUtil",
+        };
+        for (String name : classes) {
+            Class<?> target = Xp.findClassIfExists(name, loader);
+            if (target == null) {
+                AliveLog.w(TAG, "card diag missing " + name);
+                continue;
+            }
+            final String simple = target.getSimpleName();
+            for (java.lang.reflect.Method method : target.getDeclaredMethods()) {
+                if (method.getReturnType() != Bitmap.class) continue;
+                try {
+                    Class<?>[] types = method.getParameterTypes();
+                    Object[] args = new Object[types.length + 1];
+                    System.arraycopy(types, 0, args, 0, types.length);
+                    args[types.length] = new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            Bitmap result = param.getResult() instanceof Bitmap
+                                    ? (Bitmap) param.getResult() : null;
+                            int n = DIAG_CALLS.incrementAndGet();
+                            if (n > 60) return;
+                            AliveLog.i(TAG, "card diag " + simple + "." + param.method.getName()
+                                    + " -> " + (result == null ? "null"
+                                    : result.getWidth() + "x" + result.getHeight()
+                                    + (looksLikePlaceholder(result) ? " placeholder" : " real")));
+                        }
+                    };
+                    Xp.findAndHookMethod(target, method.getName(), args);
+                } catch (Throwable error) {
+                    AliveLog.w(TAG, "card diag hook failed " + simple + "." + method.getName(), error);
+                }
+            }
+        }
+    }
+
+    /**
+     * 个性化卡片的取图在 {@code com.miui.keyguard.editor.utils.Screenshots#p / #ld6}
+     * （诊断日志里只有这两个方法在卡片渲染时被调用）。动态壁纸接管时它们返回的是
+     * "灰底 + 图标网格"的占位图，卡片就整块变灰。这里只在**判定为占位**时换成
+     * 用户自己那张桌面壁纸（缓存/系统静态壁纸），返回真图时一律不动。
+     */
+    private static void installScreenshotsFallback(ClassLoader loader) {
+        Class<?> shots = Xp.findClassIfExists(
+                "com.miui.keyguard.editor.utils.Screenshots", loader);
+        if (shots == null) {
+            AliveLog.w(TAG, "screenshots fallback: missing");
+            return;
+        }
+        Xp.MethodHook hook = new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                Bitmap result = param.getResult() instanceof Bitmap ? (Bitmap) param.getResult() : null;
+                if (result != null && !looksLikePlaceholder(result)) return;
+                Context context = Xp.currentApplication();
+                if (context == null) return;
+                Bitmap remembered = rememberedHomeWallpaper(context);
+                if (remembered == null) return;
+
+                Bitmap replacement = result == null ? remembered
+                        : scaleOrRecycle(remembered.copy(Bitmap.Config.ARGB_8888, false),
+                                result.getWidth(), result.getHeight());
+                param.setResult(replacement);
+                AliveLog.i(TAG, "screenshots " + param.method.getName()
+                        + " placeholder replaced by remembered wallpaper");
+            }
+        };
+        for (String name : new String[]{"p", "ld6"}) {
+            try {
+                int count = Xp.hookAllMethods(shots, name, hook).size();
+                AliveLog.i(TAG, "screenshots " + name + " hook count=" + count);
+            } catch (Throwable error) {
+                AliveLog.w(TAG, "screenshots " + name + " hook failed", error);
+            }
+        }
+    }
+
+    /**
+     * 诊断：谁在给卡片的 ImageView 塞图。
+     *
+     * <p>Screenshots.p/ld6 的返回值实测不被卡片采用（换成纯红卡片纹丝不动），
+     * 所以只能从"最终设置图片"这一端反查：hook ImageView.setImageBitmap /
+     * setImageDrawable，打出身位与调用栈，直接定位真正的取图点。</p>
+     */
+    private static void installImageViewDiag() {
+        Xp.MethodHook bitmapHook = new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                if (param.args.length != 1 || !(param.args[0] instanceof Bitmap)) return;
+                Bitmap bitmap = (Bitmap) param.args[0];
+                int n = DIAG_CALLS.incrementAndGet();
+                if (n > 40) return;
+                AliveLog.i(TAG, "imageview setImageBitmap " + bitmap.getWidth() + "x" + bitmap.getHeight()
+                        + (looksLikePlaceholder(bitmap) ? " placeholder" : " real") + " by "
+                        + caller());
+            }
+        };
+        Xp.MethodHook drawableHook = new Xp.MethodHook() {
+            @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                if (param.args.length != 1 || !(param.args[0] instanceof android.graphics.drawable.BitmapDrawable))
+                    return;
+                Bitmap bitmap = ((android.graphics.drawable.BitmapDrawable) param.args[0]).getBitmap();
+                int n = DIAG_CALLS.incrementAndGet();
+                if (n > 40 || bitmap == null) return;
+                AliveLog.i(TAG, "imageview setImageDrawable " + bitmap.getWidth() + "x" + bitmap.getHeight()
+                        + (looksLikePlaceholder(bitmap) ? " placeholder" : " real") + " by "
+                        + caller());
+            }
+        };
+        try {
+            Xp.findAndHookMethod(android.widget.ImageView.class, "setImageBitmap", Bitmap.class, bitmapHook);
+            Xp.findAndHookMethod(android.widget.ImageView.class, "setImageDrawable",
+                    android.graphics.drawable.Drawable.class, drawableHook);
+            // 页面如果是 Compose 写的，图不会经过 ImageView，而是 asImageBitmap(Bitmap)。
+            Class<?> asImage = Xp.findClassIfExists(
+                    "androidx.compose.ui.graphics.AndroidImageBitmap_androidKt", null);
+            if (asImage == null) asImage = Xp.findClassIfExists(
+                    "androidx.compose.ui.graphics.AndroidImageBitmap", null);
+            if (asImage != null) {
+                for (java.lang.reflect.Method method : asImage.getDeclaredMethods()) {
+                    if (!method.getName().contains("asImageBitmap")) continue;
+                    Class<?>[] types = method.getParameterTypes();
+                    Object[] args = new Object[types.length + 1];
+                    System.arraycopy(types, 0, args, 0, types.length);
+                    args[types.length] = new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            if (param.args.length == 0 || !(param.args[0] instanceof Bitmap)) return;
+                            Bitmap bitmap = (Bitmap) param.args[0];
+                            int n = DIAG_CALLS.incrementAndGet();
+                            if (n > 40) return;
+                            AliveLog.i(TAG, "compose asImageBitmap " + bitmap.getWidth() + "x"
+                                    + bitmap.getHeight()
+                                    + (looksLikePlaceholder(bitmap) ? " placeholder" : " real")
+                                    + " by " + caller());
+                        }
+                    };
+                    Xp.findAndHookMethod(asImage, method.getName(), args);
+                    AliveLog.i(TAG, "compose image diag hooked " + method.getName());
+                }
+            } else {
+                AliveLog.w(TAG, "compose image class missing");
+            }
+            // 卡片也可能是自绘 View：直接盯 Canvas.drawBitmap，按尺寸+占位特征过滤。
+            for (String name : new String[]{"drawBitmap"}) {
+                for (Class<?>[] signature : new Class<?>[][]{
+                        {Bitmap.class, float.class, float.class, android.graphics.Paint.class},
+                        {Bitmap.class, android.graphics.Rect.class, android.graphics.Rect.class,
+                                android.graphics.Paint.class}}) {
+                    Object[] args = new Object[signature.length + 1];
+                    System.arraycopy(signature, 0, args, 0, signature.length);
+                    args[signature.length] = new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            if (param.args.length == 0 || !(param.args[0] instanceof Bitmap)) return;
+                            Bitmap bitmap = (Bitmap) param.args[0];
+                            if (bitmap.getWidth() < 900) return;
+                            if (!looksLikePlaceholder(bitmap)) return;
+                            int n = DIAG_CALLS.incrementAndGet();
+                            if (n > 20) return;
+                            AliveLog.i(TAG, "canvas drawBitmap placeholder " + bitmap.getWidth()
+                                    + "x" + bitmap.getHeight() + " by " + caller());
+                        }
+                    };
+                    try {
+                        Xp.findAndHookMethod(android.graphics.Canvas.class, name, args);
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "canvas diag hook failed " + signature.length, error);
+                    }
+                }
+            }
+            AliveLog.i(TAG, "imageview diag installed");
+        } catch (Throwable error) {
+            AliveLog.w(TAG, "imageview diag failed", error);
+        }
+    }
+
+    private static String caller() {
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        StringBuilder text = new StringBuilder();
+        int shown = 0;
+        for (StackTraceElement element : stack) {
+            String name = element.getClassName();
+            if (name.startsWith("org.aliveclean") || name.startsWith("de.robv")
+                    || name.startsWith("android.widget.ImageView") || name.startsWith("java.lang.Thread")) continue;
+            text.append(name).append(':').append(element.getLineNumber()).append(" <- ");
+            if (++shown >= 6) break;
+        }
+        return text.toString();
     }
 
     private static void installUf(ClassLoader loader) {
@@ -260,6 +496,10 @@ public final class AodWallpaperPreview {
                     try {
                         alive = context != null && AodWallpaperMode.alive(context);
                     } catch (Throwable ignored) {
+                    }
+                    if (!DIAG_INSTALLED && cardDiagOn()) {
+                        DIAG_INSTALLED = true;
+                        installCardDiag(param.method.getDeclaringClass().getClassLoader());
                     }
                     int n = SHOT_CALLS.incrementAndGet();
                     if (n <= 6) {

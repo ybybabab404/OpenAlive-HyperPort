@@ -334,6 +334,12 @@ final class RenderLoop {
         if(stereoSensor!=null){stereoSensor.close();stereoSensor=null;}
         if(cosmic!=null){cosmic.close();cosmic=null;}
     }
+    /**
+     * 共享 GL 场景键里表示「Vivo 系列」的那一段：不是 Vivo 就是空串。
+     * Vivo 的不同 family/裁切/效果也必须算进键里，否则换一个 Vivo 壁纸会复用上一张。
+     */
+    private static String vivoKey(SceneOptions options){return options.vivo==null?"":options.vivo.json();}
+
     private void createScene(SceneOptions options)throws IOException{
         renderedOptions=options;stereoAodAnimation=options.stereoAodAnimation;
         if(options.vivo!=null){
@@ -395,7 +401,7 @@ final class RenderLoop {
         if(options.aod==101)loadAuxiliary(3,"shader/photo/aod/fullAod/gray.png",false);
         if(lastConfig!=null){
             SharedGl.adopt(display,egl,lastConfig);
-            SharedGl.publish(instanceToken,scene,photo,decorator,auxiliary,aspect,width,height,options.aod,lock,home,options.photo);
+            SharedGl.publish(instanceToken,scene,photo,decorator,auxiliary,aspect,width,height,options.aod,lock,home,options.photo,options.cosmic,vivoKey(options));
             sharedLease=true;
         }
     }
@@ -422,7 +428,7 @@ final class RenderLoop {
     private void init(Surface surface,int w,int h)throws IOException{
         if(!NativeScene.available){if(!nativeMissingLogged){nativeMissingLogged=true;AliveLog.w("AliveClean","native library unavailable; render loop idle (restart needed after update)");}return;}
         SceneOptions options=new SceneOptions(preferences);
-        SharedGl.Lease lease=SharedGl.acquire(surface,w,h,options.aod,options.lock,options.home,options.photo);
+        SharedGl.Lease lease=SharedGl.acquire(surface,w,h,options.aod,options.lock,options.home,options.photo,options.cosmic,vivoKey(options));
         if(lease!=null){
             attachedSurface=surface;width=w;height=h;attachedWidth=w;attachedHeight=h;
             // 关键：swap() 用的是实例字段 display/window，复用路径必须把它们一并赋回，

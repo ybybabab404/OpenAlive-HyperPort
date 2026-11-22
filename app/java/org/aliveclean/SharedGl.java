@@ -41,6 +41,8 @@ final class SharedGl {
     private static int[] auxiliary=new int[6];
     private static float aspect=1f;
     private static int sceneW,sceneH,sceneAod,sceneLock,sceneHome;
+    private static int sceneCosmic;
+    private static String sceneVivo="";
     /** 发布当前 scene 的实例令牌，以及当前未归还的 window 租约数。 */
     private static long sceneOwner;
     private static int leases;
@@ -52,11 +54,19 @@ final class SharedGl {
         return display!=EGL14.EGL_NO_DISPLAY&&context!=EGL14.EGL_NO_CONTEXT&&config!=null;
     }
 
-    /** 资源键一致且上下文可用时，只建 window 并挂到共享上下文上；否则返回 null。 */
-    static Lease acquire(Surface surface,int w,int h,int aod,int lock,int home,String photoKey){
+    /**
+     * 资源键一致且上下文可用时，只建 window 并挂到共享上下文上；否则返回 null。
+     *
+     * <p>键必须覆盖"渲染什么"的全部输入：尺寸、aod/lock/home 样式、照片文件，
+     * **以及 cosmic / vivo 这两个系列本身**。少了后两项时，"从照片系列切到动态壁纸系列"
+     * 会命中照片场景的旧键而被复用 —— 表现为第一次点应用画面不变，要再点一次才切过去。</p>
+     */
+    static Lease acquire(Surface surface,int w,int h,int aod,int lock,int home,String photoKey,int cosmic,String vivoKey){
         synchronized(LOCK){
             if(!available()||scene==0)return null;
             if(sceneW!=w||sceneH!=h||sceneAod!=aod||sceneLock!=lock||sceneHome!=home)return null;
+            if(sceneCosmic!=cosmic)return null;
+            if(!sceneVivo.equals(vivoKey==null?"":vivoKey))return null;
             if(!photoKey.equals(scenePhotoKey))return null;
             // 现场重新选 config：首实例存下的那个可能与本进程当前状态不匹配（实测用它会
             // 12289 EGL_BAD_NATIVE_WINDOW，而同一 Surface 上现场选的 config 正常）。
@@ -129,7 +139,7 @@ final class SharedGl {
     }
 
     static void publish(long ownerToken,long sceneId,int photoId,int decoratorId,int[] auxiliaryIds,float photoAspect,
-                        int w,int h,int aod,int lock,int home,String photoKey){
+                        int w,int h,int aod,int lock,int home,String photoKey,int cosmic,String vivoKey){
         synchronized(LOCK){
             // 有实例正在租用它时不要替换登记：那会让正在渲染的实例与登记表不一致。
             if(leases>0&&scene!=0&&scene!=sceneId)return;
@@ -139,7 +149,9 @@ final class SharedGl {
             scene=sceneId;sceneOwner=ownerToken;orphan=false;photo=photoId;decorator=decoratorId;aspect=photoAspect;
             auxiliary=auxiliaryIds.clone();
             sceneW=w;sceneH=h;sceneAod=aod;sceneLock=lock;sceneHome=home;scenePhotoKey=photoKey;
-            AliveLog.i("AliveClean","shared gl: published scene="+scene+" "+w+"x"+h);
+            sceneCosmic=cosmic;sceneVivo=vivoKey==null?"":vivoKey;
+            AliveLog.i("AliveClean","shared gl: published scene="+scene+" "+w+"x"+h
+                    +" cosmic="+cosmic+" vivo="+(sceneVivo.isEmpty()?"-":sceneVivo.hashCode()));
         }
     }
 
@@ -159,7 +171,7 @@ final class SharedGl {
             if(leases>0)leases--;
             if(leases==0&&orphan&&scene!=0){
                 if(display!=EGL14.EGL_NO_DISPLAY)NativeScene.destroy(scene);
-                scene=0;sceneOwner=0;orphan=false;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";
+                scene=0;sceneOwner=0;orphan=false;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";sceneCosmic=0;sceneVivo="";
             }
         }
     }
@@ -175,7 +187,7 @@ final class SharedGl {
             if(!mine&&ownScene!=scene)return;              // 已被别人接管，不归我们销毁
             if(leases>0)return;                            // 还有实例在用它
             if(display!=EGL14.EGL_NO_DISPLAY)NativeScene.destroy(ownScene);
-            if(scene==ownScene){scene=0;sceneOwner=0;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";}
+            if(scene==ownScene){scene=0;sceneOwner=0;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";sceneCosmic=0;sceneVivo="";}
         }
     }
 
@@ -195,7 +207,7 @@ final class SharedGl {
 
     private static void forget(){
         display=EGL14.EGL_NO_DISPLAY;context=EGL14.EGL_NO_CONTEXT;config=null;
-        scene=0;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";
+        scene=0;photo=decorator=0;sceneW=sceneH=0;scenePhotoKey="";sceneCosmic=0;sceneVivo="";
         java.util.Arrays.fill(auxiliary,0);
     }
 }

@@ -451,6 +451,50 @@ public final class AodWallpaperPreview {
             } else {
                 AliveLog.w(TAG, "imageGL class missing");
             }
+            // 卡片数据层：DeskWpTool.zy / LockScreenWpTool 的协程结果里到底有没有图。
+            for (String name : new String[]{
+                    "com.android.thememanager.settings.personalize.task.DeskWpTool",
+                    "com.android.thememanager.settings.personalize.task.LockScreenWpTool"}) {
+                Class<?> tool = Xp.findClassIfExists(name, loader);
+                if (tool == null) continue;
+                for (java.lang.reflect.Method method : tool.getDeclaredMethods()) {
+                    Class<?>[] types = method.getParameterTypes();
+                    Object[] args = new Object[types.length + 1];
+                    System.arraycopy(types, 0, args, 0, types.length);
+                    args[types.length] = new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            Object result = param.getResult();
+                            if (result == null) {
+                                AliveLog.i(TAG, "card data " + param.method.getName() + " -> null");
+                                return;
+                            }
+                            StringBuilder fields = new StringBuilder();
+                            for (java.lang.reflect.Field field : result.getClass().getDeclaredFields()) {
+                                if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
+                                try {
+                                    field.setAccessible(true);
+                                    Object value = field.get(result);
+                                    fields.append(field.getName()).append('=')
+                                            .append(value == null ? "null"
+                                                    : (value instanceof Bitmap
+                                                    ? ((Bitmap) value).getWidth() + "x"
+                                                    + ((Bitmap) value).getHeight()
+                                                    : value.getClass().getSimpleName()))
+                                            .append(' ');
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                            AliveLog.i(TAG, "card data " + param.method.getName() + " "
+                                    + result.getClass().getSimpleName() + " { " + fields + "}");
+                        }
+                    };
+                    try {
+                        Xp.findAndHookMethod(tool, method.getName(), args);
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "card data hook failed " + method.getName(), error);
+                    }
+                }
+            }
             AliveLog.i(TAG, "imageview diag installed");
         } catch (Throwable error) {
             AliveLog.w(TAG, "imageview diag failed", error);

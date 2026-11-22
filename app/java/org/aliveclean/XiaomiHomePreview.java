@@ -50,6 +50,8 @@ final class XiaomiHomePreview {
                 if(id==0)throw new IOException("Original stage thumbnail missing");
                 BitmapFactory.Options options=new BitmapFactory.Options();options.inScaled=false;options.inJustDecodeBounds=true;
                 BitmapFactory.decodeResource(resources.get(pack.id),id,options);
+                // 卡片显示宽度只有 343，原图动辄 1200 宽：按 384 上限降采样，
+                // 再做一次解码就是十几兆 native 位图，而屏幕上根本看不出差别。
                 options.inSampleSize=1;while(options.outWidth/options.inSampleSize>384)options.inSampleSize*=2;
                 options.inJustDecodeBounds=false;card.image=BitmapFactory.decodeResource(resources.get(pack.id),id,options);
                 if(card.image==null)throw new IOException("Original stage thumbnail unreadable");

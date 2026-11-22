@@ -57,6 +57,8 @@ public final class AliveApp extends Application implements Application.ActivityL
         }
     }
 
+    // 下面这几个回调这里用不上：退出判定只看"有没有 Activity 可见"，
+    // created/resumed/paused/destroyed 不改变 started 计数。
     @Override public void onActivityCreated(Activity activity, Bundle state) {}
     @Override public void onActivityResumed(Activity activity) {}
     @Override public void onActivityPaused(Activity activity) {}

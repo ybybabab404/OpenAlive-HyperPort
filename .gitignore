@@ -23,5 +23,5 @@ Thumbs.db
 /docs/kb/
 /docs/port/
 /docs/notes/
-
-out/  # probe.py 的采样产物
+# probe.py / mem.py sampling output (local only, never committed)
+out/

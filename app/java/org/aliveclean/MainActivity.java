@@ -25,6 +25,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     private boolean pickerResultReliable;
     private int importTarget;
     private Surface previewSurface;
+    private int previewWidth,previewHeight;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -71,7 +72,7 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
     }
 
     private void showScene(){
-        renderer.mode(mode);
+        if(renderer!=null)renderer.mode(mode);
         if(editor!=null)editor.update(new SceneOptions(draft),mode,importing);
     }
     private void choosePhoto(){
@@ -219,12 +220,32 @@ public final class MainActivity extends Activity implements TextureView.SurfaceT
         }catch(IOException e){file.delete();throw e;}
     }
     @Override protected void onSaveInstanceState(Bundle state){state.putInt("mode",mode);state.putInt("importTarget",importTarget);state.putBoolean("awaitingApply",awaitingApply);state.putInt("previousWallpaperId",previousWallpaperId);state.putInt("previousLockId",previousLockId);state.putBoolean("pickerResultReliable",pickerResultReliable);super.onSaveInstanceState(state);}
-    @Override public void onSurfaceTextureAvailable(SurfaceTexture texture,int width,int height){previewSurface=new Surface(texture);renderer.attach(previewSurface,width,height);}
-    @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture,int width,int height){renderer.attach(previewSurface,width,height);}
-    @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture){renderer.detach();if(previewSurface!=null){previewSurface.release();previewSurface=null;}return true;}
+    @Override public void onSurfaceTextureAvailable(SurfaceTexture texture,int width,int height){
+        previewWidth=width;previewHeight=height;previewSurface=new Surface(texture);
+        if(renderer!=null)renderer.attach(previewSurface,width,height);
+    }
+    @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture,int width,int height){
+        previewWidth=width;previewHeight=height;
+        if(renderer!=null&&previewSurface!=null)renderer.attach(previewSurface,width,height);
+    }
+    @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture){if(renderer!=null)renderer.detach();if(previewSurface!=null){previewSurface.release();previewSurface=null;}return true;}
     @Override public void onSurfaceTextureUpdated(SurfaceTexture texture){}
-    @Override protected void onResume(){super.onResume();renderer.visible(true);showScene();}
-    @Override protected void onPause(){renderer.visible(false);super.onPause();}
-    @Override protected void onDestroy(){if(editor!=null)editor.close();renderer.close();super.onDestroy();}
+    /**
+     * 编辑页一进后台就把渲染器整个还掉：一个全屏实例的 6 个 target 就要四十多兆，
+     * 只是 visible(false) 停帧的话，这份显存会一直挂到 Activity 销毁。
+     */
+    private void releaseRenderer(){
+        if(renderer!=null){renderer.close();renderer=null;}
+    }
+    private void ensureRenderer(){
+        if(renderer==null){
+            renderer=new RenderLoop(this,SceneOptions.DRAFT);
+            if(previewSurface!=null&&previewSurface.isValid()&&previewWidth>0)renderer.attach(previewSurface,previewWidth,previewHeight);
+        }
+        renderer.visible(true);renderer.mode(mode);
+    }
+    @Override protected void onResume(){super.onResume();ensureRenderer();showScene();}
+    @Override protected void onPause(){releaseRenderer();super.onPause();}
+    @Override protected void onDestroy(){if(editor!=null)editor.close();releaseRenderer();super.onDestroy();}
     @Override public void onBackPressed(){if(editor==null||!editor.closePanel())super.onBackPressed();}
 }

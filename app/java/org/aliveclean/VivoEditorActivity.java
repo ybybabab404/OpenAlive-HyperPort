@@ -25,6 +25,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
     private VivoUi ui;
     private RenderLoop renderer;
     private Surface surface;
+    private int previewWidth,previewHeight;
     private TextureView preview;
     private FrameLayout root;
     private TextView apply,status;
@@ -75,7 +76,7 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
             LinearLayout footer=new LinearLayout(this);footer.setGravity(Gravity.CENTER);column.addView(footer,new LinearLayout.LayoutParams(-1,ui.dp(98)));
             footer(footer,"壁纸","ic_decorate_refresh",()->showWallpaperChoices());footer(footer,"装饰","ic_unlock_decorate",()->showPanel(0));
         }
-        renderer=new RenderLoop(this,SceneOptions.DRAFT);renderer.visible(resumed);renderer.mode(1,false);
+        ensureRenderer();
         if(pendingMedia!=null){Intent ready=pendingMedia;int request=pendingMediaRequest;pendingMedia=null;onActivityResult(request,RESULT_OK,ready);}
     }
     private TextView button(String name){TextView t=ui.text(name,16);t.setBackground(ui.official("ic_theme_editer_title_bg"));return t;}
@@ -325,12 +326,22 @@ public final class VivoEditorActivity extends Activity implements TextureView.Su
         }catch(Exception e){runOnUiThread(()->{busy=false;if(!isDestroyed()){apply.setEnabled(true);toast("无法打开编辑器："+e.getMessage());}});}},"VivoMaskLoad").start();
     }
     private void toast(String text){Toast.makeText(this,text,Toast.LENGTH_LONG).show();}
-    @Override public void onSurfaceTextureAvailable(SurfaceTexture texture,int width,int height){surface=new Surface(texture);if(renderer!=null)renderer.attach(surface,width,height);configureCrop();}
-    @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture,int width,int height){if(renderer!=null&&surface!=null)renderer.attach(surface,width,height);configureCrop();}
+    @Override public void onSurfaceTextureAvailable(SurfaceTexture texture,int width,int height){previewWidth=width;previewHeight=height;surface=new Surface(texture);if(renderer!=null)renderer.attach(surface,width,height);configureCrop();}
+    @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture,int width,int height){previewWidth=width;previewHeight=height;if(renderer!=null&&surface!=null)renderer.attach(surface,width,height);configureCrop();}
     @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture texture){if(renderer!=null)renderer.detach();if(surface!=null){surface.release();surface=null;}return true;}
     @Override public void onSurfaceTextureUpdated(SurfaceTexture texture){}
-    @Override protected void onResume(){super.onResume();resumed=true;if(renderer!=null)renderer.visible(true);}
-    @Override protected void onPause(){resumed=false;if(renderer!=null)renderer.visible(false);super.onPause();}
+    /** 与编辑主页同样的策略：进后台就把 GL 资源还掉，别让四十多兆显存跟着 Activity 走。 */
+    private void releaseRenderer(){if(renderer!=null){renderer.close();renderer=null;}}
+    private void ensureRenderer(){
+        if(renderer==null){
+            renderer=new RenderLoop(this,SceneOptions.DRAFT);
+            renderer.mode(1,false);
+            if(surface!=null&&surface.isValid()&&previewWidth>0)renderer.attach(surface,previewWidth,previewHeight);
+        }
+        renderer.visible(resumed);
+    }
+    @Override protected void onResume(){super.onResume();resumed=true;ensureRenderer();}
+    @Override protected void onPause(){resumed=false;releaseRenderer();super.onPause();}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);state.putString("options",options.json());state.putBoolean("awaitingApply",awaitingApply);state.putInt("previousId",previousId);state.putInt("previousLockId",previousLockId);state.putBoolean("pickerResultReliable",pickerResultReliable);if(pendingMedia!=null){state.putParcelable("pendingMedia",pendingMedia);state.putInt("pendingMediaRequest",pendingMediaRequest);}}
-    @Override protected void onDestroy(){main.removeCallbacksAndMessages(null);if(panel!=null)panel.dismiss();if(maskEditor!=null)maskEditor.close();if(slotEditor!=null)slotEditor.close();if(renderer!=null)renderer.close();super.onDestroy();}
+    @Override protected void onDestroy(){main.removeCallbacksAndMessages(null);if(panel!=null)panel.dismiss();if(maskEditor!=null)maskEditor.close();if(slotEditor!=null)slotEditor.close();releaseRenderer();super.onDestroy();}
 }

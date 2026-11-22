@@ -158,11 +158,33 @@ def scene_editor_background():
     time.sleep(8)
 
 
+def scene_pure_service():
+    """杀掉进程让系统重绑壁纸服务，得到"只有壁纸服务"的占用。
+
+    这是"进后台把 UI 全回收"的理论下限：Activity 销毁只能回收 Java 对象，
+    类加载与 ART/JIT 那部分内存只有进程重启才还回去。两个数一减，就是 UI 残留。
+    注意：force-stop 会把壁纸组件撤掉，所以这里用 kill -9（组件保留，系统会重绑）。
+    """
+    pid = shell("pidof %s" % PKG).stdout.strip().split()
+    if not pid:
+        raise RuntimeError("进程没在跑")
+    shell("su 0 kill -9 %s" % pid[0])
+    for _ in range(12):
+        time.sleep(2)
+        if shell("pidof %s" % PKG).stdout.strip():
+            break
+    time.sleep(8)
+    if PKG not in shell("dumpsys wallpaper | grep -m1 mWallpaperComponent").stdout:
+        raise RuntimeError("壁纸组件没恢复，跳过")
+
+
 SCENES = [
-    ("desktop", "桌面（只有壁纸服务）", scene_desktop),
+    ("desktop", "桌面（有 UI 残留）", scene_desktop),
     ("app_home", "App 首页（三张预览 + 壁纸）", scene_app_home),
     ("editor", "编辑页前台", scene_editor),
     ("editor_background", "编辑页进后台 8 秒", scene_editor_background),
+    # 放最后：它会杀掉进程，前面那些场景必须已经采完。
+    ("pure_service", "只有壁纸服务（kill 后系统重绑）", scene_pure_service),
 ]
 
 

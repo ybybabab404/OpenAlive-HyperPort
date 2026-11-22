@@ -29,6 +29,9 @@ final class PersonalizeLoadingFix {
     private static final String TAG = AliveLog.TAG;
     private static final String VIEW = "com.miui.keyguard.editor.settings.SettingsTemplateView";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /** 已经就绪过的模板视图，用来判断"页面是真卡住还是只是还没好"。 */
+    private static final java.util.Set<Object> READY_VIEWS =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
 
     private PersonalizeLoadingFix() {}
 
@@ -42,8 +45,12 @@ final class PersonalizeLoadingFix {
         try {
             Xp.hookAllMethods(view, "onTemplateReady", new Xp.MethodHook() {
                 @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                    // 这里**不再**替宿主调 restoreTemplate。实测宿主自己在模板就绪后就会调
+                    // （日志 SettingsTemplateView: restoreTemplate），我们每多调一次，
+                    // 卡片视图就重建一次 —— 一次进入页面 onTemplateReady 会来 3~4 次，
+                    // 于是卡片反复重建、反复播入场动画，肉眼就是"闪几下"。
                     Object target = param.thisObject;
-                    MAIN.postDelayed(() -> restore(target, "onTemplateReady"), 120);
+                    if (target instanceof View) READY_VIEWS.add(target);
                 }
             });
             hooks++;
@@ -59,7 +66,10 @@ final class PersonalizeLoadingFix {
                         Object activityObject = param.thisObject;
                         MAIN.postDelayed(() -> {
                             Object found = findTemplateView(activityObject);
-                            if (found != null) restore(found, "onResume");
+                            // 只有在"模板一直没就绪"（页面真的卡在加载中）时才补一刀；
+                            // 正常路径宿主自己会收起 loading，补刀反而会让卡片再重建一次。
+                            if (found == null || READY_VIEWS.contains(found)) return;
+                            restore(found, "onResume");
                         }, 900);
                     }
                 });

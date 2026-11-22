@@ -50,7 +50,7 @@ final class XiaomiHomePreview {
                 if(id==0)throw new IOException("Original stage thumbnail missing");
                 BitmapFactory.Options options=new BitmapFactory.Options();options.inScaled=false;options.inJustDecodeBounds=true;
                 BitmapFactory.decodeResource(resources.get(pack.id),id,options);
-                options.inSampleSize=1;while(options.outWidth/options.inSampleSize>640)options.inSampleSize*=2;
+                options.inSampleSize=1;while(options.outWidth/options.inSampleSize>384)options.inSampleSize*=2;
                 options.inJustDecodeBounds=false;card.image=BitmapFactory.decodeResource(resources.get(pack.id),id,options);
                 if(card.image==null)throw new IOException("Original stage thumbnail unreadable");
             }catch(Exception error){AliveLog.w("OpenAliveXiaomi","Home preview "+pack.id+"/"+mode,error);}

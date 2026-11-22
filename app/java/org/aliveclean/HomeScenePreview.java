@@ -50,7 +50,11 @@ final class HomeScenePreview extends FrameLayout implements TextureView.SurfaceT
         if(!active||card!=null||renderer!=null)return;
         // 三张卡尺寸一样、配置也一样，参与共享 GL 会全部租到同一个 context 上互相抢，
         // 结果就是预览跑一会儿黑掉；这里每个预览独占自己的上下文。
-        renderer=new RenderLoop(getContext(),SceneOptions.APPLIED,false);renderer.mode(mode,false);surface=new Surface(value);renderer.attach(surface,width,height);renderer.visible(true);
+        // 渲染尺寸按一半给：一个实例 4 个全尺寸 target 就是十几兆，而卡片只有巴掌大，
+        // 半分辨率在预览里看不出来，纹理却直接省掉四分之三（实测主进程 EGL 38→10 MB）。
+        int w=Math.max(64,width/2),h=Math.max(64,height/2);
+        try{value.setDefaultBufferSize(w,h);}catch(Throwable ignored){}
+        renderer=new RenderLoop(getContext(),SceneOptions.APPLIED,false);renderer.mode(mode,false);surface=new Surface(value);renderer.attach(surface,w,h);renderer.visible(true);
     }
     public void onSurfaceTextureAvailable(SurfaceTexture value,int width,int height){attach(value,width,height);}
     public void onSurfaceTextureSizeChanged(SurfaceTexture value,int width,int height){releaseSurface();attach(value,width,height);}

@@ -84,7 +84,7 @@ public final class AodWallpaperPreview {
                     if (!DIAG_INSTALLED && cardDiagOn()) {
                         DIAG_INSTALLED = true;
                         installCardDiag(param.method.getDeclaringClass().getClassLoader());
-                        installImageViewDiag();
+                        installImageViewDiag(param.method.getDeclaringClass().getClassLoader());
                     }
                     int n = TM_CALLS.incrementAndGet();
                     if (n <= 6) {
@@ -330,7 +330,7 @@ public final class AodWallpaperPreview {
      * 所以只能从"最终设置图片"这一端反查：hook ImageView.setImageBitmap /
      * setImageDrawable，打出身位与调用栈，直接定位真正的取图点。</p>
      */
-    private static void installImageViewDiag() {
+    private static void installImageViewDiag(ClassLoader loader) {
         Xp.MethodHook bitmapHook = new Xp.MethodHook() {
             @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
                 if (param.args.length != 1 || !(param.args[0] instanceof Bitmap)) return;
@@ -360,9 +360,9 @@ public final class AodWallpaperPreview {
                     android.graphics.drawable.Drawable.class, drawableHook);
             // 页面如果是 Compose 写的，图不会经过 ImageView，而是 asImageBitmap(Bitmap)。
             Class<?> asImage = Xp.findClassIfExists(
-                    "androidx.compose.ui.graphics.AndroidImageBitmap_androidKt", null);
+                    "androidx.compose.ui.graphics.AndroidImageBitmap_androidKt", loader);
             if (asImage == null) asImage = Xp.findClassIfExists(
-                    "androidx.compose.ui.graphics.AndroidImageBitmap", null);
+                    "androidx.compose.ui.graphics.AndroidImageBitmap", loader);
             if (asImage != null) {
                 for (java.lang.reflect.Method method : asImage.getDeclaredMethods()) {
                     if (!method.getName().contains("asImageBitmap")) continue;
@@ -413,6 +413,43 @@ public final class AodWallpaperPreview {
                         AliveLog.w(TAG, "canvas diag hook failed " + signature.length, error);
                     }
                 }
+            }
+            // 宿主的卡片壁纸是自绘 GL 纹理（com.miui.miwallpaper.opengl.ImageGLWallpaper）。
+            // 这里盯住"把 Bitmap 交给 GL"的两个入口，看它拿到的是什么图、谁给的。
+            Class<?> imageGl = Xp.findClassIfExists(
+                    "com.miui.miwallpaper.opengl.ImageGLWallpaper", loader);
+            if (imageGl != null) {
+                // 方法名因版本而异，按签名找"收 Bitmap 的方法"，全部挂上。
+                for (java.lang.reflect.Method method : imageGl.getDeclaredMethods()) {
+                    Class<?>[] types = method.getParameterTypes();
+                    boolean takesBitmap = false;
+                    for (Class<?> type : types) if (type == Bitmap.class) takesBitmap = true;
+                    if (!takesBitmap) continue;
+                    Object[] args = new Object[types.length + 1];
+                    System.arraycopy(types, 0, args, 0, types.length);
+                    args[types.length] = new Xp.MethodHook() {
+                        @Override protected void afterHookedMethod(Xp.MethodHookParam param) {
+                            for (Object arg : param.args) {
+                                if (!(arg instanceof Bitmap)) continue;
+                                Bitmap bitmap = (Bitmap) arg;
+                                int n = DIAG_CALLS.incrementAndGet();
+                                if (n > 30) return;
+                                AliveLog.i(TAG, "imageGL " + param.method.getName() + " "
+                                        + bitmap.getWidth() + "x" + bitmap.getHeight()
+                                        + (looksLikePlaceholder(bitmap) ? " placeholder" : " real")
+                                        + " by " + caller());
+                            }
+                        }
+                    };
+                    try {
+                        Xp.findAndHookMethod(imageGl, method.getName(), args);
+                    } catch (Throwable error) {
+                        AliveLog.w(TAG, "imageGL hook failed " + method.getName(), error);
+                    }
+                }
+                AliveLog.i(TAG, "imageGL diag installed");
+            } else {
+                AliveLog.w(TAG, "imageGL class missing");
             }
             AliveLog.i(TAG, "imageview diag installed");
         } catch (Throwable error) {
